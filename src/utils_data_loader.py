@@ -5,9 +5,12 @@ import geopandas as gpd
 from shapely import wkt
 from typing import List, Dict, Any, Optional
 import numpy as np
+import requests
+import base64
+import json
+import argparse
 
 from src.models import CoverageData
-
 
 def get_available_files(directory: str = '.', file_types: List[str] = None) -> Dict[str, List[str]]:
     """
@@ -211,3 +214,198 @@ def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = No
     
     except Exception as e:
         raise RuntimeError(f"Error loading coverage data: {str(e)}") 
+
+
+def load_commcare_data(domain: str, 
+                       user: str,
+                       api_key: str, 
+                       case_type: str = "deliver-unit", 
+                       base_url: str = "https://www.commcarehq.org") -> pd.DataFrame:
+    """
+    Load delivery unit data from CommCare's Case API v2.
+    
+    Args:
+        domain: CommCare project space/domain
+        user: Username for authentication
+        api_key: API key for authentication
+        case_type: Case type to fetch (default: 'delivery-unit')
+        base_url: Base URL for the CommCare instance (default: 'https://www.commcarehq.org')
+        
+    Returns:
+        DataFrame with case data formatted similar to Excel import
+    """
+
+    # Build API endpoint
+    endpoint = f"{base_url}/a/{domain}/api/case/v2/"
+    
+    # Set up authentication - use base64 encoding
+    auth_string = f"{user}:{api_key}"
+    encoded_auth = base64.b64encode(auth_string.encode()).decode()
+    
+    headers = {
+        'Authorization': f'ApiKey {user}:{api_key}', 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+    
+    # Parameters for the API request
+    params = {
+        'case_type': case_type,
+        'limit': 100  # Fetch 100 cases at a time
+    }
+    
+    # DEBUG: Print request information
+    print("\n=== DEBUG: REQUEST INFO ===")
+    print(f"URL: {endpoint}")
+    print(f"Headers: {headers}")
+    print(f"Params: {params}")
+    print("=========================\n")
+    
+    all_cases = []
+    next_url = endpoint
+    
+    # Paginate through all results, something is currently not working in this loop
+    # TODO: Fix this
+    page_count = 0
+    while next_url:
+        page_count += 1
+        print(f"\n--- Request #{page_count}: {next_url.split('?')[0]} ---")
+        
+        # For debugging, separate the initial request and paginated requests
+        if next_url == endpoint:
+            response = requests.get(
+                next_url,
+                params=params,
+                headers=headers
+            )
+        else:
+            response = requests.get(
+                next_url,
+                headers=headers
+            )
+        
+        # Debug response status
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print("Error summary:")
+            error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+            print(error_text)
+            raise ValueError(f"API request failed with status {response.status_code}")
+        
+        try:
+            data = response.json()
+            
+            # Just show case count and next URL info
+            case_count = len(data.get('cases', []))
+            print(f"Retrieved {case_count} cases")
+            
+            # Show first case type if available
+            if case_count > 0:
+                first_case = data.get('cases', [])[0]
+                print(f"Case type: {first_case.get('case_type')}")
+            
+            all_cases.extend(data.get('cases', []))
+            
+            # Get the next page URL, if any
+            next_url = data.get('next')
+            if next_url:
+                print(f"Next cursor: {next_url.split('?')[1] if '?' in next_url else 'NONE'}")
+            else:
+                print("No more pages")
+                
+        except Exception as e:
+            print(f"JSON parsing error: {str(e)}")
+            print("Response preview (first 100 chars):")
+            print(response.text[:100])
+            raise
+    
+    # If no cases were found
+    if not all_cases:
+        return pd.DataFrame()
+    
+    # Process case data into a format similar to Excel import
+    processed_data = []
+    for case in all_cases:
+        # Extract standard case fields
+        case_data = {
+            'case_id': case.get('case_id'),
+            'case_name': case.get('case_name'),
+            'external_id': case.get('external_id'),
+            'owner_id': case.get('owner_id'),
+            'date_opened': case.get('date_opened'),
+            'last_modified': case.get('last_modified'),
+            'closed': case.get('closed', False)
+        }
+        
+        # Extract all custom properties
+        properties = case.get('properties', {})
+        for prop_name, prop_value in properties.items():
+            case_data[prop_name] = prop_value
+        
+        processed_data.append(case_data)
+    
+    # Create DataFrame
+    df = pd.DataFrame(processed_data)
+    
+    # Convert columns to appropriate types (numeric) and handle missing values
+    numeric_columns = ['buildings', 'delivery_count', 'delivery_target', 'surface_area']
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            if col != 'surface_area':  # Keep surface_area as float
+                df[col] = df[col].astype(int)
+    
+    # Convert WKT to geometry if 'WKT' column exists
+    if 'WKT' in df.columns:
+        try:
+            df = convert_to_geo_dataframe(df)
+        except Exception as e:
+            print(f"Warning: Could not convert WKT to geometry: {e}")
+    
+    return df
+
+
+def test_commcare_api_loader(domain: str, user: str, api_key: str):
+    """
+    Simple test function to demonstrate loading data from CommCare API.
+    
+    Args:
+        domain: CommCare project space/domain name
+        user: Username for authentication
+        api_key: API key for authentication
+    """
+    print("Testing CommCare API data loader...")
+    
+    try:
+        # Load delivery unit cases
+        print(f"Fetching delivery-unit cases from {domain}...")
+        df = load_commcare_data(domain=domain, user=user, api_key=api_key, case_type="deliver-unit")
+        
+        # Display basic info about the loaded data
+        if not df.empty:
+            print(f"Successfully loaded {len(df)} delivery-unit cases")
+            print("\nColumns found:")
+            print(", ".join(df.columns.tolist()))
+            print("\nSample data:")
+            print(df.head(3))
+        else:
+            print("No delivery-unit cases found")
+        
+        return df
+    
+    except Exception as e:
+        print(f"Error testing CommCare API: {str(e)}")
+        return None
+
+
+if __name__ == "__main__":
+    # Only run the test if this file is executed directly
+    parser = argparse.ArgumentParser(description='Test CommCare API data loader')
+    parser.add_argument('domain', help='CommCare project space/domain name')
+    parser.add_argument('user', help='Username for authentication')
+    parser.add_argument('api_key', help='API key for authentication')
+    
+    args = parser.parse_args()
+    
+    test_commcare_api_loader(args.domain, args.user, args.api_key)

@@ -4,11 +4,12 @@ import pytest
 import pandas as pd
 import tempfile
 from pandas.testing import assert_frame_equal
+from unittest.mock import patch, MagicMock
 
 # Add the src directory to the path so we can import the modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.utils_data_loader import load_excel_data, load_csv_data, load_coverage_data
+from src.utils_data_loader import load_excel_data, load_csv_data, load_coverage_data, fetch_delivery_units
 
 
 @pytest.fixture
@@ -100,9 +101,69 @@ class TestDataLoader:
         with pytest.raises(FileNotFoundError):
             load_csv_data('nonexistent_file.csv')
             
-    # We can add a simplified test for load_coverage_data that uses our fixtures
-    # A full test would require mocking the CoverageData class which is beyond the scope
     def test_load_coverage_data_file_not_found(self):
         """Test that appropriate error is raised when coverage data file is not found."""
         with pytest.raises(FileNotFoundError):
             load_coverage_data('nonexistent_file.xlsx') 
+    
+    def test_fetch_delivery_units_real_api(self):
+        """
+        Test the fetch_delivery_units function with real API calls.
+        
+        This test is skipped by default as it requires:
+        1. Real CommCare credentials
+        2. Internet connection
+        3. API access to the CommCare server
+        
+        To run this test:
+        1. Set the environment variables:
+           - COMMCARE_PROJECT_SPACE
+           - COMMCARE_USERNAME
+           - COMMCARE_API_KEY
+        2. Run pytest with the --run-skipped flag:
+           pytest tests/test_data_loader.py::TestDataLoader::test_fetch_delivery_units_real_api -v --run-skipped
+        """
+
+        """Test the fetch_delivery_units function with real API calls."""
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()  # Load environment variables from .env file
+            print("Loaded .env file")
+        except ImportError:
+            print("python-dotenv not installed. Using environment variables directly.")
+    
+        # Check if environment variables are set
+        project_space = os.environ.get('COMMCARE_PROJECT_SPACE')
+        username = os.environ.get('COMMCARE_USERNAME')
+        api_key = os.environ.get('COMMCARE_API_KEY')
+        
+        print(f"DEBUG: project_space={project_space}, username={username}, api_key={api_key}")
+
+
+        if not all([project_space, username, api_key]):
+            pytest.skip("CommCare credentials not set in environment variables")
+        
+        # Call the function with real credentials
+        result_df = fetch_delivery_units(
+            project_space=project_space,
+            username=username,
+            api_key=api_key,
+            days_ago=30  # Fetch cases from the last 30 days
+        )
+        
+        # Basic validation of results
+        assert isinstance(result_df, pd.DataFrame)
+        assert len(result_df) >= 0  # Could be zero if no cases
+        
+        # If we got results, verify the structure
+        if len(result_df) > 0:
+            assert 'caseid' in result_df.columns
+            assert 'name' in result_df.columns
+            assert 'service_area' in result_df.columns
+            assert 'owner_name' in result_df.columns
+            
+            # Print some stats for manual verification
+            print(f"\nRetrieved {len(result_df)} delivery units")
+            print(f"Service areas: {result_df['service_area'].nunique()}")
+            print(f"FLWs: {result_df['owner_name'].nunique()}")
+            print(f"Status counts: {result_df['du_status'].value_counts().to_dict()}") 

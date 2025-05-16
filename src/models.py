@@ -608,33 +608,29 @@ class CoverageData:
         return pd.DataFrame(rows)
 
     @classmethod
-    def from_excel_and_csv(cls, excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+    def load_delivery_units_from_df(cls, delivery_units_df: pd.DataFrame) -> 'CoverageData':
         """
-        Load coverage data from Excel and CSV files
+        Load coverage data from CommCare dataframe
         
         Args:
-            excel_file: Path to the DU Export Excel file
-            service_delivery_csv: Optional path to service delivery GPS coordinates CSV
+            delivery_units_df: DataFrame containing delivery units data from CommCare
         """
         data = cls()
         
-        # Read the Excel file
-        print(f"Loading Excel file: {excel_file}")
-        delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
-        print(f"Excel file loaded, shape: {delivery_units_df.shape}")
+        # Store the processed dataframe
+        data.delivery_units_df = delivery_units_df
         
-        # Check if WKT column exists
-        if 'WKT' not in delivery_units_df.columns:
-            print(f"WARNING: 'WKT' column not found in Excel file. Available columns: {delivery_units_df.columns.tolist()}")
+        print(f"Processing {len(delivery_units_df)} delivery units from CommCare")
         
+        # Process the dataframe similar to from_excel_and_csv
         # Ensure required columns exist to avoid KeyError
         required_columns = ['caseid', 'name', 'service_area', 'owner_name', 'WKT']
         for col in required_columns:
             if col not in delivery_units_df.columns:
-                print(f"ERROR: Required column '{col}' not found in Excel file")
+                print(f"ERROR: Required column '{col}' not found in CommCare data")
                 return data  # Return empty data if required columns are missing
         
-        # Convert columns to appropriate types - use column names as they appear in Excel
+        # Convert columns to appropriate types
         try:
             delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
         except KeyError:
@@ -663,53 +659,45 @@ class CoverageData:
         delivery_units_df.rename(columns={
             'service_area_number': 'service_area_id',
             'buildings': '#Buildings',
-            'surface_area': 'Surface Area (sq. meters)'
+            'surface_area': 'Surface Area (sq. meters)',
+            'owner_name': 'flw'
         }, inplace=True)
-        
-        # Handle service area ID assignment
-        if 'service_area_id' not in delivery_units_df.columns:
-            if 'service_area_number' in delivery_units_df.columns:
-                delivery_units_df['service_area_id'] = delivery_units_df['service_area_number']
-            elif 'service_area' in delivery_units_df.columns:
-                delivery_units_df['service_area_id'] = delivery_units_df['service_area']
-            else:
-                delivery_units_df['service_area_id'] = "UNKNOWN"
-        
-        # Ensure service_area_id is valid
-        delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna("UNKNOWN")
+            
+        # Ensure service_area_id is string type for existing values
+        delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
         delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
         
-        # Replace empty values
-        mask = delivery_units_df['service_area_id'].str.strip() == ''
-        delivery_units_df.loc[mask, 'service_area_id'] = "UNKNOWN"
+        # Count rows with missing service area IDs (likely test data)
+        test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
+        
+        # Filter out rows with missing service area IDs or with value "---"
+        initial_row_count = len(delivery_units_df)
+        delivery_units_df = delivery_units_df[(delivery_units_df['service_area_id'].notna()) & (delivery_units_df['service_area_id'] != "---")].copy()
         
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
-        print(f"Found {distinct_service_areas} distinct service areas in the data.")
+        print(f"Found {distinct_service_areas} distinct service areas in the data. Skipped {test_data_count} rows with missing service area ID (likely test data).")
         
         # Make sure all key columns are strings to avoid issues
-        str_columns = ['caseid', 'name', 'service_area', 'owner_name', 'du_status']
+        str_columns = ['caseid', 'name', 'service_area', 'du_status']
+        # Handle both original column name and renamed column
+        if 'owner_name' in delivery_units_df.columns:
+            str_columns.append('owner_name')
+        elif 'flw' in delivery_units_df.columns:
+            str_columns.append('flw')
+            
         for col in str_columns:
             if col in delivery_units_df.columns:
-                delivery_units_df[col] = delivery_units_df[col].astype(str)
-        
-        # Fill missing du_status with "unvisited"
-        if 'du_status' not in delivery_units_df.columns:
-            print("Column 'du_status' not found, adding it with default 'unvisited'")
-            delivery_units_df['du_status'] = 'unvisited'
-        else:
-            delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('unvisited')
-        
+                # Fixed approach: First convert to object type, then to string
+                delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
+                
         # Make sure the status values are lowercase for consistency
-        delivery_units_df['du_status'] = delivery_units_df['du_status'].str.lower()
+        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
         
-        # Use owner_name as the flw column
-        delivery_units_df['flw'] = delivery_units_df['owner_name']
+        # Ensure flw column exists from owner_name if renaming didn't happen
+        if 'flw' not in delivery_units_df.columns and 'owner_name' in delivery_units_df.columns:
+            delivery_units_df.loc[:, 'flw'] = delivery_units_df['owner_name']
         
-        # Store the processed dataframe
-        data.delivery_units_df = delivery_units_df
-        
-        print(f"Processing {len(delivery_units_df)} delivery units from Excel")
         created_count = 0
         
         # Create delivery units and service areas
@@ -752,19 +740,59 @@ class CoverageData:
         
         print(f"Successfully created {created_count} delivery units across {len(data.service_areas)} service areas")
         
-        # Read service delivery data if provided
-        if service_delivery_csv and pd.io.common.file_exists(service_delivery_csv):
-            service_df = pd.read_csv(service_delivery_csv)
-            print(f"Loaded service delivery data: {len(service_df)} points")
-            
-            # Create service delivery points
-            for _, row in service_df.iterrows():
-                row_dict = row.to_dict()
-                point = ServiceDeliveryPoint.from_dict(row_dict)
-                data.service_points.append(point)
-        
         # Precompute metadata
         data._compute_metadata()
+        
+        return data
+    
+    def load_service_delivery_from_csv(self, service_delivery_csv: str) -> None:
+        """
+        Load service delivery points from a CSV file
+        
+        Args:
+            service_delivery_csv: Path to service delivery GPS coordinates CSV
+        """
+        if not service_delivery_csv or not pd.io.common.file_exists(service_delivery_csv):
+            print(f"Service delivery CSV file not found: {service_delivery_csv}")
+            return
+            
+        service_df = pd.read_csv(service_delivery_csv)
+        print(f"Loaded service delivery data: {len(service_df)} points")
+        
+        # Create service delivery points
+        for _, row in service_df.iterrows():
+            row_dict = row.to_dict()
+            try:
+                point = ServiceDeliveryPoint.from_dict(row_dict)
+                self.service_points.append(point)
+            except Exception as e:
+                print(f"Error creating service delivery point: {e}")
+                continue
+        
+        return service_df
+
+    @classmethod
+    def from_excel_and_csv(cls, excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+        """
+        Load coverage data from Excel and CSV files
+        
+        Args:
+            excel_file: Path to the DU Export Excel file
+            service_delivery_csv: Optional path to service delivery GPS coordinates CSV
+        """
+        data = cls()
+        
+        # Read the Excel file
+        print(f"Loading Excel file: {excel_file}")
+        delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
+        print(f"Excel file loaded, shape: {delivery_units_df.shape}")
+        
+        # Use the new from_commcare method to process the dataframe
+        data = cls.load_delivery_units_from_df(delivery_units_df)
+        
+        # Load service delivery data if provided
+        if service_delivery_csv:
+            data.load_service_delivery_from_csv(service_delivery_csv)
         
         return data
 

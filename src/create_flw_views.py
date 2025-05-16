@@ -534,23 +534,86 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add custom handler for axis label clicks
         // Using direct DOM event since ECharts doesn't provide built-in axis label click events
         chartElement.addEventListener('click', function(e) {
+            console.log('DEBUG: Chart clicked at', e.clientX, e.clientY);
+            
             // Get chart's position relative to the window
             const chartRect = chartElement.getBoundingClientRect();
+            console.log('DEBUG: Chart rect:', chartRect.left, chartRect.top, chartRect.width, chartRect.height);
             
             // Calculate click position relative to chart
             const x = e.clientX - chartRect.left;
             const y = e.clientY - chartRect.top;
+            console.log('DEBUG: Relative coordinates:', x, y);
             
             // Only process clicks near the y-axis labels (left side of chart)
             if (x < chartRect.width * 0.15) { // Adjust this value as needed
-                // We need to manually find which FLW label was clicked
-                // First get all text elements in the chart
-                const textElements = Array.from(chartElement.querySelectorAll('text'));
+                console.log('DEBUG: Click is in y-axis area');
+                
+                // Alternate implementation: Use chart.getZr() to get renderer and test coordinates
+                try {
+                    const zr = chart.getZr();
+                    const hasSVG = zr.painter.type === 'svg';
+                    console.log('DEBUG: Chart renderer type:', hasSVG ? 'SVG' : 'Canvas');
+                    
+                    // If it's a canvas renderer, we need a different approach
+                    if (!hasSVG) {
+                        console.log('DEBUG: Using ECharts API for Canvas renderer');
+                        
+                        // Fix for Canvas renderer: we need to properly transform the coordinates
+                        // Extract the yAxis component to find its position
+                        const yAxisComponent = chart.getModel().getComponent('yAxis', 0);
+                        const grid = chart.getModel().getComponent('grid').coordinateSystem.getRect();
+                        
+                        // Calculate the relative position within the axis range
+                        // First get the actual pixel range of the y-axis
+                        const yAxisTop = grid.y;
+                        const yAxisBottom = grid.y + grid.height;
+                        const yAxisHeight = yAxisBottom - yAxisTop;
+                        
+                        // Calculate normalized position (0-1) within axis range
+                        const normalizedPos = (y - yAxisTop) / yAxisHeight;
+                        console.log('DEBUG: Normalized position in axis (0-1):', normalizedPos);
+                        
+                        // The y-axis data is the list of FLWs, so we can calculate index
+                        // directly based on the normalized position
+                        const flwCount = selectedFLWs.length;
+                        const index = Math.floor(normalizedPos * flwCount);
+                        console.log('DEBUG: Canvas renderer - calculated index:', index);
+                        
+                        if (index >= 0 && index < selectedFLWs.length) {
+                            const clickedFLW = selectedFLWs[index];
+                            console.log('DEBUG: Canvas renderer - matched FLW:', clickedFLW);
+                            
+                            // Toggle highlight
+                            if (window.highlightedFLWs.has(clickedFLW)) {
+                                console.log('DEBUG: Removing highlight for', clickedFLW);
+                                window.highlightedFLWs.delete(clickedFLW);
+                            } else {
+                                console.log('DEBUG: Adding highlight for', clickedFLW);
+                                window.highlightedFLWs.add(clickedFLW);
+                            }
+                            
+                            // Update the highlights
+                            updateHighlighting();
+                            return; // Skip the rest of the handler
+                        }
+                    }
+                } catch (err) {
+                    console.log('DEBUG: Error accessing chart renderer:', err);
+                }
                 
                 // Filter to likely y-axis labels (those on the left side)
                 const yAxisLabels = textElements.filter(el => {
                     const rect = el.getBoundingClientRect();
                     return (rect.left - chartRect.left) < chartRect.width * 0.15;
+                });
+                console.log('DEBUG: Filtered to', yAxisLabels.length, 'potential y-axis labels');
+                
+                // Log all potential labels and their positions
+                yAxisLabels.forEach((label, i) => {
+                    const rect = label.getBoundingClientRect();
+                    console.log(`DEBUG: Label ${i}:`, label.textContent, 
+                                'Position:', rect.left, rect.top, rect.right, rect.bottom);
                 });
                 
                 // Find the clicked label
@@ -560,26 +623,67 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (e.clientY >= labelRect.top && e.clientY <= labelRect.bottom) {
                         // Check if this label text matches an FLW name
                         const labelText = label.textContent;
+                        console.log('DEBUG: Found label at click position:', labelText);
                         if (selectedFLWs.includes(labelText)) {
                             clickedFLW = labelText;
+                            console.log('DEBUG: Matched with an FLW name!');
                         }
                     }
                 });
                 
                 // If we found a matching FLW, toggle its highlight
                 if (clickedFLW) {
-                    console.log('Clicked on FLW:', clickedFLW);
+                    console.log('DEBUG: Successfully identified clicked FLW:', clickedFLW);
                     
                     // Toggle highlight
                     if (window.highlightedFLWs.has(clickedFLW)) {
+                        console.log('DEBUG: Removing highlight');
                         window.highlightedFLWs.delete(clickedFLW);
                     } else {
+                        console.log('DEBUG: Adding highlight');
                         window.highlightedFLWs.add(clickedFLW);
                     }
                     
                     // Update the highlights
                     updateHighlighting();
+                } else {
+                    console.log('DEBUG: Could not identify an FLW at click position');
+                    
+                    // Improved fallback based on grid coordinates
+                    const grid = chart.getModel().getComponent('grid').coordinateSystem.getRect();
+                    const yAxisHeight = grid.height;
+                    const yAxisTop = grid.y;
+                    
+                    // Only proceed if click is within the grid y range
+                    if (y >= yAxisTop && y <= yAxisTop + yAxisHeight) {
+                        // Calculate normalized position within grid (0 to 1)
+                        const normalizedPos = (y - yAxisTop) / yAxisHeight;
+                        console.log('DEBUG: Fallback - normalized position in grid:', normalizedPos);
+                        
+                        // Convert to index (reverse the order if the axis is inverted)
+                        const flwCount = selectedFLWs.length;
+                        // For most ECharts, the y-axis increases from top to bottom (0 at top)
+                        const index = Math.floor(normalizedPos * flwCount);
+                        console.log('DEBUG: Fallback - calculated index:', index);
+                        
+                        if (index >= 0 && index < selectedFLWs.length) {
+                            const estimatedFLW = selectedFLWs[index];
+                            console.log('DEBUG: Fallback - using estimated FLW:', estimatedFLW);
+                            
+                            // Toggle highlight
+                            if (window.highlightedFLWs.has(estimatedFLW)) {
+                                window.highlightedFLWs.delete(estimatedFLW);
+                            } else {
+                                window.highlightedFLWs.add(estimatedFLW);
+                            }
+                            
+                            // Update the highlights
+                            updateHighlighting();
+                        }
+                    }
                 }
+            } else {
+                console.log('DEBUG: Click is outside y-axis area');
             }
         });
         
@@ -596,8 +700,13 @@ document.addEventListener('DOMContentLoaded', function() {
             window.highlightedFLWs.forEach(flwName => {
                 const flwIndex = selectedFLWs.indexOf(flwName);
                 if (flwIndex >= 0) {
-                    // Convert index to pixel position
-                    const yPos = chart.convertToPixel({yAxisIndex: 0}, flwIndex);
+                    // Log which FLW we're highlighting and its index
+                    console.log('DEBUG: Highlighting FLW:', flwName, 'at index:', flwIndex);
+                    
+                    // Convert index to pixel position - use grid coordinates for accuracy
+                    const normalizedPos = (flwIndex + 0.5) / selectedFLWs.length; // +0.5 to center
+                    const yPos = grid.y + normalizedPos * grid.height;
+                    console.log('DEBUG: Calculated Y position for highlight:', yPos);
                     
                     // Create highlight element
                     const highlightElem = document.createElement('div');
@@ -605,8 +714,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     highlightElem.style.position = 'absolute';
                     highlightElem.style.left = `${grid.x}px`;
                     highlightElem.style.width = `${grid.width}px`;
-                    highlightElem.style.top = `${yPos - 15}px`; // Center on the row
-                    highlightElem.style.height = '30px'; // Approximate row height
+                    
+                    // Calculate row height based on total height and number of FLWs
+                    const rowHeight = grid.height / selectedFLWs.length;
+                    highlightElem.style.top = `${yPos - rowHeight/2}px`; // Center on the row
+                    highlightElem.style.height = `${rowHeight}px`;
                     
                     // Add a label showing which FLW is highlighted
                     const label = document.createElement('div');
@@ -623,9 +735,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Add to container
                     highlightContainer.appendChild(highlightElem);
-                    
-                    // Log for debugging
-                    console.log('Highlighted:', flwName, 'at y-position:', yPos);
                 }
             });
         }

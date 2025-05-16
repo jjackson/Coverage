@@ -517,9 +517,13 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     // Add popup with info
                     marker.bindPopup(`
                         <strong>FLW:</strong> ${{flwName}}<br>
-                        <strong>Visit Date:</strong> ${{feature.properties.visit_date}}<br>
-                        <strong>Visit ID:</strong> ${{feature.properties.visit_id}}<br>
-                        <strong>Accuracy:</strong> ${{feature.properties.accuracy_in_m}} m
+                        <strong>Visit Date:</strong> ${{feature.properties.visit_date || 'N/A'}}<br>
+                        <strong>Visit ID:</strong> ${{feature.properties.visit_id || 'N/A'}}<br>
+                        <strong>Accuracy:</strong> ${{feature.properties.accuracy_in_m || 'N/A'}} m<br>
+                        <strong>Status:</strong> ${{feature.properties.status || 'N/A'}}<br>
+                        <strong>Delivery Unit:</strong> ${{feature.properties.du_name || 'N/A'}}<br>
+                        <strong>Flagged:</strong> ${{feature.properties.flagged ? 'Yes' : 'No'}}<br>
+                        <strong>Flag Reason:</strong> ${{feature.properties.flag_reason || 'N/A'}}
                     `);
                     
                     // Add to service points layer
@@ -764,27 +768,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             const legend = L.control({{position: 'bottomright'}});
             legend.onAdd = function(map) {{
                 const div = L.DomUtil.create('div', 'info legend');
-                div.innerHTML = '<h4>FLW/Owner IDs</h4>';
                 
-                // Add legend items for each FLW
-                flws.forEach(flw => {{
-                    div.innerHTML += `
-                        <div class="legend-item">
-                            <span class="legend-color" style="background:${{flwColors[flw]}}"></span>
-                            ${{flw}}
-                        </div>
-                    `;
-                }});
-                
-                // Add status legend
-                div.innerHTML += '<h4 style="margin-top: 10px;">Status Types</h4>';
-                statuses.forEach(status => {{
-                    div.innerHTML += `
-                        <div class="legend-item">
-                            ${{status}}
-                        </div>
-                    `;
-                }});
+
                 
                 // Add legend for service points
                 if (servicePointsData) {{

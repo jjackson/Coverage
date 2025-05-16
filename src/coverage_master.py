@@ -2,6 +2,7 @@ import os
 import glob
 import argparse
 import subprocess
+import webbrowser
 from datetime import datetime
 
 # Handle imports based on how the module is used
@@ -246,11 +247,21 @@ def main():
     index_file = "index.html"
     generate_index_html(output_dir, map_file, stats_file)
     
+    # Construct the full path to the index.html file
+    full_path = os.path.join(current_dir, output_dir, index_file)
+    
     # Change back to original directory
     os.chdir(current_dir)
     
-    full_path = os.path.join(current_dir, output_dir, index_file)
     print(f"\nAll done! Open the dashboard at: {full_path}")
+    
+    # Open the dashboard in the default web browser
+    print("Launching dashboard in your default browser...")
+    try:
+        webbrowser.open(f"file://{full_path}")
+    except Exception as e:
+        print(f"Could not open browser automatically: {e}")
+        print("Please open the file manually.")
 
 if __name__ == "__main__":
-    main() 
+    main()

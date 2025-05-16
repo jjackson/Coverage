@@ -40,6 +40,10 @@ class ServiceDeliveryPoint:
     longitude: float
     flw_id: str
     flw_name: str
+    status: Optional[str] = None
+    du_name: Optional[str] = None
+    flagged: Optional[bool] = None
+    flag_reason: Optional[str] = None
     visit_date: Optional[str] = None
     accuracy_in_m: Optional[float] = None
     
@@ -57,6 +61,10 @@ class ServiceDeliveryPoint:
             longitude=float(data.get('longitude', 0.0)),
             flw_id=str(data.get('flw_id', '')),
             flw_name=str(data.get('flw_name', '')),
+            status=data.get('status'),
+            du_name=data.get('du_name'),
+            flagged=bool(data.get('flagged')) if data.get('flagged') is not None else None,
+            flag_reason=data.get('flag_reason'),
             visit_date=data.get('visit_date'),
             accuracy_in_m=float(data.get('accuracy_in_m', 0.0)) if data.get('accuracy_in_m') else None
         )
@@ -864,6 +872,10 @@ class CoverageData:
                 'flw_name': point.flw_name,
                 'visit_date': point.visit_date,
                 'accuracy_in_m': point.accuracy_in_m,
+                'status': point.status,
+                'du_name': point.du_name,
+                'flagged': point.flagged,
+                'flag_reason': point.flag_reason,
                 'geometry': point.geometry  # This is a Shapely Point object
             }
             service_points_data.append(point_dict)
@@ -883,7 +895,11 @@ class CoverageData:
             'lattitude': point.latitude,
             'longitude': point.longitude,
             'visit_date': point.visit_date,
-            'accuracy_in_m': point.accuracy_in_m
+            'accuracy_in_m': point.accuracy_in_m,
+            'status': point.status,
+            'du_name': point.du_name,
+            'flagged': point.flagged,
+            'flag_reason': point.flag_reason
         } for point in self.service_points])
         
         return service_df 

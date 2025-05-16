@@ -222,6 +222,11 @@ class ServiceArea:
         return list(set(du.flw for du in self.delivery_units))
     
     @property
+    def total_deliveries(self) -> int:
+        """Get the total number of service deliveries in this service area"""
+        return sum(du.delivery_count for du in self.delivery_units)
+    
+    @property
     def building_density(self) -> float:
         """Calculate building density (buildings per sq km)"""
         if self.total_surface_area == 0:

@@ -340,6 +340,98 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 background: #f0f0f0;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             }}
+            
+            /* Info Panel Styles */
+            #info-panel {{
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                width: 300px;
+                max-width: 35%;
+                background: white;
+                border-radius: 4px;
+                box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+                z-index: 1000;
+                overflow: hidden;
+                transition: all 0.3s ease;
+            }}
+            #info-panel.collapsed {{
+                width: 40px;
+                height: 40px;
+            }}
+            #info-panel-toggle {{
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 40px;
+                height: 40px;
+                background: #fff;
+                color: #555;
+                border: none;
+                border-left: 1px solid #ccc;
+                border-bottom: 1px solid #ccc;
+                border-bottom-left-radius: 4px;
+                cursor: pointer;
+                font-size: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1001;
+            }}
+            #info-panel-toggle:hover {{
+                background: #f0f0f0;
+            }}
+            #info-panel-content {{
+                padding: 15px;
+                max-height: 70vh;
+                overflow-y: auto;
+                display: block;
+            }}
+            .info-panel-section {{
+                margin-bottom: 20px;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 15px;
+            }}
+            .info-panel-section:last-child {{
+                border-bottom: none;
+                margin-bottom: 0;
+            }}
+            .info-panel-section h3 {{
+                margin-top: 0;
+                margin-bottom: 10px;
+                color: #333;
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            .info-panel-section p {{
+                margin: 5px 0;
+                color: #666;
+                font-size: 14px;
+            }}
+            .info-panel-label {{
+                font-weight: bold;
+                display: inline-block;
+                min-width: 120px;
+            }}
+            .info-panel-value {{
+                display: inline-block;
+            }}
+            .info-panel-header {{
+                padding: 10px 15px;
+                background: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+                font-weight: bold;
+                position: relative;
+            }}
+            .info-panel-empty {{
+                padding: 20px;
+                text-align: center;
+                color: #999;
+                font-style: italic;
+            }}
+            .info-panel-section.hidden {{
+                display: none;
+            }}
         </style>
     </head>
     <body>
@@ -386,6 +478,53 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
         </div>
         <div id="map"></div>
         
+        <div id="info-panel" class="collapsed">
+            <div id="info-panel-header" class="info-panel-header">
+                Information Panel
+            </div>
+            <button id="info-panel-toggle">&#8249;</button>
+            <div id="info-panel-content">
+                <div class="info-panel-empty">
+                    Click on a Delivery Unit or Service Delivery Point to view details
+                </div>
+                
+                <div id="service-point-section" class="info-panel-section hidden">
+                    <h3>Service Delivery Point</h3>
+                    <p><span class="info-panel-label">FLW:</span> <span id="sp-flw" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Visit Date:</span> <span id="sp-date" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Status:</span> <span id="sp-status" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Accuracy:</span> <span id="sp-accuracy" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Flagged:</span> <span id="sp-flagged" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Flag Reason:</span> <span id="sp-flag-reason" class="info-panel-value">-</span></p>
+                </div>
+                
+                <div id="flw-section" class="info-panel-section hidden">
+                    <h3>FLW (Field Worker)</h3>
+                    <p><span class="info-panel-label">ID/Name:</span> <span id="flw-name" class="info-panel-value">-</span></p>
+                </div>
+                
+                <div id="delivery-unit-section" class="info-panel-section hidden">
+                    <h3>Delivery Unit</h3>
+                    <p><span class="info-panel-label">Name:</span> <span id="du-name" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Status:</span> <span id="du-status" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Delivery Target:</span> <span id="du-target" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Delivery Count:</span> <span id="du-count" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Buildings:</span> <span id="du-buildings" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Checked Out:</span> <span id="du-checkout" class="info-panel-value">-</span></p>
+                </div>
+                
+                <div id="service-area-section" class="info-panel-section hidden">
+                    <h3>Service Area</h3>
+                    <p><span class="info-panel-label">ID:</span> <span id="service-area-id" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Total DUs:</span> <span id="service-area-total-dus" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Completed DUs:</span> <span id="service-area-completed-dus" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Total Buildings:</span> <span id="service-area-buildings" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Completion Rate:</span> <span id="service-area-completion" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Total Service Deliveries:</span> <span id="service-area-deliveries" class="info-panel-value">-</span></p>
+                </div>
+            </div>
+        </div>
+        
         <script>
             // Define the GeoJSON data with all delivery units
             const geojsonData = {json.dumps(geojson_data)};
@@ -419,36 +558,116 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             // Create a layer for service points
             const servicePointsLayer = L.layerGroup().addTo(map);
             
-            // Function to style features based on FLW and status
+            // Track the currently selected service area for highlighting
+            let selectedServiceAreaId = null;
+            
+            // Create a layer group for boundary highlights
+            const boundaryHighlightLayer = L.layerGroup().addTo(map);
+            
+            // Function to style features based on FLW, status, and if it's in the selected service area
             function style(feature) {{
+                if (!feature || !feature.properties) return {{}}; // Safety check
+                
                 const status = feature.properties.du_status || 'unvisited';
+                const inSelectedServiceArea = selectedServiceAreaId && 
+                                             feature.properties.service_area_id === selectedServiceAreaId;
                 
                 // Base styling
                 const baseStyle = {{
                     fillColor: feature.properties.color,
-                    weight: 2,
+                    weight: 3, // Same width for all borders (3px)
                     opacity: 1,
-                    color: 'white',
-                    dashArray: '3'
+                    color: inSelectedServiceArea ? 'black' : 'white',
+                    dashArray: null, // Always solid borders for cleaner look
+                    zIndex: inSelectedServiceArea ? 1000 : 500 // Higher z-index for selected areas
                 }};
                 
                 // Apply different styling based on status
                 if (status === 'completed') {{
                     // More solid/vibrant for completed
                     baseStyle.fillOpacity = 0.8;
-                    baseStyle.weight = 3;
-                    baseStyle.dashArray = null;
                 }} else if (status === 'visited') {{
                     // Medium transparency for visited
                     baseStyle.fillOpacity = 0.5;
-                    baseStyle.dashArray = '5';
                 }} else {{
                     // More transparent for unvisited
                     baseStyle.fillOpacity = 0.3;
-                    baseStyle.dashArray = '5,3';
                 }}
                 
                 return baseStyle;
+            }}
+            
+            // Function to extract boundary coordinates from a GeoJSON feature
+            function extractBoundaryCoordinates(feature) {{
+                if (!feature || !feature.geometry || !feature.geometry.coordinates) return [];
+                
+                const coordinates = [];
+                
+                // Function to process coordinates array
+                const processCoordinates = (coords) => {{
+                    if (coords.length === 0) return;
+                    
+                    // Polygons in GeoJSON are arrays of linear rings
+                    // The first ring is the outer boundary, the rest are holes
+                    if (Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {{
+                        // This is a MultiPolygon or Polygon with holes
+                        coords.forEach(ring => processCoordinates(ring));
+                    }} else if (Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {{
+                        // This is a single linear ring (array of positions)
+                        // Each position is [longitude, latitude]
+                        coordinates.push(coords.map(pos => [pos[1], pos[0]])); // Swap to Leaflet's [lat, lng] format
+                    }}
+                }};
+                
+                processCoordinates(feature.geometry.coordinates);
+                return coordinates;
+            }}
+            
+            // Function to draw outer boundary for a service area
+            function highlightServiceAreaBoundary(serviceAreaId) {{
+                // Clear previous highlights
+                boundaryHighlightLayer.clearLayers();
+                
+                if (!serviceAreaId || serviceAreaId === 'all') return;
+                
+                // Get all features in the selected service area
+                const serviceAreaFeatures = geojsonData.features.filter(
+                    feature => feature.properties.service_area_id === serviceAreaId
+                );
+                
+                // Extract and draw boundaries for each feature
+                serviceAreaFeatures.forEach(feature => {{
+                    const boundaryRings = extractBoundaryCoordinates(feature);
+                    
+                    boundaryRings.forEach(ring => {{
+                        // Create polyline for each boundary ring
+                        const boundaryLine = L.polyline(ring, {{
+                            color: 'black',
+                            weight: 3.5, // Slightly thicker to ensure visibility
+                            opacity: 1,
+                            lineCap: 'square',
+                            lineJoin: 'miter'
+                        }});
+                        
+                        boundaryHighlightLayer.addLayer(boundaryLine);
+                    }});
+                }});
+            }}
+            
+            // Function to update styles when service area selection changes
+            function updateDUStyles() {{
+                allFeatureLayers.forEach(feature => {{
+                    if (feature.layer && feature.layer.getLayers) {{
+                        feature.layer.getLayers().forEach(layer => {{
+                            if (layer.setStyle) {{
+                                layer.setStyle(style(layer.feature));
+                            }}
+                        }});
+                    }}
+                }});
+                
+                // Add the outer boundary highlight
+                highlightServiceAreaBoundary(selectedServiceAreaId);
             }}
             
             // Create individual GeoJSON layers for each feature
@@ -468,20 +687,67 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 const geoJsonLayer = L.geoJSON(feature, {{
                     style: style,
                     onEachFeature: function(feature, layer) {{
-                        // Popup content
+                        // Popup content (we'll keep simple popup for quick reference)
                         let popupContent = `
                             <strong>Name:</strong> ${{feature.properties.name}}<br>
                             <strong>Service Area:</strong> ${{feature.properties.service_area_id}}<br>
-                            <strong>FLW (Owner ID):</strong> ${{feature.properties.flw}}<br>
-                            <strong>Status:</strong> ${{feature.properties.du_status}}<br>
-                            <strong>Delivery Target:</strong> ${{feature.properties.delivery_target}}<br>
-                            <strong>Delivery Count:</strong> ${{feature.properties.delivery_count}}<br>
-                            <strong>Buildings:</strong> ${{feature.properties['#Buildings']}}<br>
-                            <strong>Surface Area:</strong> ${{feature.properties['Surface Area (sq. meters)'].toFixed(2)}} m²<br>
-                            <strong>Checkout Remark:</strong> ${{feature.properties.du_checkout_remark || 'N/A'}}<br>
-                            <strong>Checked Out Date:</strong> ${{feature.properties.checked_out_date || 'N/A'}}
+                            <strong>FLW:</strong> ${{feature.properties.flw}}
                         `;
                         layer.bindPopup(popupContent);
+                        
+                        // Add click handler to update the info panel
+                        layer.on('click', function() {{
+                            // Expand the info panel if collapsed
+                            if (document.getElementById('info-panel').classList.contains('collapsed')) {{
+                                toggleInfoPanel();
+                            }}
+                            
+                            // Update Delivery Unit section
+                            document.getElementById('du-name').textContent = feature.properties.name;
+                            document.getElementById('du-status').textContent = feature.properties.du_status || 'Unknown';
+                            document.getElementById('du-target').textContent = feature.properties.delivery_target;
+                            document.getElementById('du-count').textContent = feature.properties.delivery_count;
+                            document.getElementById('du-buildings').textContent = feature.properties['#Buildings'];
+                            document.getElementById('du-checkout').textContent = feature.properties.checked_out_date || 'Not checked out';
+                            
+                            // Update FLW section
+                            document.getElementById('flw-name').textContent = feature.properties.flw;
+                            
+                            // Update Service Area section
+                            const serviceAreaId = feature.properties.service_area_id;
+                            document.getElementById('service-area-id').textContent = serviceAreaId;
+                            
+                            // Highlight this service area on the map
+                            selectedServiceAreaId = serviceAreaId;
+                            
+                            // Update styles of all DUs to highlight this service area
+                            updateDUStyles();
+                            
+                            // Calculate and display service area statistics
+                            const areaStats = calculateServiceAreaStats(serviceAreaId);
+                            document.getElementById('service-area-total-dus').textContent = areaStats.totalDUs;
+                            document.getElementById('service-area-completed-dus').textContent = areaStats.completedDUs;
+                            document.getElementById('service-area-buildings').textContent = areaStats.totalBuildings;
+                            document.getElementById('service-area-completion').textContent = areaStats.completionRate;
+                            document.getElementById('service-area-deliveries').textContent = areaStats.totalServiceDeliveries;
+                            
+                            // Show all sections
+                            document.getElementById('service-point-section').classList.remove('hidden');
+                            document.getElementById('flw-section').classList.remove('hidden');
+                            document.getElementById('delivery-unit-section').classList.remove('hidden');
+                            document.getElementById('service-area-section').classList.remove('hidden');
+                            
+                            // Reset service point values since we're viewing a DU
+                            document.getElementById('sp-flw').textContent = '-';
+                            document.getElementById('sp-date').textContent = '-';
+                            document.getElementById('sp-status').textContent = '-';
+                            document.getElementById('sp-accuracy').textContent = '-';
+                            document.getElementById('sp-flagged').textContent = '-';
+                            document.getElementById('sp-flag-reason').textContent = '-';
+                            
+                            // Hide the empty message
+                            document.querySelector('.info-panel-empty').style.display = 'none';
+                        }});
                     }}
                 }}).addTo(map);
                 
@@ -506,7 +772,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         {{
                             icon: L.divIcon({{
                                 className: 'service-point-marker',
-                                html: `<div style="background-color: ${{markerColor}}; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #000; z-index: 9999;"></div>`,
+                                html: '<div style="background-color: ' + markerColor + '; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #000; z-index: 9999;"></div>',
                                 iconSize: [14, 14],
                                 iconAnchor: [7, 7]
                             }}),
@@ -515,19 +781,116 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     );
                     
                     // Add popup with info
-                    marker.bindPopup(`
-                        <strong>FLW:</strong> ${{flwName}}<br>
-                        <strong>Visit Date:</strong> ${{feature.properties.visit_date || 'N/A'}}<br>
-                        <strong>Visit ID:</strong> ${{feature.properties.visit_id || 'N/A'}}<br>
-                        <strong>Accuracy:</strong> ${{feature.properties.accuracy_in_m || 'N/A'}} m<br>
-                        <strong>Status:</strong> ${{feature.properties.status || 'N/A'}}<br>
-                        <strong>Delivery Unit:</strong> ${{feature.properties.du_name || 'N/A'}}<br>
-                        <strong>Flagged:</strong> ${{feature.properties.flagged ? 'Yes' : 'No'}}<br>
-                        <strong>Flag Reason:</strong> ${{feature.properties.flag_reason || 'N/A'}}
-                    `);
+                    marker.bindPopup(
+                        '<strong>FLW:</strong> ' + flwName + '<br>' +
+                        '<strong>Visit Date:</strong> ' + (feature.properties.visit_date || 'N/A') + '<br>' +
+                        '<strong>Visit ID:</strong> ' + (feature.properties.visit_id || 'N/A') + '<br>' +
+                        '<strong>Accuracy:</strong> ' + (feature.properties.accuracy_in_m || 'N/A') + ' m<br>' +
+                        '<strong>Status:</strong> ' + (feature.properties.status || 'N/A') + '<br>' +
+                        '<strong>Delivery Unit:</strong> ' + (feature.properties.du_name || 'N/A') + '<br>' +
+                        '<strong>Flagged:</strong> ' + (feature.properties.flagged ? 'Yes' : 'No') + '<br>' +
+                        '<strong>Flag Reason:</strong> ' + (feature.properties.flag_reason || 'N/A')
+                    );
                     
                     // Add to service points layer
                     marker.addTo(servicePointsLayer);
+                    
+                    // Add click handler to update info panel for service points
+                    marker.on('click', function() {{
+                        // Expand the info panel if collapsed
+                        if (document.getElementById('info-panel').classList.contains('collapsed')) {{
+                            toggleInfoPanel();
+                        }}
+                        
+                                                    // Update Service Point section
+                            document.getElementById('sp-flw').textContent = flwName;
+                            document.getElementById('sp-date').textContent = feature.properties.visit_date || 'N/A';
+                            document.getElementById('sp-status').textContent = feature.properties.status || 'N/A';
+                            document.getElementById('sp-accuracy').textContent = (feature.properties.accuracy_in_m || 'N/A') + " m";
+                            document.getElementById('sp-flagged').textContent = feature.properties.flagged ? 'Yes' : 'No';
+                            document.getElementById('sp-flag-reason').textContent = feature.properties.flag_reason || 'N/A';
+                            
+                            // If this service point is in the selected service area, highlight it
+                            if (feature.properties.service_area_id && feature.properties.service_area_id === selectedServiceAreaId) {{
+                                // Add a special highlight class or styling if needed
+                            }}
+                        
+                        // Variables to track if we found DU and service area information
+                        let foundDU = false;
+                        let serviceAreaId = null;
+                        
+                        // Update related Delivery Unit info if available
+                        if (feature.properties.du_name) {{
+                            const duName = feature.properties.du_name;
+                            document.getElementById('du-name').textContent = duName;
+                            foundDU = true;
+                            
+                            // Look for the DU in the geojson data to get full DU information
+                            // and its service area
+                            for (const du of geojsonData.features) {{
+                                if (du.properties.name === duName) {{
+                                    // Found the DU, update DU fields with full information
+                                    document.getElementById('du-status').textContent = du.properties.du_status || 'Unknown';
+                                    document.getElementById('du-target').textContent = du.properties.delivery_target || '-';
+                                    document.getElementById('du-count').textContent = du.properties.delivery_count || '-';
+                                    document.getElementById('du-buildings').textContent = du.properties['#Buildings'] || '-';
+                                    document.getElementById('du-checkout').textContent = du.properties.checked_out_date || 'Not checked out';
+                                    
+                                    // Get the service area ID
+                                    serviceAreaId = du.properties.service_area_id;
+                                    break;
+                                }}
+                            }}
+                        }}
+                        
+                        if (!foundDU) {{
+                            // Reset DU values if no DU is associated
+                            document.getElementById('du-name').textContent = '-';
+                            document.getElementById('du-status').textContent = '-';
+                            document.getElementById('du-target').textContent = '-';
+                            document.getElementById('du-count').textContent = '-';
+                            document.getElementById('du-buildings').textContent = '-';
+                            document.getElementById('du-checkout').textContent = '-';
+                        }}
+                        
+                        // Update FLW section
+                        document.getElementById('flw-name').textContent = flwName;
+                        
+                        // First, try to use service_area_id from the feature itself
+                        if (feature.properties.service_area_id) {{
+                            serviceAreaId = feature.properties.service_area_id;
+                        }}
+                        
+                        // Update Service Area section if we have a service area ID, otherwise reset
+                        if (serviceAreaId) {{
+                            document.getElementById('service-area-id').textContent = serviceAreaId;
+                            
+                            // Calculate and display service area statistics
+                            const areaStats = calculateServiceAreaStats(serviceAreaId);
+                            document.getElementById('service-area-total-dus').textContent = areaStats.totalDUs;
+                            document.getElementById('service-area-completed-dus').textContent = areaStats.completedDUs;
+                            document.getElementById('service-area-buildings').textContent = areaStats.totalBuildings;
+                            document.getElementById('service-area-completion').textContent = areaStats.completionRate;
+                            document.getElementById('service-area-deliveries').textContent = areaStats.totalServiceDeliveries;
+                        }} else {{
+                            // Reset all service area fields
+                            document.getElementById('service-area-id').textContent = '-';
+                            document.getElementById('service-area-total-dus').textContent = '-';
+                            document.getElementById('service-area-completed-dus').textContent = '-';
+                            document.getElementById('service-area-buildings').textContent = '-';
+                            document.getElementById('service-area-completion').textContent = '-';
+                            document.getElementById('service-area-deliveries').textContent = '-';
+                        }}
+                        
+                        // Show all sections
+                        document.getElementById('service-point-section').classList.remove('hidden');
+                        document.getElementById('flw-section').classList.remove('hidden');
+                        document.getElementById('delivery-unit-section').classList.remove('hidden');
+                        document.getElementById('service-area-section').classList.remove('hidden');
+                        
+                        // Hide the empty message
+                        document.querySelector('.info-panel-empty').style.display = 'none';
+                    }});
                 }});
             }}
             
@@ -714,6 +1077,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             serviceAreaSelect.addEventListener('change', function() {{
                 const selectedServiceArea = this.value;
                 
+                // Update the global selected service area ID
+                selectedServiceAreaId = selectedServiceArea === 'all' ? null : selectedServiceArea;
+                
                 // First hide all FLW layers
                 allFeatureLayers.forEach(feature => {{
                     map.removeLayer(feature.layer);
@@ -734,7 +1100,14 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     allFeatureLayers.forEach(feature => {{
                         feature.layer.addTo(map);
                     }});
+                    
+                    // If showing all, fit to all features
+                    map.fitBounds(L.geoJSON(geojsonData).getBounds());
                 }} else {{
+                    // Create a bounds object to calculate the extent of the selected service area
+                    const bounds = L.latLngBounds();
+                    let hasValidBounds = false;
+                    
                     // Show only delivery units in the selected service area and check their FLWs
                     const relevantFlws = new Set();
                     
@@ -743,6 +1116,12 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         if (feature.serviceArea === selectedServiceArea) {{
                             feature.layer.addTo(map);
                             relevantFlws.add(feature.flw);
+                            
+                            // Add to bounds for zooming
+                            if (feature.layer.getBounds) {{
+                                bounds.extend(feature.layer.getBounds());
+                                hasValidBounds = true;
+                            }}
                         }}
                     }});
                     
@@ -753,6 +1132,11 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             toggle.checked = true;
                         }}
                     }});
+                    
+                    // Zoom to the selected service area if we have valid bounds
+                    if (hasValidBounds) {{
+                        map.fitBounds(bounds, {{ padding: [50, 50] }});
+                    }}
                 }}
                 
                 // Reset status filters when service area changes
@@ -762,6 +1146,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 
                 // Apply status filters with the new selection
                 filterByStatus();
+                
+                // Update styles for all features and draw boundary highlights
+                updateDUStyles();
             }});
             
             // Add legend
@@ -787,6 +1174,81 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 return div;
             }};
             legend.addTo(map);
+            
+            // Function to calculate service area statistics
+            function calculateServiceAreaStats(serviceAreaId) {{
+                // Initialize stats
+                let totalDUs = 0;
+                let totalBuildings = 0;
+                let totalSurfaceArea = 0;
+                let completedDUs = 0;
+                let flwsInArea = new Set();
+                let totalServiceDeliveries = 0;
+                
+                // Loop through all features to find those in this service area
+                geojsonData.features.forEach(feature => {{
+                    if (feature.properties.service_area_id === serviceAreaId) {{
+                        totalDUs++;
+                        
+                        // Add to total buildings if available
+                        if (feature.properties['#Buildings']) {{
+                            totalBuildings += parseInt(feature.properties['#Buildings'], 10);
+                        }}
+                        
+                        // Add to total surface area if available
+                        if (feature.properties['Surface Area (sq. meters)']) {{
+                            totalSurfaceArea += parseFloat(feature.properties['Surface Area (sq. meters)']);
+                        }}
+                        
+                        // Count completed DUs
+                        if (feature.properties.du_status === 'completed') {{
+                            completedDUs++;
+                        }}
+                        
+                        // Add delivery count if available
+                        if (feature.properties.delivery_count) {{
+                            totalServiceDeliveries += parseInt(feature.properties.delivery_count, 10);
+                        }}
+                        
+                        // Add FLW to unique set
+                        if (feature.properties.flw) {{
+                            flwsInArea.add(feature.properties.flw);
+                        }}
+                    }}
+                }});
+                
+                // Calculate completion rate
+                const completionRate = totalDUs > 0 ? ((completedDUs / totalDUs) * 100).toFixed(1) : 0;
+                
+                // Return the stats object
+                return {{
+                    totalDUs: totalDUs,
+                    completedDUs: completedDUs,
+                    totalBuildings: totalBuildings,
+                    totalSurfaceArea: totalSurfaceArea.toFixed(2),
+                    totalServiceDeliveries: totalServiceDeliveries,
+                    completionRate: completionRate + "%",
+                    uniqueFLWs: flwsInArea.size
+                }};
+            }}
+            
+            // Info panel toggle functionality
+            function toggleInfoPanel() {{
+                const panel = document.getElementById('info-panel');
+                const toggleBtn = document.getElementById('info-panel-toggle');
+                
+                panel.classList.toggle('collapsed');
+                
+                // Change toggle button text based on state
+                if (panel.classList.contains('collapsed')) {{
+                    toggleBtn.innerHTML = '&#8250;'; // Right arrow
+                }} else {{
+                    toggleBtn.innerHTML = '&#8249;'; // Left arrow
+                }}
+            }}
+            
+            // Add event listener to toggle button
+            document.getElementById('info-panel-toggle').addEventListener('click', toggleInfoPanel);
         </script>
     </body>
     </html>

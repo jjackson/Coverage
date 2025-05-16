@@ -64,11 +64,12 @@ def create_output_directory():
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
 
-def generate_index_html(output_dir, map_file, stats_file):
+def generate_index_html(output_dir, map_file, stats_file, flw_views_file=None):
     """Generate an index HTML file that links to the map and statistics pages."""
     # Get relative paths to the output files - these are just the filenames since we're in the output directory
     map_path = map_file
     stats_path = stats_file
+    flw_views_path = flw_views_file
     
     index_html = f"""<!DOCTYPE html>
 <html>
@@ -155,6 +156,16 @@ def generate_index_html(output_dir, map_file, stats_file):
                 </div>
                 <a href="{stats_path}" class="btn">View Statistics</a>
             </div>
+            
+            {f'''
+            <div class="card">
+                <div>
+                    <h2>FLW Analysis</h2>
+                    <p>Detailed analysis of Field-Level Worker performance and activities.</p>
+                </div>
+                <a href="{flw_views_path}" class="btn">View FLW Analysis</a>
+            </div>
+            ''' if flw_views_path else ''}
         </div>
         
         <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
@@ -242,10 +253,28 @@ def main():
     if not os.path.exists(stats_file):
         print(f"Warning: Expected statistics file '{stats_file}' was not created.")
     
+    # Generate FLW views
+    print("\nGenerating FLW views...")
+    
+    # Import the FLW views function
+    try:
+        # When used as a module
+        from .create_flw_views import create_flw_views_report
+    except ImportError:
+        # When run as a script
+        from src.create_flw_views import create_flw_views_report
+    
+    flw_views_file = create_flw_views_report(coverage_data=coverage_data)
+    
+    # Check if FLW views file was created successfully
+    if not os.path.exists(flw_views_file):
+        print(f"Warning: Expected FLW views file '{flw_views_file}' was not created.")
+        flw_views_file = None
+    
     # Generate index HTML
     print("\nCreating dashboard index...")
     index_file = "index.html"
-    generate_index_html(output_dir, map_file, stats_file)
+    generate_index_html(output_dir, map_file, stats_file, flw_views_file)
     
     # Construct the full path to the index.html file
     full_path = os.path.join(current_dir, output_dir, index_file)

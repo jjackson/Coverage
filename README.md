@@ -10,6 +10,7 @@ The project is organized into the following directories:
   - `coverage_master.py` - The main command that coordinates the workflow
   - `create_delivery_map.py` - Creates an interactive map of delivery units
   - `create_statistics.py` - Generates statistical analysis and visualizations
+  - `create_flw_views.py` - Generates Field-Level Worker performance analysis
   - `models.py` - Data models for coverage analysis
   - `utils.py` - General utility functions
   - `utils_data_loader.py` - Data loading utility functions
@@ -21,17 +22,18 @@ The project is organized into the following directories:
 The following Python packages are required:
 
 ```
-pandas
-geopandas
-matplotlib
-seaborn
-numpy
+pandas>=1.3.0
+geopandas>=0.10.0
+matplotlib>=3.4.0
+seaborn>=0.11.0
+numpy>=1.20.0
+shapely>=1.8.0
 ```
 
 You can install them with:
 
 ```
-pip install pandas geopandas matplotlib seaborn numpy
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -49,7 +51,8 @@ This will:
 2. Create a timestamped output directory
 3. Generate the delivery map
 4. Generate the statistics report
-5. Create an index HTML page linking to both
+5. Generate the FLW analysis report
+6. Create an index HTML page linking to all reports
 
 #### Command-line options:
 
@@ -75,6 +78,12 @@ python src/create_delivery_map.py --excel [EXCEL_FILE] --csv [CSV_FILE]
 
 ```
 python src/create_statistics.py --excel [EXCEL_FILE] --csv [CSV_FILE]
+```
+
+#### FLW Analysis Generator
+
+```
+python src/create_flw_views.py --excel [EXCEL_FILE] --csv [CSV_FILE]
 ```
 
 ## Input Files
@@ -103,12 +112,13 @@ The tools generate the following outputs in the specified directory:
 
 1. **nigeria_delivery_units_map.html** - Interactive map showing delivery units and service points
 2. **coverage_statistics.html** - Statistical report with visualizations
-3. **index.html** - Dashboard page linking to both reports
+3. **flw_analysis.html** - Field-Level Worker performance analysis
+4. **index.html** - Dashboard page linking to all reports
 
 ## Development
 
 To run the tests:
 
 ```
-python -m unittest discover -s tests
+python -m pytest
 ``` 

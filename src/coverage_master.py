@@ -16,8 +16,13 @@ except ImportError:
     from src.models import CoverageData
 
 def get_available_files():
-    """Get available Excel and CSV files in the current directory."""
-    files = glob.glob('*.*')
+    """Get available Excel and CSV files in the data subdirectory."""
+    # Ensure data directory exists
+    data_dir = 'data'
+    os.makedirs(data_dir, exist_ok=True)
+    
+    # Look for files in the data directory
+    files = glob.glob(os.path.join(data_dir, '*.*'))
     excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls')) and not f.startswith('~$')]
     csv_files = [f for f in files if f.lower().endswith('.csv')]
     return excel_files, csv_files
@@ -192,11 +197,11 @@ def main():
     
     # Check if files are available
     if not excel_files:
-        print("Error: No Excel files found in the current directory.")
+        print("Error: No Excel files found in the data directory.")
         return
     
     if not csv_files:
-        print("Error: No CSV files found in the current directory.")
+        print("Error: No CSV files found in the data directory.")
         return
     
     # Select input files

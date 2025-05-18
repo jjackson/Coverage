@@ -453,6 +453,90 @@ document.addEventListener('DOMContentLoaded', function() {
             series: series
         };
         
+        // Add day summary labels for each FLW (counts at 23:30)
+        selectedFLWs.forEach((flw) => {
+            const flwData = timelineData.timeline_data[flw];
+            if (!flwData || !flwData.visits || flwData.visits.length === 0) return;
+            
+            // Group visits by date to count them
+            const visitsByDate = {};
+            flwData.visits.forEach(visit => {
+                // Only count visits within the selected date range
+                if (visit.date >= startDate && visit.date <= endDate) {
+                    if (!visitsByDate[visit.date]) {
+                        visitsByDate[visit.date] = 0;
+                    }
+                    visitsByDate[visit.date]++;
+                }
+            });
+            
+            // Add a text label series for each day's count
+            const labelData = [];
+            Object.keys(visitsByDate).forEach(date => {
+                // Create timestamp for middle of the day (noon) instead of 23:30
+                const labelTime = date + 'T22:00:00';
+                labelData.push({
+                    value: [labelTime, flw, visitsByDate[date]],
+                    itemStyle: {
+                        color: 'rgba(0, 0, 0, 0)' // Transparent point
+                    }
+                });
+            });
+            
+            // Add label series if we have data
+            if (labelData.length > 0) {
+                // Add a more visible day count indicator
+                option.series.push({
+                    name: flw + ' counts',
+                    type: 'custom',
+                    renderItem: function(params, api) {
+                        const point = api.coord([
+                            api.value(0), // time
+                            api.value(1)  // FLW name
+                        ]);
+                        const count = api.value(2);
+                        
+                        return {
+                            type: 'group',
+                            children: [{
+                                type: 'rect',
+                                shape: {
+                                    x: point[0] + 10,
+                                    y: point[1] - 10,
+                                    width: 22,
+                                    height: 20
+                                },
+                                style: {
+                                    fill: 'rgba(255, 255, 255, 0.8)',
+                                    stroke: '#666666',
+                                    lineWidth: 1
+                                }
+                            }, {
+                                type: 'text',
+                                style: {
+                                    x: point[0] + 21, // Center of the rectangle
+                                    y: point[1],
+                                    text: count.toString(),
+                                    textAlign: 'center',
+                                    textVerticalAlign: 'middle',
+                                    fill: '#666666',
+                                    fontSize: 14,
+                                    fontWeight: 'bold'
+                                }
+                            }]
+                        };
+                    },
+                    data: labelData,
+                    z: 200,
+                    tooltip: {
+                        formatter: function(params) {
+                            return flw + ': ' + params.value[2] + ' visits on ' + params.value[0].split('T')[0];
+                        }
+                    }
+                });
+            }
+        });
+        
         // Generate day boundary vertical lines
         if (startDate && endDate) {
             const markLines = [];

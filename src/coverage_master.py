@@ -23,7 +23,7 @@ def get_available_files():
     
     # Look for files in the data directory
     files = glob.glob(os.path.join(data_dir, '*.*'))
-    excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls')) and not f.startswith('~$')]
+    excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls')) and not os.path.basename(f).startswith('~')]
     csv_files = [f for f in files if f.lower().endswith('.csv')]
     return excel_files, csv_files
 

@@ -101,12 +101,6 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     gdf = coverage_data.create_delivery_units_geodataframe()
     service_points = coverage_data.create_service_points_geodataframe()
     
-    # Debug prints to check the geodataframe content
-    # print(f"Delivery units GeoDataFrame shape: {gdf.shape}")
-    # print(f"Delivery units GeoDataFrame columns: {gdf.columns.tolist()}")
-    # print(f"Sample of first row: {gdf.iloc[0] if len(gdf) > 0 else 'Empty DataFrame'}")
-    # print(f"Number of geometries: {sum(1 for g in gdf['geometry'] if g is not None)}")
-    
     # Use precomputed data from CoverageData object
     service_areas = coverage_data.unique_service_area_ids
     flws = coverage_data.unique_flw_names
@@ -125,7 +119,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     # Add color property based on FLW
     for i, feature in enumerate(geojson_data['features']):
         # Get FLW for this feature
-        flw = feature['properties']['flw']
+        flw = feature['properties']['flw_id']
         feature['properties']['color'] = flw_colors[flw]
         
         # Convert all numpy types in properties to Python native types
@@ -680,7 +674,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     feature.properties.du_status = 'unvisited';
                 }}
                 
-                const flw = feature.properties.flw;
+                const flw = feature.properties.flw_id;
                 const status = feature.properties.du_status;
                 
                 // Create GeoJSON layer for this feature
@@ -691,7 +685,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         let popupContent = `
                             <strong>Name:</strong> ${{feature.properties.name}}<br>
                             <strong>Service Area:</strong> ${{feature.properties.service_area_id}}<br>
-                            <strong>FLW:</strong> ${{feature.properties.flw}}
+                            <strong>FLW:</strong> ${{feature.properties.flw_id}}
                         `;
                         layer.bindPopup(popupContent);
                         
@@ -711,7 +705,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             document.getElementById('du-checkout').textContent = feature.properties.checked_out_date || 'Not checked out';
                             
                             // Update FLW section
-                            document.getElementById('flw-name').textContent = feature.properties.flw;
+                            document.getElementById('flw-name').textContent = feature.properties.flw_id;
                             
                             // Update Service Area section
                             const serviceAreaId = feature.properties.service_area_id;
@@ -754,7 +748,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 // Store layer reference with metadata
                 allFeatureLayers.push({{
                     layer: geoJsonLayer,
-                    flw: flw,
+                    flw_id: flw,
                     status: status,
                     serviceArea: feature.properties.service_area_id
                 }});
@@ -916,13 +910,13 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     const flw = this.dataset.flw;
                     if (this.checked) {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw === flw) {{
+                            if (feature.flw_id === flw) {{
                                 feature.layer.addTo(map);
                             }}
                         }});
                     }} else {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw === flw) {{
+                            if (feature.flw_id === flw) {{
                                 map.removeLayer(feature.layer);
                             }}
                         }});
@@ -1030,7 +1024,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 
                 // Apply filtering to each feature layer
                 allFeatureLayers.forEach(feature => {{
-                    const flw = feature.flw;
+                    const flw = feature.flw_id;
                     const status = feature.status;
                     const serviceArea = feature.serviceArea;
                     
@@ -1115,7 +1109,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     allFeatureLayers.forEach(feature => {{
                         if (feature.serviceArea === selectedServiceArea) {{
                             feature.layer.addTo(map);
-                            relevantFlws.add(feature.flw);
+                            relevantFlws.add(feature.flw_id);
                             
                             // Add to bounds for zooming
                             if (feature.layer.getBounds) {{
@@ -1211,8 +1205,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         }}
                         
                         // Add FLW to unique set
-                        if (feature.properties.flw) {{
-                            flwsInArea.add(feature.properties.flw);
+                        if (feature.properties.flw_id) {{
+                            flwsInArea.add(feature.properties.flw_id);
                         }}
                     }}
                 }});

@@ -76,7 +76,7 @@ class DeliveryUnit:
     id: str
     name: str
     service_area_id: str
-    flw: str  # FLW/owner name
+    flw_id: str  # FLW/owner name
     status: str  # completed, visited, unvisited represented as "---"
     wkt: str
     buildings: int = 0
@@ -86,6 +86,7 @@ class DeliveryUnit:
     du_checkout_remark: str = "---"
     checked_out_date: str = "---"
     centroid: Optional[tuple] = None
+    last_modified_date: Optional[datetime] = None
     
     @property
     def geometry(self) -> Polygon:
@@ -125,7 +126,8 @@ class DeliveryUnit:
         if not service_area_id:
             service_area_id = "UNKNOWN"
         
-        flw_val = data.get('owner_name', data.get('flw', ''))
+        # Look for flw_id first (as it might have been renamed), then fall back to original column names
+        flw_val = data.get('flw_id', data.get('owner_name', data.get('flw', '')))
         flw = str(flw_val) if not pd.isna(flw_val) else ''
         
         status_val = data.get('du_status', 'unvisited')
@@ -165,12 +167,25 @@ class DeliveryUnit:
         checkout_date_val = data.get('checked_out_date', '---')
         checkout_date = str(checkout_date_val) if not pd.isna(checkout_date_val) else '---'
         
+        # Parse last_modified_date if available
+        last_modified = None
+        if 'last_modified_date' in data and data['last_modified_date']:
+            try:
+                if isinstance(data['last_modified_date'], datetime):
+                    last_modified = data['last_modified_date']
+                else:
+                    # Try parsing the date string
+                    last_modified = pd.to_datetime(data['last_modified_date'])
+            except Exception:
+                # If parsing fails, leave as None
+                pass
+        
         # Create the DeliveryUnit instance
         return cls(
             id=du_id,
             name=name,
             service_area_id=service_area_id,
-            flw=flw,
+            flw_id=flw,
             status=status,
             wkt=wkt_str,
             buildings=buildings,
@@ -179,7 +194,8 @@ class DeliveryUnit:
             delivery_target=delivery_target,
             du_checkout_remark=checkout_remark,
             checked_out_date=checkout_date,
-            centroid=data.get('centroid')
+            centroid=data.get('centroid'),
+            last_modified_date=last_modified
         )
 
 
@@ -219,7 +235,7 @@ class ServiceArea:
     @property
     def assigned_flws(self) -> List[str]:
         """Get list of FLWs assigned to this service area"""
-        return list(set(du.flw for du in self.delivery_units))
+        return list(set(du.flw_id for du in self.delivery_units))
     
     @property
     def total_deliveries(self) -> int:
@@ -243,6 +259,9 @@ class CoverageData:
         self.service_points: List[ServiceDeliveryPoint] = []
         self.flws: Dict[str, FLW] = {}
         self.delivery_units_df: Optional[pd.DataFrame] = None
+        
+        # Mapping between FLW ID and FLW Name
+        self.flw_id_to_name_map: Dict[str, str] = {}
         
         # Additional cached properties
         self.unique_service_area_ids: List[str] = []
@@ -325,8 +344,8 @@ class CoverageData:
         
         # Calculate status counts per FLW
         for du in self.delivery_units.values():
-            if du.flw in self.flws:
-                self.flws[du.flw].status_counts[du.status] = self.flws[du.flw].status_counts.get(du.status, 0) + 1
+            if du.flw_id in self.flws:
+                self.flws[du.flw_id].status_counts[du.status] = self.flws[du.flw_id].status_counts.get(du.status, 0) + 1
         
         # Pre-compute service area progress
         self._compute_service_area_progress()
@@ -367,7 +386,7 @@ class CoverageData:
         
         for du in self.delivery_units.values():
             sa_id = du.service_area_id
-            flw_name = du.flw
+            flw_name = du.flw_id
             
             if sa_id not in temp_stats:
                 temp_stats[sa_id] = {}
@@ -673,12 +692,26 @@ class CoverageData:
             'service_area_number': 'service_area_id',
             'buildings': '#Buildings',
             'surface_area': 'Surface Area (sq. meters)',
-            'owner_name': 'flw'
+            'owner_name': 'flw_id',  # Ensure owner_name is mapped to flw_id
+            'flw': 'flw_id'  # Also map flw to flw_id if it exists
         }, inplace=True)
             
         # Ensure service_area_id is string type for existing values
         delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
         delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
+        
+        # Ensure flw_id exists and is properly formatted
+        if 'flw_id' not in delivery_units_df.columns:
+            if 'owner_name' in delivery_units_df.columns:
+                delivery_units_df['flw_id'] = delivery_units_df['owner_name']
+            elif 'flw' in delivery_units_df.columns:
+                delivery_units_df['flw_id'] = delivery_units_df['flw']
+            else:
+                print("WARNING: No FLW identifier column found in data")
+                delivery_units_df['flw_id'] = 'UNKNOWN'
+        
+        # Ensure flw_id is string type
+        delivery_units_df['flw_id'] = delivery_units_df['flw_id'].fillna('').astype(str)
         
         # Count rows with missing service area IDs (likely test data)
         test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
@@ -692,13 +725,7 @@ class CoverageData:
         print(f"Found {distinct_service_areas} distinct service areas in the data. Skipped {test_data_count} rows with missing service area ID (likely test data).")
         
         # Make sure all key columns are strings to avoid issues
-        str_columns = ['caseid', 'name', 'service_area', 'du_status']
-        # Handle both original column name and renamed column
-        if 'owner_name' in delivery_units_df.columns:
-            str_columns.append('owner_name')
-        elif 'flw' in delivery_units_df.columns:
-            str_columns.append('flw')
-            
+        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_id']
         for col in str_columns:
             if col in delivery_units_df.columns:
                 # Fixed approach: First convert to object type, then to string
@@ -706,10 +733,6 @@ class CoverageData:
                 
         # Make sure the status values are lowercase for consistency
         delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
-        
-        # Ensure flw column exists from owner_name if renaming didn't happen
-        if 'flw' not in delivery_units_df.columns and 'owner_name' in delivery_units_df.columns:
-            delivery_units_df.loc[:, 'flw'] = delivery_units_df['owner_name']
         
         created_count = 0
         
@@ -737,11 +760,11 @@ class CoverageData:
                 data.service_areas[sa_id].delivery_units.append(du)
                 
                 # Create or update FLW
-                if du.flw not in data.flws:
-                    data.flws[du.flw] = FLW(id=du.flw, name=du.flw)
+                if du.flw_id not in data.flws:
+                    data.flws[du.flw_id] = FLW(id=du.flw_id, name=du.flw_id)
                 
                 # Update FLW's assigned units and service areas
-                flw = data.flws[du.flw]
+                flw = data.flws[du.flw_id]
                 flw.assigned_units += 1
                 if du.status == 'completed':
                     flw.completed_units += 1
@@ -778,6 +801,10 @@ class CoverageData:
             try:
                 point = ServiceDeliveryPoint.from_dict(row_dict)
                 self.service_points.append(point)
+                
+                # Add to the FLW ID to Name mapping if both values are present
+                if point.flw_id and point.flw_name:
+                    self.flw_id_to_name_map[point.flw_id] = point.flw_name
             except Exception as e:
                 print(f"Error creating service delivery point: {e}")
                 continue
@@ -824,11 +851,20 @@ class CoverageData:
                 valid_geoms += 1
                 
                 # Create a dictionary with all relevant properties
+                # Convert Timestamp to string to ensure JSON serialization works
+                last_modified_str = None
+                if du.last_modified_date is not None:
+                    try:
+                        last_modified_str = du.last_modified_date.isoformat()
+                    except:
+                        # If conversion fails, use string representation
+                        last_modified_str = str(du.last_modified_date)
+                
                 du_dict = {
                     'du_id': du.id,
                     'name': du.name,
                     'service_area_id': du.service_area_id,
-                    'flw': du.flw,
+                    'flw_id': du.flw_id,
                     'du_status': du.status,
                     'WKT': du.wkt,
                     '#Buildings': du.buildings,
@@ -837,6 +873,7 @@ class CoverageData:
                     'delivery_target': du.delivery_target,
                     'du_checkout_remark': du.du_checkout_remark,
                     'checked_out_date': du.checked_out_date,
+                    'last_modified_date': last_modified_str,
                     'geometry': geometry  # This is a Shapely geometry object
                 }
                 delivery_units_data.append(du_dict)
@@ -852,7 +889,7 @@ class CoverageData:
             return gpd.GeoDataFrame(columns=['du_id', 'name', 'service_area_id', 'flw', 'du_status', 
                                              'WKT', '#Buildings', 'Surface Area (sq. meters)', 
                                              'delivery_count', 'delivery_target', 'du_checkout_remark', 
-                                             'checked_out_date', 'geometry'], 
+                                             'checked_out_date', 'last_modified_date', 'geometry'], 
                                    geometry='geometry', crs="EPSG:4326")
         
         # Create GeoDataFrame
@@ -908,3 +945,71 @@ class CoverageData:
         } for point in self.service_points])
         
         return service_df 
+
+    def get_completed_du_heatmap_data(self, flw_filter=None, date_start=None, date_end=None):
+        """
+        Returns a heatmap matrix of completed DUs per FLW per day.
+        - flw_filter: optional list of FLW IDs to include
+        - date_start, date_end: optional date strings (YYYY-MM-DD) to filter date range
+        Returns a dict: { 'flws': [...], 'flw_names': [...], 'dates': [...], 'matrix': [[count,...], ...] }
+        """
+        # Collect relevant DUs
+        du_list = [du for du in self.delivery_units.values() if du.status == 'completed' and du.last_modified_date]
+        
+        # Convert last_modified_date to date string (YYYY-MM-DD)
+        data = []
+        for du in du_list:
+            try:
+                date_str = du.last_modified_date.strftime('%Y-%m-%d')
+            except Exception:
+                continue
+            # Get the display name for this FLW ID
+            flw_name = self.flw_id_to_name_map.get(du.flw_id, du.flw_id)
+            data.append({'flw_id': du.flw_id, 'flw_name': flw_name, 'date': date_str})
+        
+        df = pd.DataFrame(data)
+        # Determine FLWs and dates to use for axes
+        if flw_filter is not None:
+            flw_ids = sorted(list(flw_filter))
+        else:
+            flw_ids = sorted(df['flw_id'].unique().tolist()) if not df.empty else []
+        
+        # Get display names for the FLWs
+        flw_names = [self.flw_id_to_name_map.get(flw_id, flw_id) for flw_id in flw_ids]
+        
+        # Build date range
+        if date_start is not None and date_end is not None:
+            try:
+                date_range = pd.date_range(start=date_start, end=date_end)
+                dates = [d.strftime('%Y-%m-%d') for d in date_range]
+            except Exception:
+                dates = []
+        else:
+            dates = sorted(df['date'].unique().tolist()) if not df.empty else []
+        
+        # If no FLWs or dates, return empty
+        if not flw_ids or not dates:
+            return {'flws': flw_ids, 'flw_names': flw_names, 'dates': dates, 'matrix': []}
+        
+        # Filter df to only selected FLWs and dates
+        if not df.empty:
+            df = df[df['flw_id'].isin(flw_ids) & df['date'].isin(dates)]
+        
+        # Build matrix: rows=FLWs, cols=dates, fill zeros for missing
+        matrix = []
+        for flw_id in flw_ids:
+            row = []
+            for date in dates:
+                if not df.empty:
+                    count = df[(df['flw_id'] == flw_id) & (df['date'] == date)].shape[0]
+                else:
+                    count = 0
+                row.append(count)
+            matrix.append(row)
+        
+        return {
+            'flws': flw_ids,  # FLW IDs for internal use
+            'flw_names': flw_names,  # Display names for UI
+            'dates': dates,
+            'matrix': matrix
+        } 

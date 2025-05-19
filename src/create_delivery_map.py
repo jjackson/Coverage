@@ -119,7 +119,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     # Add color property based on FLW
     for i, feature in enumerate(geojson_data['features']):
         # Get FLW for this feature
-        flw = feature['properties']['flw_id']
+        flw = feature['properties']['flw_commcare_id']
         feature['properties']['color'] = flw_colors[flw]
         
         # Convert all numpy types in properties to Python native types
@@ -134,14 +134,14 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
         # Add color property to service points based on FLW
         for feature in service_points_geojson['features']:
             flw_name = feature['properties']['flw_name']
-            flw_id = str(feature['properties']['flw_id'])
+            flw_commcare_id = str(feature['properties']['flw_commcare_id'])
             
             # Try to match by name first
             if flw_name in flw_colors:
                 feature['properties']['color'] = flw_colors[flw_name]
             # Then try to match by ID if it's in the flw list
-            elif flw_id in flw_colors:
-                feature['properties']['color'] = flw_colors[flw_id]
+            elif flw_commcare_id in flw_colors:
+                feature['properties']['color'] = flw_colors[flw_commcare_id]
             else:
                 # Assign a new color if this FLW isn't in our dictionary yet
                 new_color = generate_contrasting_colors(1)[0]
@@ -674,7 +674,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     feature.properties.du_status = 'unvisited';
                 }}
                 
-                const flw = feature.properties.flw_id;
+                const flw = feature.properties.flw_commcare_id;
                 const status = feature.properties.du_status;
                 
                 // Create GeoJSON layer for this feature
@@ -685,7 +685,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         let popupContent = `
                             <strong>Name:</strong> ${{feature.properties.name}}<br>
                             <strong>Service Area:</strong> ${{feature.properties.service_area_id}}<br>
-                            <strong>FLW:</strong> ${{feature.properties.flw_id}}
+                            <strong>FLW:</strong> ${{feature.properties.flw_commcare_id}}
                         `;
                         layer.bindPopup(popupContent);
                         
@@ -705,7 +705,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             document.getElementById('du-checkout').textContent = feature.properties.checked_out_date || 'Not checked out';
                             
                             // Update FLW section
-                            document.getElementById('flw-name').textContent = feature.properties.flw_id;
+                            document.getElementById('flw-name').textContent = feature.properties.flw_commcare_id;
                             
                             // Update Service Area section
                             const serviceAreaId = feature.properties.service_area_id;
@@ -748,7 +748,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 // Store layer reference with metadata
                 allFeatureLayers.push({{
                     layer: geoJsonLayer,
-                    flw_id: flw,
+                    flw_commcare_id: flw,
                     status: status,
                     serviceArea: feature.properties.service_area_id
                 }});
@@ -910,13 +910,13 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     const flw = this.dataset.flw;
                     if (this.checked) {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw_id === flw) {{
+                            if (feature.flw_commcare_id === flw) {{
                                 feature.layer.addTo(map);
                             }}
                         }});
                     }} else {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw_id === flw) {{
+                            if (feature.flw_commcare_id === flw) {{
                                 map.removeLayer(feature.layer);
                             }}
                         }});
@@ -1024,7 +1024,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 
                 // Apply filtering to each feature layer
                 allFeatureLayers.forEach(feature => {{
-                    const flw = feature.flw_id;
+                    const flw = feature.flw_commcare_id;
                     const status = feature.status;
                     const serviceArea = feature.serviceArea;
                     
@@ -1109,7 +1109,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     allFeatureLayers.forEach(feature => {{
                         if (feature.serviceArea === selectedServiceArea) {{
                             feature.layer.addTo(map);
-                            relevantFlws.add(feature.flw_id);
+                            relevantFlws.add(feature.flw_commcare_id);
                             
                             // Add to bounds for zooming
                             if (feature.layer.getBounds) {{
@@ -1205,8 +1205,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         }}
                         
                         // Add FLW to unique set
-                        if (feature.properties.flw_id) {{
-                            flwsInArea.add(feature.properties.flw_id);
+                        if (feature.properties.flw_commcare_id) {{
+                            flwsInArea.add(feature.properties.flw_commcare_id);
                         }}
                     }}
                 }});

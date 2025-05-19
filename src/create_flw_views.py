@@ -119,7 +119,7 @@ def create_flw_views_report(excel_file=None, service_delivery_csv=None, coverage
         heatmap_data = coverage_data.get_completed_du_heatmap_data()
     except Exception as e:
         print(f"Error processing heatmap data: {e}")
-        heatmap_data = {'flws': [], 'dates': [], 'matrix': []}
+        heatmap_data = {'flws': [], 'flw_names': [], 'dates': [], 'matrix': []}
 
     # Create the JavaScript file content
     js_content = f"""
@@ -319,7 +319,13 @@ document.addEventListener('DOMContentLoaded', function() {{
     const heatmapChart = echarts.init(heatmapElement);
     function updateHeatmap() {{
         // Use the matrix and axes as provided by Python (using FLW Name (flw) for the Y axis and tooltip)
+        console.log("DEBUG: heatmapData structure:", JSON.stringify(heatmapData, null, 2));
+        console.log("DEBUG: flw_names array:", heatmapData.flw_names);
+        console.log("DEBUG: flws array:", heatmapData.flws);
+        console.log("DEBUG: Are arrays equal length?", (heatmapData.flw_names || []).length === (heatmapData.flws || []).length);
+        
         let values = [];
+        // Iterate using the same order as the matrix data to ensure alignment
         (heatmapData.flws || []).forEach((flw, i) => {{
             (heatmapData.dates || []).forEach((date, j) => {{
                 let count = (heatmapData.matrix && heatmapData.matrix[i]) ? heatmapData.matrix[i][j] : 0;
@@ -327,10 +333,15 @@ document.addEventListener('DOMContentLoaded', function() {{
             }});
         }});
         const option = {{
-            tooltip: {{ position: 'top', formatter: function(params) {{ return (heatmapData.flws[params.value[1]] || '') + '<br>' + (heatmapData.dates[params.value[0]] || '') + ': <b>' + params.value[2] + '</b> completed DUs'; }} }},
+            tooltip: {{ position: 'top', formatter: function(params) {{ 
+                console.log("DEBUG: Tooltip params:", params);
+                // Get the FLW name using the same index as used in the matrix
+                const flwName = heatmapData.flw_names[params.value[1]];
+                return (flwName || 'Unknown') + '<br>' + (heatmapData.dates[params.value[0]] || '') + ': <b>' + params.value[2] + '</b> completed DUs'; 
+            }} }},
             grid: {{ left: 80, bottom: 80, right: 40, top: 40 }},
             xAxis: {{ type: 'category', data: heatmapData.dates, axisLabel: {{ rotate: 45 }} }},
-            yAxis: {{ type: 'category', data: heatmapData.flws, inverse: true }},
+            yAxis: {{ type: 'category', data: heatmapData.flw_names, inverse: true }},
             visualMap: {{ min: 0, max: Math.max(1, ...values.map(v => v[2])), calculable: true, orient: 'horizontal', left: 'center', bottom: 10, inRange: {{ color: ['#ffffe0', '#ffd080', '#ff8040', '#d73027'] }} }},
             series: [{{ name: 'Completed DUs', type: 'heatmap', data: values, label: {{ show: true, color: '#222', fontWeight: 'bold', formatter: function(p) {{ return p.value[2] > 0 ? p.value[2] : ''; }} }}, emphasis: {{ itemStyle: {{ shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }} }} }}]
         }};

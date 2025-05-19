@@ -505,7 +505,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     sas_50_plus = len(sas_50_plus_ids)
 
     # Identify unique users with at least one SA having more than 50 DUs
-    flws_with_50_plus_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_50_plus_ids)]['flw_id'].unique()
+    flws_with_50_plus_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_50_plus_ids)]['flw_commcare_id'].unique()
     dus_50_plus_users = len(flws_with_50_plus_dus)  # Count of unique FLWs with SAs having 50+ DUs
 
     # Calculate the number of SAs with between 35 and 50 DUs
@@ -513,7 +513,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     sas_35_to_50 = len(sas_35_to_50_ids)
 
     # Identify unique users with SAs having between 35 and 50 DUs
-    flws_with_35_to_50_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_35_to_50_ids)]['flw_id'].unique()
+    flws_with_35_to_50_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_35_to_50_ids)]['flw_commcare_id'].unique()
     users_sas_35_to_50 = len(flws_with_35_to_50_dus)
 
     # Create the HTML report
@@ -642,14 +642,14 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
             count_column = delivery_df.columns[0]
     
     # Create FLW data for filtering
-    flw_data = delivery_df.groupby('flw_id').agg({
+    flw_data = delivery_df.groupby('flw_commcare_id').agg({
         'du_status': lambda x: (x == 'completed').sum(),
         count_column: 'count',
         'service_area_id': lambda x: ', '.join(str(i) for i in sorted(set(x)))  # Convert all values to strings before joining
     }).reset_index()
     
-    # Keep flw_id as is, but add a display name column for UI
-    flw_data['flw'] = flw_data['flw_id']  # Create display name column for UI
+    # Keep flw_commcare_id as is, but add a display name column for UI
+    flw_data['flw'] = flw_data['flw_commcare_id']  # Create display name column for UI
     
     flw_data.rename(columns={
         count_column: 'assigned_units',
@@ -663,7 +663,7 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
     # Convert to JSON for JavaScript
     flw_json = json.dumps([{
         'flw': row['flw'],  # Display name for UI
-        'flw_id': row['flw_id'],  # Internal ID
+        'flw_commcare_id': row['flw_commcare_id'],  # Internal ID
         'completed_units': int(row['completed_units']),
         'assigned_units': int(row['assigned_units']),
         'completion_rate': float(row['completion_rate']),

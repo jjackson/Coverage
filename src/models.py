@@ -40,6 +40,7 @@ class ServiceDeliveryPoint:
     longitude: float
     flw_id: str
     flw_name: str
+    flw_commcare_id: Optional[str] = None
     status: Optional[str] = None
     du_name: Optional[str] = None
     flagged: Optional[bool] = None
@@ -61,6 +62,7 @@ class ServiceDeliveryPoint:
             longitude=float(data.get('longitude', 0.0)),
             flw_id=str(data.get('flw_id', '')),
             flw_name=str(data.get('flw_name', '')),
+            flw_commcare_id=data.get('cchq_user_owner_id'),
             status=data.get('status'),
             du_name=data.get('du_name'),
             flagged=bool(data.get('flagged')) if data.get('flagged') is not None else None,
@@ -76,7 +78,7 @@ class DeliveryUnit:
     id: str
     name: str
     service_area_id: str
-    flw_id: str  # FLW/owner name
+    flw_commcare_id: str  # FLW/owner CommCare ID
     status: str  # completed, visited, unvisited represented as "---"
     wkt: str
     buildings: int = 0
@@ -126,8 +128,8 @@ class DeliveryUnit:
         if not service_area_id:
             service_area_id = "UNKNOWN"
         
-        # Look for flw_id first (as it might have been renamed), then fall back to original column names
-        flw_val = data.get('flw_id', data.get('owner_name', data.get('flw', '')))
+        # Look for flw_commcare_id first (as it might have been renamed), then fall back to original column names
+        flw_val = data.get('flw_commcare_id', data.get('owner_id', data.get('flw', '')))
         flw = str(flw_val) if not pd.isna(flw_val) else ''
         
         status_val = data.get('du_status', 'unvisited')
@@ -185,7 +187,7 @@ class DeliveryUnit:
             id=du_id,
             name=name,
             service_area_id=service_area_id,
-            flw_id=flw,
+            flw_commcare_id=flw,
             status=status,
             wkt=wkt_str,
             buildings=buildings,
@@ -235,7 +237,7 @@ class ServiceArea:
     @property
     def assigned_flws(self) -> List[str]:
         """Get list of FLWs assigned to this service area"""
-        return list(set(du.flw_id for du in self.delivery_units))
+        return list(set(du.flw_commcare_id for du in self.delivery_units))
     
     @property
     def total_deliveries(self) -> int:
@@ -260,8 +262,8 @@ class CoverageData:
         self.flws: Dict[str, FLW] = {}
         self.delivery_units_df: Optional[pd.DataFrame] = None
         
-        # Mapping between FLW ID and FLW Name
-        self.flw_id_to_name_map: Dict[str, str] = {}
+        # Mapping between FLW CommCare ID and FLW Name
+        self.flw_commcare_id_to_name_map: Dict[str, str] = {}
         
         # Additional cached properties
         self.unique_service_area_ids: List[str] = []
@@ -344,8 +346,8 @@ class CoverageData:
         
         # Calculate status counts per FLW
         for du in self.delivery_units.values():
-            if du.flw_id in self.flws:
-                self.flws[du.flw_id].status_counts[du.status] = self.flws[du.flw_id].status_counts.get(du.status, 0) + 1
+            if du.flw_commcare_id in self.flws:
+                self.flws[du.flw_commcare_id].status_counts[du.status] = self.flws[du.flw_commcare_id].status_counts.get(du.status, 0) + 1
         
         # Pre-compute service area progress
         self._compute_service_area_progress()
@@ -386,7 +388,7 @@ class CoverageData:
         
         for du in self.delivery_units.values():
             sa_id = du.service_area_id
-            flw_name = du.flw_id
+            flw_name = du.flw_commcare_id
             
             if sa_id not in temp_stats:
                 temp_stats[sa_id] = {}
@@ -656,11 +658,11 @@ class CoverageData:
         
         # Process the dataframe similar to from_excel_and_csv
         # Ensure required columns exist to avoid KeyError
-        required_columns = ['caseid', 'name', 'service_area', 'owner_name', 'WKT']
-        for col in required_columns:
-            if col not in delivery_units_df.columns:
-                print(f"ERROR: Required column '{col}' not found in CommCare data")
-                return data  # Return empty data if required columns are missing
+        required_columns = ['caseid', 'name', 'service_area', 'owner_id', 'WKT']
+        missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
+        if missing_columns:
+            error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns)
+            raise ValueError(error_msg)
         
         # Convert columns to appropriate types
         try:
@@ -692,26 +694,26 @@ class CoverageData:
             'service_area_number': 'service_area_id',
             'buildings': '#Buildings',
             'surface_area': 'Surface Area (sq. meters)',
-            'owner_name': 'flw_id',  # Ensure owner_name is mapped to flw_id
-            'flw': 'flw_id'  # Also map flw to flw_id if it exists
+            'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
+            'flw': 'flw_commcare_id'  # Also map flw to flw_commcare_id if it exists
         }, inplace=True)
             
         # Ensure service_area_id is string type for existing values
         delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
         delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
         
-        # Ensure flw_id exists and is properly formatted
-        if 'flw_id' not in delivery_units_df.columns:
-            if 'owner_name' in delivery_units_df.columns:
-                delivery_units_df['flw_id'] = delivery_units_df['owner_name']
+        # Ensure flw_commcare_id exists and is properly formatted
+        if 'flw_commcare_id' not in delivery_units_df.columns:
+            if 'owner_id' in delivery_units_df.columns:
+                delivery_units_df['flw_commcare_id'] = delivery_units_df['owner_id']
             elif 'flw' in delivery_units_df.columns:
-                delivery_units_df['flw_id'] = delivery_units_df['flw']
+                delivery_units_df['flw_commcare_id'] = delivery_units_df['flw']
             else:
                 print("WARNING: No FLW identifier column found in data")
-                delivery_units_df['flw_id'] = 'UNKNOWN'
+                delivery_units_df['flw_commcare_id'] = 'UNKNOWN'
         
-        # Ensure flw_id is string type
-        delivery_units_df['flw_id'] = delivery_units_df['flw_id'].fillna('').astype(str)
+        # Ensure flw_commcare_id is string type
+        delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
         
         # Count rows with missing service area IDs (likely test data)
         test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
@@ -725,7 +727,7 @@ class CoverageData:
         print(f"Found {distinct_service_areas} distinct service areas in the data. Skipped {test_data_count} rows with missing service area ID (likely test data).")
         
         # Make sure all key columns are strings to avoid issues
-        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_id']
+        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
         for col in str_columns:
             if col in delivery_units_df.columns:
                 # Fixed approach: First convert to object type, then to string
@@ -760,11 +762,11 @@ class CoverageData:
                 data.service_areas[sa_id].delivery_units.append(du)
                 
                 # Create or update FLW
-                if du.flw_id not in data.flws:
-                    data.flws[du.flw_id] = FLW(id=du.flw_id, name=du.flw_id)
+                if du.flw_commcare_id not in data.flws:
+                    data.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
                 
                 # Update FLW's assigned units and service areas
-                flw = data.flws[du.flw_id]
+                flw = data.flws[du.flw_commcare_id]
                 flw.assigned_units += 1
                 if du.status == 'completed':
                     flw.completed_units += 1
@@ -802,13 +804,18 @@ class CoverageData:
                 point = ServiceDeliveryPoint.from_dict(row_dict)
                 self.service_points.append(point)
                 
-                # Add to the FLW ID to Name mapping if both values are present
-                if point.flw_id and point.flw_name:
-                    self.flw_id_to_name_map[point.flw_id] = point.flw_name
+                # Add to the FLW CommCare ID to Name mapping if both values are present
+                if point.flw_commcare_id and point.flw_name:
+                    self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
+                    
+                    # If this FLW exists in our FLW list, update its name too
+                    if point.flw_id in self.flws:
+                        self.flws[point.flw_id].name = point.flw_name
             except Exception as e:
                 print(f"Error creating service delivery point: {e}")
                 continue
         
+        print(f"DEBUG: Final flw_commcare_id_to_name_map contents: {self.flw_commcare_id_to_name_map}")
         return service_df
 
     @classmethod
@@ -864,7 +871,7 @@ class CoverageData:
                     'du_id': du.id,
                     'name': du.name,
                     'service_area_id': du.service_area_id,
-                    'flw_id': du.flw_id,
+                    'flw_commcare_id': du.flw_commcare_id,
                     'du_status': du.status,
                     'WKT': du.wkt,
                     '#Buildings': du.buildings,
@@ -886,7 +893,7 @@ class CoverageData:
         if not delivery_units_data:
             print("WARNING: No valid delivery units with geometries found")
             # Return an empty GeoDataFrame with the right structure
-            return gpd.GeoDataFrame(columns=['du_id', 'name', 'service_area_id', 'flw', 'du_status', 
+            return gpd.GeoDataFrame(columns=['du_id', 'name', 'service_area_id', 'flw_commcare_id', 'du_status', 
                                              'WKT', '#Buildings', 'Surface Area (sq. meters)', 
                                              'delivery_count', 'delivery_target', 'du_checkout_remark', 
                                              'checked_out_date', 'last_modified_date', 'geometry'], 
@@ -912,6 +919,7 @@ class CoverageData:
                 'visit_id': point.id,
                 'flw_id': point.flw_id,
                 'flw_name': point.flw_name,
+                'flw_commcare_id': point.flw_commcare_id,
                 'visit_date': point.visit_date,
                 'accuracy_in_m': point.accuracy_in_m,
                 'status': point.status,
@@ -934,6 +942,7 @@ class CoverageData:
             'visit_id': point.id,
             'flw_id': point.flw_id,
             'flw_name': point.flw_name,
+            'flw_commcare_id': point.flw_commcare_id,
             'lattitude': point.latitude,
             'longitude': point.longitude,
             'visit_date': point.visit_date,
@@ -956,6 +965,8 @@ class CoverageData:
         # Collect relevant DUs
         du_list = [du for du in self.delivery_units.values() if du.status == 'completed' and du.last_modified_date]
         
+        print(f"DEBUG: flw_commcare_id_to_name_map in heatmap data: {self.flw_commcare_id_to_name_map}")
+        
         # Convert last_modified_date to date string (YYYY-MM-DD)
         data = []
         for du in du_list:
@@ -963,9 +974,25 @@ class CoverageData:
                 date_str = du.last_modified_date.strftime('%Y-%m-%d')
             except Exception:
                 continue
-            # Get the display name for this FLW ID
-            flw_name = self.flw_id_to_name_map.get(du.flw_id, du.flw_id)
-            data.append({'flw_id': du.flw_id, 'flw_name': flw_name, 'date': date_str})
+                
+            # For each delivery unit, we need to find the corresponding service point to get the CommCare ID
+            # First assume we can't find a match
+            flw_name = None
+            
+            # Look for a matching service point with the same flw_id
+            for sp in self.service_points:
+                if sp.flw_id == du.flw_commcare_id and sp.flw_commcare_id:
+                    # If we find a match, use the CommCare ID to look up the name
+                    flw_name = self.flw_commcare_id_to_name_map.get(sp.flw_commcare_id)
+                    break
+            
+            # If we couldn't find a match through service points, fall back to direct lookup
+            if flw_name is None:
+                # This is a fallback in case we can't find the CommCare ID
+                flw_name = du.flw_commcare_id
+            
+            print(f"DEBUG: Looking up FLW name for ID {du.flw_commcare_id} -> got {flw_name}")
+            data.append({'flw_id': du.flw_commcare_id, 'flw_name': flw_name, 'date': date_str})
         
         df = pd.DataFrame(data)
         # Determine FLWs and dates to use for axes
@@ -975,7 +1002,22 @@ class CoverageData:
             flw_ids = sorted(df['flw_id'].unique().tolist()) if not df.empty else []
         
         # Get display names for the FLWs
-        flw_names = [self.flw_id_to_name_map.get(flw_id, flw_id) for flw_id in flw_ids]
+        flw_names = []
+        for flw_id in flw_ids:
+            # Try to find a matching service point to get the CommCare ID
+            match_found = False
+            for sp in self.service_points:
+                if sp.flw_commcare_id == flw_id:
+                    flw_names.append(self.flw_commcare_id_to_name_map.get(sp.flw_commcare_id, flw_id))
+                    match_found = True
+                    break
+            
+            # If no match found, use the flw_id directly
+            if not match_found:
+                flw_names.append(flw_id)
+        
+        print(f"DEBUG: Final flw_ids: {flw_ids}")
+        print(f"DEBUG: Final flw_names: {flw_names}")
         
         # Build date range
         if date_start is not None and date_end is not None:

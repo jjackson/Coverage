@@ -438,13 +438,13 @@ class CoverageData:
         Get a DataFrame with status counts per FLW
         
         Returns:
-            DataFrame with columns flw, du_status, count
+            DataFrame with columns flw_name, du_status, count
         """
         rows = []
         for flw_name, flw in self.flws.items():
             for status, count in flw.status_counts.items():
                 rows.append({
-                    'flw': flw_name,
+                    'flw_name': flw_name,
                     'du_status': status,
                     'count': count
                 })
@@ -456,12 +456,12 @@ class CoverageData:
         Get a DataFrame with FLW completion rates and assigned service areas
         
         Returns:
-            DataFrame with columns flw, completed_units, assigned_units, completion_rate, service_areas
+            DataFrame with columns flw_name, completed_units, assigned_units, completion_rate, service_areas
         """
         rows = []
         for flw_name, flw in self.flws.items():
             rows.append({
-                'flw': flw_name,
+                'flw_name': flw_name,
                 'completed_units': flw.completed_units,
                 'assigned_units': flw.assigned_units,
                 'completion_rate': flw.completion_rate,
@@ -493,13 +493,13 @@ class CoverageData:
         Get a DataFrame with FLW progress per service area
         
         Returns:
-            DataFrame with columns flw, service_area_id, completed_dus, total_dus, percentage
+            DataFrame with columns flw_name, service_area_id, completed_dus, total_dus, percentage
         """
         rows = []
         for flw_name, sa_stats in self.flw_service_area_stats.items():
             for sa_id, stats in sa_stats.items():
                 rows.append({
-                    'flw': flw_name,
+                    'flw_name': flw_name,
                     'service_area_id': sa_id,
                     'completed_dus': stats['completed_dus'],
                     'total_dus': stats['total_dus'],
@@ -531,13 +531,13 @@ class CoverageData:
         Get a DataFrame with building density per FLW and service area
         
         Returns:
-            DataFrame with columns flw, service_area_id, #Buildings, Surface Area (sq. meters), density
+            DataFrame with columns flw_name, service_area_id, #Buildings, Surface Area (sq. meters), density
         """
         rows = []
         for flw_name, sa_stats in self.flw_service_area_stats.items():
             for sa_id, stats in sa_stats.items():
                 rows.append({
-                    'flw': flw_name,
+                    'flw_name': flw_name,
                     'service_area_id': sa_id,
                     '#Buildings': stats['buildings'],
                     'Surface Area (sq. meters)': stats['surface_area'],
@@ -622,7 +622,7 @@ class CoverageData:
         Get a DataFrame with travel distances by FLW
         
         Returns:
-            DataFrame with columns flw, total_distance
+            DataFrame with columns flw_name, total_distance
         """
         # Calculate travel distances if not already done
         if not self.travel_distances:
@@ -638,7 +638,7 @@ class CoverageData:
             flw_distances[flw_name] = total_distance
         
         # Convert to DataFrame
-        rows = [{'flw': flw, 'total_distance': distance} for flw, distance in flw_distances.items()]
+        rows = [{'flw_name': flw, 'total_distance': distance} for flw, distance in flw_distances.items()]
         return pd.DataFrame(rows)
 
     @classmethod

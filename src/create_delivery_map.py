@@ -106,6 +106,22 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     flws = coverage_data.unique_flw_names
     status_values = coverage_data.unique_status_values
     
+    # Create a mapping between FLW CommCare IDs and FLW names
+    flw_id_to_name_map = {}
+    flw_name_to_id_map = {}
+    
+    # Try to get existing mapping from coverage_data if available
+    if hasattr(coverage_data, 'flw_commcare_id_to_name_map') and coverage_data.flw_commcare_id_to_name_map:
+        flw_id_to_name_map = coverage_data.flw_commcare_id_to_name_map
+        # Create the reverse mapping
+        flw_name_to_id_map = {name: id for id, name in flw_id_to_name_map.items()}
+    # Fallback to using flws objects if available
+    elif hasattr(coverage_data, 'flws'):
+        for flw_name, flw_obj in coverage_data.flws.items():
+            if hasattr(flw_obj, 'id') and flw_obj.id:
+                flw_id_to_name_map[flw_obj.id] = flw_name
+                flw_name_to_id_map[flw_name] = flw_obj.id
+    
     # Debug print
     # print(f"Unique status values: {status_values}")
     
@@ -444,6 +460,31 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             </div>
             
             <div class="row">
+                <div class="control-section" style="width: 100%;">
+                    <div class="section-title">Filter Service Delivery Points by Date Range</div>
+                    <div style="margin-bottom: 5px; font-size: 12px; color: #555;">All dates are in (UTC+1)</div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <label for="start-date">Start Date:</label>
+                            <input type="date" id="start-date">
+                        </div>
+                        <div>
+                            <label for="end-date">End Date:</label>
+                            <input type="date" id="end-date">
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <button id="end-date-minus" class="toggle-all-btn">-1 Day</button>
+                            <button id="end-date-plus" class="toggle-all-btn">+1 Day</button>
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <button id="apply-date-filter" class="toggle-all-btn">Apply Filter</button>
+                            <button id="clear-date-filter" class="toggle-all-btn">Clear Filter</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
                 <div class="control-section">
                     <div class="section-title">Status Filters</div>
                     <div id="status-toggles">
@@ -538,6 +579,10 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             // Define colors for FLWs
             const flwColors = {json.dumps(flw_colors)};
             
+            // Define mapping between FLW CommCare IDs and names
+            const flwIdToNameMap = {json.dumps(flw_id_to_name_map)};
+            const flwNameToIdMap = {json.dumps(flw_name_to_id_map)};
+            
             // Initialize the map
             const map = L.map('map').setView([11.8, 13.15], 13);  // Centered on Nigeria (approximate)
             
@@ -546,11 +591,17 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }}).addTo(map);
             
+            // Add a scale control to the map (shows distance scale)
+            L.control.scale({{position: 'topleft', maxWidth: 200, metric: true, imperial: false}}).addTo(map);
+            
             // No need for FLW or status layer groups anymore
             // Each feature has its own layer that we'll manage directly
             
-            // Create a layer for service points
+            // Create layers for service points
             const servicePointsLayer = L.layerGroup().addTo(map);
+            let allServicePoints = []; // Store all service points for filtering
+            let minServiceDate = null; // Track earliest service date
+            let maxServiceDate = null; // Track latest service date
             
             // Track the currently selected service area for highlighting
             let selectedServiceAreaId = null;
@@ -685,7 +736,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         let popupContent = `
                             <strong>Name:</strong> ${{feature.properties.name}}<br>
                             <strong>Service Area:</strong> ${{feature.properties.service_area_id}}<br>
-                            <strong>FLW:</strong> ${{feature.properties.flw_commcare_id}}
+                            <strong>FLW:</strong> ${{flwIdToNameMap[feature.properties.flw_commcare_id] || feature.properties.flw_commcare_id}}
                         `;
                         layer.bindPopup(popupContent);
                         
@@ -705,7 +756,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             document.getElementById('du-checkout').textContent = feature.properties.checked_out_date || 'Not checked out';
                             
                             // Update FLW section
-                            document.getElementById('flw-name').textContent = feature.properties.flw_commcare_id;
+                            document.getElementById('flw-name').textContent = flwIdToNameMap[feature.properties.flw_commcare_id] || feature.properties.flw_commcare_id;
                             
                             // Update Service Area section
                             const serviceAreaId = feature.properties.service_area_id;
@@ -749,6 +800,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 allFeatureLayers.push({{
                     layer: geoJsonLayer,
                     flw_commcare_id: flw,
+                    flw_name: flwIdToNameMap[flw] || flw, // Use name if available, fallback to ID
                     status: status,
                     serviceArea: feature.properties.service_area_id
                 }});
@@ -759,6 +811,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 servicePointsData.features.forEach(feature => {{
                     const flwName = feature.properties.flw_name;
                     const markerColor = feature.properties.color || '#FF0000';
+                    const visitDate = feature.properties.visit_date || null;
                     
                     // Create a regular marker for each service point with a custom icon for better visibility
                     const marker = L.marker(
@@ -777,7 +830,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     // Add popup with info
                     marker.bindPopup(
                         '<strong>FLW:</strong> ' + flwName + '<br>' +
-                        '<strong>Visit Date:</strong> ' + (feature.properties.visit_date || 'N/A') + '<br>' +
+                        '<strong>Visit Date:</strong> ' + (visitDate || 'N/A') + '<br>' +
                         '<strong>Visit ID:</strong> ' + (feature.properties.visit_id || 'N/A') + '<br>' +
                         '<strong>Accuracy:</strong> ' + (feature.properties.accuracy_in_m || 'N/A') + ' m<br>' +
                         '<strong>Status:</strong> ' + (feature.properties.status || 'N/A') + '<br>' +
@@ -785,6 +838,26 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         '<strong>Flagged:</strong> ' + (feature.properties.flagged ? 'Yes' : 'No') + '<br>' +
                         '<strong>Flag Reason:</strong> ' + (feature.properties.flag_reason || 'N/A')
                     );
+                    
+                    // Save the marker with its date for filtering
+                    allServicePoints.push({{
+                        marker: marker,
+                        date: visitDate,
+                        feature: feature
+                    }});
+                    
+                    // Track min and max dates for the date picker
+                    if (visitDate) {{
+                        const pointDate = new Date(visitDate);
+                        if (!isNaN(pointDate.getTime())) {{
+                            if (!minServiceDate || pointDate < minServiceDate) {{
+                                minServiceDate = pointDate;
+                            }}
+                            if (!maxServiceDate || pointDate > maxServiceDate) {{
+                                maxServiceDate = pointDate;
+                            }}
+                        }}
+                    }}
                     
                     // Add to service points layer
                     marker.addTo(servicePointsLayer);
@@ -886,6 +959,26 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         document.querySelector('.info-panel-empty').style.display = 'none';
                     }});
                 }});
+                
+                // Set min and max dates for the date picker inputs if we found valid dates
+                if (minServiceDate && maxServiceDate) {{
+                    // Format dates as YYYY-MM-DD for the date inputs
+                    const formatDateForInput = (date) => {{
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        return year + '-' + month + '-' + day;
+                    }};
+                    
+                    const minDateStr = formatDateForInput(minServiceDate);
+                    const maxDateStr = formatDateForInput(maxServiceDate);
+                    
+                    // Set min and max attributes on date inputs
+                    document.getElementById('start-date').min = minDateStr;
+                    document.getElementById('start-date').max = maxDateStr;
+                    document.getElementById('end-date').min = minDateStr;
+                    document.getElementById('end-date').max = maxDateStr;
+                }}
             }}
             
             // Fit map to all features
@@ -893,30 +986,32 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             
             // Add FLW toggle controls
             const flwTogglesContainer = document.getElementById('flw-toggles');
-            flws.forEach(flw => {{
+            
+            // Organize by FLW names but store IDs for filtering
+            Object.entries(flwIdToNameMap).forEach(([flwId, flwName]) => {{
                 const label = document.createElement('label');
                 label.className = 'flw-toggle';
                 
                 const input = document.createElement('input');
                 input.type = 'checkbox';
                 input.checked = true;
-                input.dataset.flw = flw;
+                input.dataset.flw = flwId; // Store ID for filtering
                 
                 const colorSwatch = document.createElement('span');
                 colorSwatch.className = 'color-swatch';
-                colorSwatch.style.backgroundColor = flwColors[flw];
+                colorSwatch.style.backgroundColor = flwColors[flwName] || flwColors[flwId] || '#CCCCCC';
                 
                 input.addEventListener('change', function() {{
-                    const flw = this.dataset.flw;
+                    const flwId = this.dataset.flw;
                     if (this.checked) {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw_commcare_id === flw) {{
+                            if (feature.flw_commcare_id === flwId) {{
                                 feature.layer.addTo(map);
                             }}
                         }});
                     }} else {{
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw_commcare_id === flw) {{
+                            if (feature.flw_commcare_id === flwId) {{
                                 map.removeLayer(feature.layer);
                             }}
                         }});
@@ -928,7 +1023,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 
                 label.appendChild(input);
                 label.appendChild(colorSwatch);
-                label.appendChild(document.createTextNode(flw));
+                label.appendChild(document.createTextNode(flwName || flwId)); // Show name, fallback to ID
                 
                 flwTogglesContainer.appendChild(label);
             }});
@@ -972,9 +1067,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     if (!input.checked) {{
                         input.checked = true;
                         // Add the corresponding FLW layers to the map
-                        const flw = input.dataset.flw;
+                        const flwId = input.dataset.flw;
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw === flw) {{
+                            if (feature.flw_commcare_id === flwId) {{
                                 feature.layer.addTo(map);
                             }}
                         }});
@@ -990,9 +1085,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     if (input.checked) {{
                         input.checked = false;
                         // Remove the corresponding FLW layers from the map
-                        const flw = input.dataset.flw;
+                        const flwId = input.dataset.flw;
                         allFeatureLayers.forEach(feature => {{
-                            if (feature.flw === flw) {{
+                            if (feature.flw_commcare_id === flwId) {{
                                 map.removeLayer(feature.layer);
                             }}
                         }});
@@ -1015,8 +1110,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 const checkedStatuses = Array.from(document.querySelectorAll('.status-toggle input:checked'))
                     .map(input => input.dataset.status);
                 
-                // Get all checked FLWs
-                const checkedFlws = Array.from(document.querySelectorAll('.flw-toggle input:checked'))
+                // Get all checked FLWs (by ID)
+                const checkedFlwIds = Array.from(document.querySelectorAll('.flw-toggle input:checked'))
                     .map(input => input.dataset.flw);
                 
                 // Get the selected service area
@@ -1024,7 +1119,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 
                 // Apply filtering to each feature layer
                 allFeatureLayers.forEach(feature => {{
-                    const flw = feature.flw_commcare_id;
+                    const flwId = feature.flw_commcare_id;
                     const status = feature.status;
                     const serviceArea = feature.serviceArea;
                     
@@ -1033,7 +1128,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     // 2. Status is selected
                     // 3. Either all service areas are selected OR this feature is in the selected service area
                     const shouldBeVisible = 
-                        checkedFlws.includes(flw) && 
+                        checkedFlwIds.includes(flwId) && 
                         checkedStatuses.includes(status) &&
                         (selectedServiceArea === 'all' || serviceArea === selectedServiceArea);
                     
@@ -1058,12 +1153,503 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 }}
             }});
             
+            // Date filtering functionality
+            let dateFilterActive = false;
+            let startDateFilter = null;
+            let endDateFilter = null;
+            
+            // Legacy function - using incrementDay now
+            function adjustEndDate(daysToAdjust) {{
+                console.log("Adjusting date (legacy method) by", daysToAdjust, "days");
+                // Forward to new implementation
+                incrementDay(daysToAdjust);
+            }}
+            
+            // Simplified button setup with more robust implementation
+            window.onload = function() {{
+                console.log("Window loaded, setting up date buttons");
+                
+                // Get button elements
+                const plusButton = document.getElementById('end-date-plus');
+                const minusButton = document.getElementById('end-date-minus');
+                
+                // Add click handlers for +1 day button
+                if (plusButton) {{
+                    console.log("Found +1 day button");
+                    plusButton.onclick = function(e) {{
+                        e.preventDefault(); // Prevent default behavior
+                        console.log("+1 day button clicked");
+                        incrementDay(1); // Use a specialized function for day increment
+                    }};
+                }} else {{
+                    console.error("Could not find +1 day button");
+                }}
+                
+                // Add click handlers for -1 day button
+                if (minusButton) {{
+                    console.log("Found -1 day button");
+                    minusButton.onclick = function(e) {{
+                        e.preventDefault(); // Prevent default behavior
+                        console.log("-1 day button clicked");
+                        incrementDay(-1); // Use the same function with negative argument
+                    }};
+                }} else {{
+                    console.error("Could not find -1 day button");
+                }}
+            }};
+            
+            // Specialized function just for incrementing/decrementing days
+            function incrementDay(increment) {{
+                console.log("%c*** DAY INCREMENT CALLED: " + increment, "background: #333; color: yellow; font-size: 16px; padding: 5px;");
+                
+                // Get the end date input field
+                const endDateInput = document.getElementById('end-date');
+                console.table({{
+                    "Input Element": endDateInput,
+                    "Current Value": endDateInput.value,
+                    "Min": endDateInput.min,
+                    "Max": endDateInput.max,
+                    "Increment": increment
+                }});
+                
+                // If no date is set, initialize with a default
+                if (!endDateInput.value) {{
+                    if (increment > 0 && endDateInput.min) {{
+                        // Start from min date when incrementing
+                        console.log("No date set - using min date:", endDateInput.min);
+                        endDateInput.value = endDateInput.min;
+                    }} else if (increment < 0 && endDateInput.max) {{
+                        // Start from max date when decrementing
+                        console.log("No date set - using max date:", endDateInput.max);
+                        endDateInput.value = endDateInput.max;
+                    }} else {{
+                        // Default to first available date
+                        console.log("No date set - using first available date");
+                        if (endDateInput.min) {{
+                            endDateInput.value = endDateInput.min;
+                        }} else if (endDateInput.max) {{
+                            endDateInput.value = endDateInput.max;
+                        }} else {{
+                            // Last resort - use today
+                            const today = new Date();
+                            const yyyy = today.getFullYear();
+                            const mm = String(today.getMonth() + 1).padStart(2, '0');
+                            const dd = String(today.getDate()).padStart(2, '0');
+                            endDateInput.value = yyyy + '-' + mm + '-' + dd;
+                        }}
+                    }}
+                    
+                    console.log("Initialized with default:", endDateInput.value);
+                    
+                    // If we don't need to increment (we just needed to set an initial value)
+                    if (increment === 0) {{
+                        console.log("No increment needed - applying filter with initial value");
+                        applyDateFilter();
+                        return;
+                    }}
+                }}
+                
+                // At this point, we should have a valid date in the input field
+                console.log("Current date value:", endDateInput.value);
+                
+                // Force-parse the date in each part to avoid timezone/locale issues
+                const dateParts = endDateInput.value.split('-');
+                if (dateParts.length !== 3) {{
+                    console.error("Invalid date format:", endDateInput.value);
+                    return;
+                }}
+                
+                const year = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1; // JS months are 0-based
+                const day = parseInt(dateParts[2], 10);
+                
+                console.log("Parsed date parts:", {{year, month: month+1, day}});
+                
+                // Create a new date object
+                const currentDate = new Date(year, month, day);
+                console.log("Created date object:", currentDate);
+                
+                // For debugging - show what the current date represents
+                console.log("Current date components:", {{
+                    "getFullYear()": currentDate.getFullYear(),
+                    "getMonth()": currentDate.getMonth() + 1, // +1 for human-readable month
+                    "getDate()": currentDate.getDate()
+                }});
+                
+                // Increment or decrement the day
+                const newDate = new Date(currentDate);
+                newDate.setDate(newDate.getDate() + increment);
+                console.log("New date after adjustment:", newDate);
+                
+                // Format as YYYY-MM-DD very explicitly to avoid any issues
+                const newYear = newDate.getFullYear();
+                const newMonth = String(newDate.getMonth() + 1).padStart(2, '0'); // +1 because months are 0-based
+                const newDay = String(newDate.getDate()).padStart(2, '0');
+                const newDateStr = newYear + '-' + newMonth + '-' + newDay;
+                console.log("New formatted date string:", newDateStr);
+                
+                // Check boundaries
+                const minDateStr = endDateInput.min;
+                const maxDateStr = endDateInput.max;
+                console.log("Checking boundaries - min:", minDateStr, "max:", maxDateStr);
+                
+                // Force the input to update with the new date
+                let finalDateStr;
+                
+                if (minDateStr && newDateStr < minDateStr) {{
+                    console.log("New date below minimum - using min date");
+                    finalDateStr = minDateStr;
+                }} else if (maxDateStr && newDateStr > maxDateStr) {{
+                    console.log("New date above maximum - using max date");
+                    finalDateStr = maxDateStr;
+                }} else {{
+                    console.log("New date within bounds - using new date");
+                    finalDateStr = newDateStr;
+                }}
+                
+                console.log("Final date to set:", finalDateStr);
+                
+                // Save original value for logging
+                const originalValue = endDateInput.value;
+                
+                // Force-update the input value
+                endDateInput.value = finalDateStr;
+                
+                // Try to trigger change events to ensure the browser recognizes the change
+                // Create and dispatch an input event (for modern browsers)
+                const inputEvent = new Event('input', {{bubbles: true}});
+                endDateInput.dispatchEvent(inputEvent);
+                
+                // Create and dispatch a change event
+                const changeEvent = new Event('change', {{bubbles: true}});
+                endDateInput.dispatchEvent(changeEvent);
+                
+                // For even more visibility, briefly highlight the field to show it changed
+                const originalBg = endDateInput.style.backgroundColor;
+                const originalBorder = endDateInput.style.border;
+                endDateInput.style.backgroundColor = increment > 0 ? '#e6ffe6' : '#e6f7ff'; // Green tint for +, blue for -
+                endDateInput.style.border = '2px solid ' + (increment > 0 ? 'green' : 'blue');
+                
+                setTimeout(function() {{
+                    endDateInput.style.backgroundColor = originalBg;
+                    endDateInput.style.border = originalBorder;
+                }}, 1000);
+                
+                // Visually log what we did
+                console.log("%cFINAL RESULT: Updated date from " + originalValue + " to " + finalDateStr, 
+                           "background: green; color: white; font-size: 14px; padding: 5px;");
+                
+                // Apply the filter
+                console.log("Applying date filter");
+                
+                // Add a temporary debug marker to show the adjustment worked
+                const debugMessage = document.createElement('div');
+                debugMessage.style.position = 'fixed';
+                debugMessage.style.top = '10px';
+                debugMessage.style.right = '10px';
+                debugMessage.style.backgroundColor = increment > 0 ? 'green' : 'blue';
+                debugMessage.style.color = 'white';
+                debugMessage.style.padding = '5px 10px';
+                debugMessage.style.borderRadius = '3px';
+                debugMessage.style.zIndex = '9999';
+                debugMessage.textContent = increment > 0 ? "Added 1 day" : "Subtracted 1 day";
+                document.body.appendChild(debugMessage);
+                
+                // Remove debug message after 2 seconds
+                setTimeout(function() {{
+                    if (debugMessage.parentNode) {{
+                        debugMessage.parentNode.removeChild(debugMessage);
+                    }}
+                }}, 2000);
+                
+                applyDateFilter();
+            }}
+            
+            // Function to apply the date filter
+            function applyDateFilter() {{
+                console.log("Applying date filter");
+                const startDateInput = document.getElementById('start-date').value;
+                const endDateInput = document.getElementById('end-date').value;
+                
+                console.log("Start date input:", startDateInput);
+                console.log("End date input:", endDateInput);
+                
+                // Whether either date is set
+                if (startDateInput || endDateInput) {{
+                    console.log("At least one date is set, activating filter");
+                    dateFilterActive = true;
+                    
+                    // Store the original input strings for display purposes
+                    const startDateStr = startDateInput;
+                    const endDateStr = endDateInput;
+                    
+                    // Set filters consistently using Nigeria timezone (UTC+1)
+                    if (startDateInput) {{
+                        // Parse the date and adjust to Nigeria timezone (UTC+1)
+                        const parts = startDateInput.split('-');
+                        // Create date as midnight in Nigeria timezone
+                        // To do this, we adjust by the difference between local timezone and Nigeria
+                        // Nigeria is UTC+1
+                        const nigeriaOffsetHours = 1; // UTC+1
+                        const localOffset = new Date().getTimezoneOffset() / -60; // Convert to hours (positive for east)
+                        const offsetDiff = nigeriaOffsetHours - localOffset; // Difference to apply
+                        
+                        // Create date with adjusted time to compensate for timezone difference
+                        startDateFilter = new Date(parts[0], parts[1]-1, parts[2]);
+                        startDateFilter.setHours(0 - offsetDiff, 0, 0, 0);
+                        console.log("Start date filter adjusted for Nigeria timezone:", startDateFilter);
+                    }} else {{
+                        startDateFilter = null;
+                    }}
+                    
+                    if (endDateInput) {{
+                        // Same process for end date
+                        const parts = endDateInput.split('-');
+                        const nigeriaOffsetHours = 1; // UTC+1
+                        const localOffset = new Date().getTimezoneOffset() / -60;
+                        const offsetDiff = nigeriaOffsetHours - localOffset;
+                        
+                        // Create date with adjusted time for timezone difference
+                        endDateFilter = new Date(parts[0], parts[1]-1, parts[2]);
+                        // Set to end of day in Nigeria timezone (23:59:59.999)
+                        endDateFilter.setHours(23 - offsetDiff, 59, 59, 999);
+                        console.log("End date filter adjusted for Nigeria timezone:", endDateFilter);
+                    }} else {{
+                        endDateFilter = null;
+                    }}
+                    
+                    filterServicePointsByDate();
+                }} else {{
+                    // If both are empty, clear the filter
+                    console.log("No dates set, clearing filter");
+                    dateFilterActive = false;
+                    startDateFilter = null;
+                    endDateFilter = null;
+                    resetServicePointsFilter();
+                }}
+                
+                // Visual feedback that the filter was applied
+                const applyButton = document.getElementById('apply-date-filter');
+                if (applyButton) {{
+                    applyButton.style.backgroundColor = '#c8e6c9';  // Light green
+                    setTimeout(function() {{
+                        applyButton.style.backgroundColor = '#f0f0f0';  // Reset to original color
+                    }}, 500);
+                }}
+            }}
+            
+            // Apply date filter button
+            document.getElementById('apply-date-filter').addEventListener('click', function() {{
+                applyDateFilter();
+            }});
+            
+            // Clear date filter button
+            document.getElementById('clear-date-filter').addEventListener('click', function() {{
+                document.getElementById('start-date').value = '';
+                document.getElementById('end-date').value = '';
+                dateFilterActive = false;
+                startDateFilter = null;
+                endDateFilter = null;
+                
+                // Restore all service points
+                resetServicePointsFilter();
+            }});
+            
+            // Function to filter service points by date
+            function filterServicePointsByDate() {{
+                console.log("Filtering service points by date");
+                console.log("Date filter active:", dateFilterActive);
+                console.log("Start date filter:", startDateFilter);
+                console.log("End date filter:", endDateFilter);
+                
+                // Clear existing service points layer
+                servicePointsLayer.clearLayers();
+                
+                // Track how many points are shown/filtered
+                let shownCount = 0;
+                let filteredCount = 0;
+                
+                // Add only points that match the date filter
+                allServicePoints.forEach(point => {{
+                    let shouldShow = true;
+                    
+                    if (dateFilterActive && point.date) {{
+                        // Ensure consistent date parsing regardless of browser or format
+                        // Force manual date parsing to avoid browser inconsistencies
+                        let pointDate;
+                        try {{
+                            // First try standard Date parsing
+                            pointDate = new Date(point.date);
+                            
+                            // Check if date is valid, if not try manual parsing
+                            if (isNaN(pointDate.getTime())) {{
+                                throw new Error("Invalid date format");
+                            }}
+                            console.log("Successfully parsed date:", pointDate);
+                        }} catch (e) {{
+                            console.log("Error parsing date, trying backup methods:", e);
+                            
+                            // Try to handle different date formats (ISO, MM/DD/YYYY, etc.)
+                            // Extract parts from various formats
+                            const dateParts = point.date.split(/[\/\-T ]/);
+                            if (dateParts.length >= 3) {{
+                                // Try to determine format based on parts
+                                let year, month, day;
+                                
+                                // Check if first part is year (length 4)
+                                if (dateParts[0].length === 4) {{
+                                    // Likely YYYY-MM-DD format
+                                    year = parseInt(dateParts[0]);
+                                    month = parseInt(dateParts[1]) - 1; // JavaScript months are 0-based
+                                    day = parseInt(dateParts[2]);
+                                }} else {{
+                                    // Likely MM/DD/YYYY format
+                                    month = parseInt(dateParts[0]) - 1;
+                                    day = parseInt(dateParts[1]);
+                                    year = parseInt(dateParts[2]);
+                                }}
+                                
+                                pointDate = new Date(year, month, day);
+                                console.log("Manually parsed date parts:", {{year, month: month+1, day}}, "to date:", pointDate);
+                            }} else {{
+                                // If we can't parse, default to showing the point
+                                console.log("Could not parse date format:", point.date);
+                                shouldShow = true;
+                                // Skip remaining date filtering
+                                return;
+                            }}
+                        }}
+                        
+                        console.log("Checking point with date:", pointDate);
+                        
+                        // Instead of comparing Date objects directly, compare just year, month, day components
+                        const pointYMD = new Date(pointDate.getFullYear(), pointDate.getMonth(), pointDate.getDate());
+                        
+                        // Compare the point date in its original timezone with our Nigeria-adjusted filter dates
+                        // This lets the filter logic work in Nigeria timezone while preserving the original timezone
+                        // of the service point data
+                        
+                        if (startDateFilter) {{
+                            if (pointYMD < startDateFilter) {{
+                                console.log("Point date before start date (using Nigeria time filter), filtering out");
+                                shouldShow = false;
+                            }}
+                        }}
+                        
+                        if (endDateFilter) {{
+                            if (pointYMD > endDateFilter) {{
+                                console.log("Point date after end date (using Nigeria time filter), filtering out");
+                                shouldShow = false;
+                            }}
+                        }}
+                    }} else if (dateFilterActive && !point.date) {{
+                        // If date filter is active but point has no date, don't show
+                        console.log("Point has no date, filtering out");
+                        shouldShow = false;
+                    }}
+                    
+                    if (shouldShow) {{
+                        point.marker.addTo(servicePointsLayer);
+                        shownCount++;
+                    }} else {{
+                        filteredCount++;
+                    }}
+                }});
+                
+                console.log("Filter applied: showing " + shownCount + " points, filtered out " + filteredCount + " points");
+                
+                // Prepare date range text for notification
+                let dateRangeText = "";
+                if (startDateFilter && endDateFilter) {{
+                    // Format dates for display - use direct input values to avoid timezone issues
+                    const startDateInput = document.getElementById('start-date').value;
+                    const endDateInput = document.getElementById('end-date').value;
+                    
+                    // Function to format date string in a more readable way
+                    const formatDateStr = (dateStr) => {{
+                        if (!dateStr) return "";
+                        // Parse the date parts explicitly to avoid timezone issues
+                        const parts = dateStr.split('-');
+                        if (parts.length !== 3) return dateStr;
+                        
+                        const year = parts[0];
+                        const month = parseInt(parts[1], 10);
+                        const day = parseInt(parts[2], 10);
+                        
+                        // Get month name
+                        const monthNames = ["January", "February", "March", "April", "May", "June", 
+                                          "July", "August", "September", "October", "November", "December"];
+                        return monthNames[month-1] + " " + day + ", " + year;
+                    }};
+                    
+                    const startDateStr = formatDateStr(startDateInput);
+                    const endDateStr = formatDateStr(endDateInput);
+                    
+                    if (startDateInput === endDateInput) {{
+                        dateRangeText = " on " + startDateStr;
+                    }} else {{
+                        dateRangeText = " from " + startDateStr + " to " + endDateStr;
+                    }}
+                }} else if (startDateFilter) {{
+                    // Use input value directly to avoid timezone issues
+                    const startDateInput = document.getElementById('start-date').value;
+                    const startDateStr = formatDateStr(startDateInput);
+                    dateRangeText = " after " + startDateStr;
+                }} else if (endDateFilter) {{
+                    // Use input value directly to avoid timezone issues
+                    const endDateInput = document.getElementById('end-date').value;
+                    const endDateStr = formatDateStr(endDateInput);
+                    dateRangeText = " before " + endDateStr;
+                }}
+                
+                // Show a notification with filter results
+                const mapElement = document.getElementById('map');
+                const notification = document.createElement('div');
+                notification.style.position = 'absolute';
+                notification.style.top = '70px';
+                notification.style.left = '50%';
+                notification.style.transform = 'translateX(-50%)';
+                notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                notification.style.color = 'white';
+                notification.style.padding = '10px 20px';
+                notification.style.borderRadius = '5px';
+                notification.style.zIndex = '1000';
+                notification.style.transition = 'opacity 0.5s';
+                
+                // Handle zero results message differently
+                if (shownCount === 0) {{
+                    notification.style.backgroundColor = 'rgba(220, 53, 69, 0.8)'; // Red background for no results
+                    notification.innerHTML = "<b>No service points found" + dateRangeText + "</b><br>Try adjusting your date range";
+                }} else {{
+                    notification.innerHTML = "<b>Date filter applied:</b> Showing " + shownCount + " service points" + dateRangeText;
+                }}
+                
+                // Add to map and fade out after a few seconds
+                mapElement.appendChild(notification);
+                setTimeout(function() {{
+                    notification.style.opacity = '0';
+                    setTimeout(function() {{
+                        if (notification.parentNode) {{
+                            notification.parentNode.removeChild(notification);
+                        }}
+                    }}, 500);
+                }}, 4000);
+            }}
+            
+            // Function to reset service points filter
+            function resetServicePointsFilter() {{
+                servicePointsLayer.clearLayers();
+                allServicePoints.forEach(point => {{
+                    point.marker.addTo(servicePointsLayer);
+                }});
+            }}
+            
             // Add service area options
             const serviceAreaSelect = document.getElementById('service-area-select');
             serviceAreas.forEach(id => {{
                 const option = document.createElement('option');
                 option.value = id;
-                option.textContent = `Service Area ${{id}}`;
+                                        option.textContent = 'Service Area ' + id;
                 serviceAreaSelect.appendChild(option);
             }});
             
@@ -1103,13 +1689,13 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     let hasValidBounds = false;
                     
                     // Show only delivery units in the selected service area and check their FLWs
-                    const relevantFlws = new Set();
+                    const relevantFlwIds = new Set();
                     
                     // Add only delivery units from the selected service area
                     allFeatureLayers.forEach(feature => {{
                         if (feature.serviceArea === selectedServiceArea) {{
                             feature.layer.addTo(map);
-                            relevantFlws.add(feature.flw_commcare_id);
+                            relevantFlwIds.add(feature.flw_commcare_id);
                             
                             // Add to bounds for zooming
                             if (feature.layer.getBounds) {{
@@ -1120,8 +1706,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     }});
                     
                     // Check toggles for FLWs that have delivery units in this service area
-                    relevantFlws.forEach(flw => {{
-                        const toggle = document.querySelector(`.flw-toggle input[data-flw="${{flw}}"]`);
+                    relevantFlwIds.forEach(flwId => {{
+                        const toggle = document.querySelector('.flw-toggle input[data-flw="' + flwId + '"]');
                         if (toggle) {{
                             toggle.checked = true;
                         }}
@@ -1155,14 +1741,13 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 // Add legend for service points
                 if (servicePointsData) {{
                     div.innerHTML += '<h4 style="margin-top: 10px;">Map Symbols</h4>';
-                    div.innerHTML += `
-                        <div class="legend-item">
-                            <svg height="20" width="20" style="margin-right: 8px;">
-                                <circle cx="10" cy="10" r="5" stroke="black" stroke-width="1" fill="#FF0000" />
-                            </svg>
-                            Service Delivery Point
-                        </div>
-                    `;
+                    div.innerHTML += 
+                        '<div class="legend-item">' +
+                            '<svg height="20" width="20" style="margin-right: 8px;">' +
+                                '<circle cx="10" cy="10" r="5" stroke="black" stroke-width="1" fill="#FF0000" />' +
+                            '</svg>' +
+                            'Service Delivery Point' +
+                        '</div>';
                 }}
                 
                 return div;

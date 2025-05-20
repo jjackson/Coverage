@@ -111,7 +111,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
         status_data = status_counts_by_flw[status_counts_by_flw['du_status'] == status]
         
         fig1.add_trace(go.Bar(
-            x=status_data['flw'],
+            x=status_data['flw_name'],
             y=status_data['count'],
             name=status.title(),
             hovertemplate='<b>%{x}</b><br>' +
@@ -192,8 +192,8 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     fig2 = go.Figure()
     
     # Add a trace for each FLW's service area progress
-    for flw in sorted(flw_service_area_progress['flw'].unique()):
-        flw_data = flw_service_area_progress[flw_service_area_progress['flw'] == flw]
+    for flw in sorted(flw_service_area_progress['flw_name'].unique()):
+        flw_data = flw_service_area_progress[flw_service_area_progress['flw_name'] == flw]
         
         fig2.add_trace(go.Bar(
             x=flw_data['service_area_id'],
@@ -202,7 +202,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
             text=flw_data['percentage'].round(1).astype(str) + '%',
             textposition='outside',
             hovertext=flw_data.apply(lambda row: 
-                f"<b>{row['flw']}</b><br>" +
+                f"<b>{row['flw_name']}</b><br>" +
                 f"Service Area: {row['service_area_id']}<br>" +
                 f"Progress: {row['percentage']:.1f}%<br>" +
                 f"Completed: {row['completed_dus']}/{row['total_dus']}", 
@@ -250,7 +250,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     
     # Create hover text with detailed information
     hover_text = [
-        f"<b>{row['flw']}</b><br>" +
+        f"<b>{row['flw_name']}</b><br>" +
         f"Completion Rate: {row['completion_rate']:.1f}%<br>" +
         f"Completed: {row['completed_units']}/{row['assigned_units']}<br>" +
         f"Service Areas: {row['service_areas']}"
@@ -261,7 +261,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     
     # Add the bar trace
     fig3.add_trace(go.Bar(
-        x=sorted_flw_data['flw'],
+        x=sorted_flw_data['flw_name'],
         y=sorted_flw_data['completion_rate'],
         text=sorted_flw_data['completion_rate'].round(1).astype(str) + '%',
         textposition='outside',
@@ -319,7 +319,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
         ),
         cells=dict(
             values=[
-                sorted_flw_data['flw'],
+                sorted_flw_data['flw_name'],
                 sorted_flw_data['completion_rate'].round(1),
                 sorted_flw_data['completed_units'],
                 sorted_flw_data['assigned_units'],
@@ -371,8 +371,8 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
         fig5 = go.Figure()
         
         # Add a trace for each FLW
-        for flw in sorted(flw_building_density['flw'].unique()):
-            flw_data = flw_building_density[flw_building_density['flw'] == flw]
+        for flw in sorted(flw_building_density['flw_name'].unique()):
+            flw_data = flw_building_density[flw_building_density['flw_name'] == flw]
             
             fig5.add_trace(go.Bar(
                 x=flw_data['service_area_id'],
@@ -381,7 +381,7 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
                 text=flw_data['density'].round(1).astype(str),
                 textposition='outside',
                 hovertext=flw_data.apply(lambda row: 
-                    f"<b>{row['flw']}</b><br>" +
+                    f"<b>{row['flw_name']}</b><br>" +
                     f"Service Area: {row['service_area_id']}<br>" +
                     f"Density: {row['density']:.1f} buildings/km²<br>" +
                     f"Buildings: {row['#Buildings']}<br>" +
@@ -648,8 +648,20 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
         'service_area_id': lambda x: ', '.join(str(i) for i in sorted(set(x)))  # Convert all values to strings before joining
     }).reset_index()
     
-    # Keep flw_commcare_id as is, but add a display name column for UI
-    flw_data['flw'] = flw_data['flw_commcare_id']  # Create display name column for UI
+    # Create a mapping from flw_commcare_id to display name
+    flw_name_map = {}
+    # First try to use the name mapping from coverage_data
+    if hasattr(coverage_data, 'flw_commcare_id_to_name_map') and coverage_data.flw_commcare_id_to_name_map:
+        flw_name_map = coverage_data.flw_commcare_id_to_name_map
+    # If that's not available, fallback to the FLW objects in coverage_data
+    elif hasattr(coverage_data, 'flws') and coverage_data.flws:
+        for flw_id, flw_obj in coverage_data.flws.items():
+            flw_name_map[flw_id] = flw_obj.name
+    
+    # Add a display name column using the mapping
+    flw_data['flw_name'] = flw_data['flw_commcare_id'].apply(
+        lambda id: flw_name_map.get(id, id)  # Use the ID itself if no name mapping exists
+    )
     
     flw_data.rename(columns={
         count_column: 'assigned_units',
@@ -662,8 +674,8 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
     
     # Convert to JSON for JavaScript
     flw_json = json.dumps([{
-        'flw': row['flw'],  # Display name for UI
-        'flw_commcare_id': row['flw_commcare_id'],  # Internal ID
+        'flw_name': row['flw_name'],  # Display name for UI
+        'flw_id': row['flw_commcare_id'],  # Internal ID for filtering
         'completed_units': int(row['completed_units']),
         'assigned_units': int(row['assigned_units']),
         'completion_rate': float(row['completion_rate']),
@@ -907,7 +919,7 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                 // FLW Filter functionality
                 // Populate FLW dropdown with all unique FLWs
                 const flwData = {flw_json};
-                const uniqueFlws = [...new Set(flwData.map(item => item.flw))].sort();
+                const uniqueFlws = [...new Set(flwData.map(item => item.flw_name))].sort();
                 
                 uniqueFlws.forEach(flw => {{
                     $("#flw-selector").append(`<option value="${{flw}}">${{flw}}</option>`);
@@ -934,6 +946,16 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                         return;
                     }}
                     
+                    // Create a mapping of names to IDs for lookup
+                    const flwNameToIdMap = {{}};
+                    flwData.forEach(item => {{
+                        flwNameToIdMap[item.flw_name] = item.flw_id;
+                    }});
+                    
+                    // Get the corresponding IDs for the selected names
+                    const selectedFlwIds = selectedFlws.map(name => flwNameToIdMap[name]);
+                    console.log("Selected FLW IDs:", selectedFlwIds);
+                    
                     // Add filtering-active class to hide summary views
                     $(".tab-content").addClass("filtering-active");
                     
@@ -959,7 +981,7 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                         
                         console.log("Processing chart:", plotDiv, isTable ? "(FLW Table)" : "");
                         
-                        // Special handling for FLW table
+                        // Special handling for FLW table - use name-based filtering
                         if (isTable) {{
                             // For the table, we'll filter the rows
                             const tableData = data[0];
@@ -987,51 +1009,18 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                             plotObj._originalData = JSON.parse(JSON.stringify(data));
                         }}
                         
-                        // First determine if this chart has FLW data
-                        let hasFLWData = false;
+                        // The rest of the logic depends on the chart type and how FLW data is displayed
+                        // We need to check how FLW data is represented in this specific chart
                         
-                        // Check multiple ways a chart might have FLW data
-                        // 1. Check if any trace has a name matching an FLW
-                        for (const trace of data) {{
-                            if (trace.name && uniqueFlws.includes(trace.name)) {{
-                                hasFLWData = true;
-                                break;
-                            }}
-                        }}
-                        
-                        // 2. Check if any trace has x values matching FLWs
-                        if (!hasFLWData) {{
-                            for (const trace of data) {{
-                                if (trace.x) {{
-                                    for (const val of trace.x) {{
-                                        if (uniqueFlws.includes(val)) {{
-                                            hasFLWData = true;
-                                            break;
-                                        }}
-                                    }}
-                                }}
-                                if (hasFLWData) break;
-                            }}
-                        }}
-                        
-                        console.log("Chart has FLW data:", hasFLWData);
-                        
-                        if (!hasFLWData) {{
-                            return; // Skip charts without FLW data
-                        }}
-                        
-                        // Handle different chart types
-                        
-                        // Case 1: Chart where traces are FLWs (like in service area charts)
+                        // For charts where traces have FLW names as their 'name' property (like service area progress)
                         if (data[0].name && uniqueFlws.includes(data[0].name)) {{
-                            // Filter out any traces for FLWs not in selectedFlws
                             const visibility = data.map(trace => 
                                 selectedFlws.includes(trace.name) ? true : 'legendonly'
                             );
                             
                             Plotly.restyle(plotDiv, {{ visible: visibility }});
                         }}
-                        // Case 2: Chart where x-axis has FLW names (like FLW performance)
+                        // For charts where x-axis has FLW names (like FLW performance chart)
                         else if (data[0].x && uniqueFlws.some(flw => data[0].x.includes(flw))) {{
                             // Create a new data array that only includes the selected FLWs
                             const newData = [];
@@ -1043,12 +1032,14 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                                 const newX = [];
                                 const newY = [];
                                 const newText = trace.text ? [] : undefined;
+                                const newHovertext = trace.hovertext ? [] : undefined;
                                 
                                 for (let j = 0; j < trace.x.length; j++) {{
                                     if (selectedFlws.includes(trace.x[j])) {{
                                         newX.push(trace.x[j]);
                                         newY.push(trace.y[j]);
                                         if (newText) newText.push(trace.text[j]);
+                                        if (newHovertext) newHovertext.push(trace.hovertext[j]);
                                     }}
                                 }}
                                 
@@ -1063,6 +1054,9 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                                 }};
                                 
                                 if (newText) newTrace.text = newText;
+                                if (newHovertext) newTrace.hovertext = newHovertext;
+                                if (trace.hoverinfo) newTrace.hoverinfo = trace.hoverinfo;
+                                if (trace.textposition) newTrace.textposition = trace.textposition;
                                 
                                 newData.push(newTrace);
                             }}

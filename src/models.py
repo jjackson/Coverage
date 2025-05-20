@@ -19,6 +19,11 @@ class FLW:
     assigned_units: int = 0
     completed_units: int = 0
     status_counts: Dict[str, int] = field(default_factory=dict)
+    first_service_delivery_date: Optional[datetime] = None
+    last_service_delivery_date: Optional[datetime] = None
+    dates_active: List[datetime] = field(default_factory=list)
+    service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
+    delivery_units: List['DeliveryUnit'] = field(default_factory=list)
     
     @property
     def completion_rate(self) -> float:
@@ -30,6 +35,18 @@ class FLW:
     def get_service_areas_str(self) -> str:
         """Returns service areas as a comma-separated string"""
         return ', '.join(str(sa) for sa in sorted(self.service_areas))
+        
+    @property
+    def days_active(self) -> int:
+        """Return count of unique days the FLW was active"""
+        return len(self.dates_active)
+
+    @property
+    def delivery_units_completed_per_day(self) -> float:
+        """Calculate the average number of delivery units completed per day worked"""
+        if self.days_active == 0:
+            return 0.0
+        return self.completed_units / self.days_active
 
 
 @dataclass
@@ -772,6 +789,8 @@ class CoverageData:
                     flw.completed_units += 1
                 if sa_id not in flw.service_areas:
                     flw.service_areas.append(sa_id)
+                # Add this delivery unit to the FLW's delivery_units list
+                flw.delivery_units.append(du)
             
             except Exception as e:
                 continue
@@ -809,8 +828,33 @@ class CoverageData:
                     self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                     
                     # If this FLW exists in our FLW list, update its name too
-                    if point.flw_id in self.flws:
-                        self.flws[point.flw_id].name = point.flw_name
+                    if point.flw_commcare_id in self.flws:
+                        self.flws[point.flw_commcare_id].name = point.flw_name
+                        # Add the service point to this FLW's service_points list
+                        self.flws[point.flw_commcare_id].service_points.append(point)
+                
+                # Update FLW's active dates if visit_date is present
+                if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
+                    try:
+                        visit_date = pd.to_datetime(point.visit_date).date()
+                        flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
+                        
+                        if flw_id in self.flws:
+                            if visit_date not in self.flws[flw_id].dates_active:
+                                self.flws[flw_id].dates_active.append(visit_date)
+                            
+                            # Update first and last service delivery dates
+                            if (self.flws[flw_id].first_service_delivery_date is None or 
+                                visit_date < self.flws[flw_id].first_service_delivery_date):
+                                self.flws[flw_id].first_service_delivery_date = visit_date
+                                
+                            if (self.flws[flw_id].last_service_delivery_date is None or 
+                                visit_date > self.flws[flw_id].last_service_delivery_date):
+                                self.flws[flw_id].last_service_delivery_date = visit_date
+                    except:
+                        # Skip if date parsing fails
+                        pass
+                
             except Exception as e:
                 print(f"Error creating service delivery point: {e}")
                 continue

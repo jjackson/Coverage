@@ -1839,9 +1839,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     </html>
     """
     
-    # Write the HTML to a file
+    # Write the HTML to a file with UTF-8 encoding
     output_filename = "nigeria_delivery_units_map.html"
-    with open(output_filename, "w") as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
     print(f"Map has been created: {output_filename}")

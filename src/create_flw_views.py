@@ -85,6 +85,39 @@ def process_flw_timeline_data(coverage_data):
         'max_date': max_date.strftime('%Y-%m-%d') if not pd.isnull(max_date) else ''
     }
 
+def extract_flw_table_data(coverage_data):
+    """
+    Extract detailed FLW data for table view showing productivity metrics.
+    
+    Args:
+        coverage_data: CoverageData object containing the loaded data
+        
+    Returns:
+        A list of dictionaries with FLW metrics
+    """
+    flw_data = []
+    
+    for flw_id, flw in coverage_data.flws.items():
+        # Format dates nicely or use placeholder if None
+        first_date = flw.first_service_delivery_date.strftime('%Y-%m-%d') if flw.first_service_delivery_date else 'N/A'
+        last_date = flw.last_service_delivery_date.strftime('%Y-%m-%d') if flw.last_service_delivery_date else 'N/A'
+        
+        # Create entry for this FLW
+        entry = {
+            'flw_name': flw.name,
+            'service_deliveries': len(flw.service_points),
+            'first_service_delivery_date': first_date,
+            'last_service_delivery_date': last_date,
+            'days_active': flw.days_active,
+            'completed_units': flw.completed_units,
+            'assigned_units': flw.assigned_units,
+            'completion_rate': round(flw.completion_rate, 1),
+            'units_per_day': round(flw.delivery_units_completed_per_day, 2)
+        }
+        flw_data.append(entry)
+    
+    return flw_data
+
 def create_flw_views_report(excel_file=None, service_delivery_csv=None, coverage_data=None):
     """
     Create Field-Level Worker (FLW) views from the DU Export Excel file and service delivery CSV
@@ -120,6 +153,13 @@ def create_flw_views_report(excel_file=None, service_delivery_csv=None, coverage
     except Exception as e:
         print(f"Error processing heatmap data: {e}")
         heatmap_data = {'flws': [], 'flw_names': [], 'dates': [], 'matrix': []}
+        
+    # Extract FLW table data for productivity metrics
+    try:
+        flw_table_data = extract_flw_table_data(coverage_data)
+    except Exception as e:
+        print(f"Error processing FLW table data: {e}")
+        flw_table_data = []
 
     # Create the JavaScript file content
     js_content = f"""
@@ -132,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {{
     const chart = echarts.init(chartElement);
     const timelineData = {json.dumps(timeline_data)};
     const heatmapData = {json.dumps(heatmap_data)};
+    const flwTableData = {json.dumps(flw_table_data)};
 
     // Populate FLW select
     const flwSelect = document.getElementById('flw-select');
@@ -353,21 +394,186 @@ document.addEventListener('DOMContentLoaded', function() {{
         heatmapChart.setOption(option);
     }}
 
+    // FLW Table functionality
+    function populateFlwTable() {{
+        const tableBody = document.getElementById('flw-table-body');
+        if (!tableBody) return;
+
+        // Clear existing rows
+        tableBody.innerHTML = '';
+        
+        // Sort the data initially by service deliveries (descending)
+        const sortedData = [...flwTableData].sort((a, b) => b.service_deliveries - a.service_deliveries);
+        
+        // Add rows to the table
+        sortedData.forEach(flw => {{
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${{flw.flw_name}}</td>
+                <td>${{flw.service_deliveries}}</td>
+                <td>${{flw.first_service_delivery_date}}</td>
+                <td>${{flw.last_service_delivery_date}}</td>
+                <td>${{flw.days_active}}</td>
+                <td>${{flw.completed_units}}</td>
+                <td>${{flw.assigned_units}}</td>
+                <td>${{flw.completion_rate}}%</td>
+                <td>${{flw.units_per_day}}</td>
+            `;
+            
+            tableBody.appendChild(row);
+        }});
+    }}
+    
+    // Table sorting functionality
+    function setupTableSorting() {{
+        const table = document.getElementById('flw-table');
+        const headers = table.querySelectorAll('th');
+        const tableBody = document.getElementById('flw-table-body');
+        const rows = tableBody.querySelectorAll('tr');
+        
+        // Define the sort direction for each column (initially all ascending)
+        const directions = Array.from(headers).map(() => {{
+            return '';
+        }});
+        
+        // Add click listeners to all headers
+        headers.forEach((header, index) => {{
+            header.addEventListener('click', () => {{
+                // Get all rows from the table body
+                const rows = Array.from(tableBody.querySelectorAll('tr'));
+                // Get the header text
+                const headerText = header.textContent.trim();
+                // Get the column type to determine sort method
+                const isNumber = header.dataset.type === 'number';
+                const isDate = header.dataset.type === 'date';
+                
+                // Direction changes each time header is clicked
+                // Empty -> ascending -> descending -> Empty (back to original order)
+                const direction = directions[index] === '' ? 'asc' : directions[index] === 'asc' ? 'desc' : '';
+                
+                // Reset all other directions
+                directions.forEach((dir, i) => {{
+                    directions[i] = i !== index ? '' : direction;
+                }});
+                
+                // Remove class from all headers
+                headers.forEach(header => {{
+                    header.classList.remove('asc', 'desc');
+                }});
+                
+                if (direction) {{
+                    header.classList.add(direction);
+                }}
+                
+                // Sort the rows
+                const sortedRows = [...rows].sort((rowA, rowB) => {{
+                    const cellA = rowA.querySelectorAll('td')[index].textContent;
+                    const cellB = rowB.querySelectorAll('td')[index].textContent;
+                    
+                    // Compare based on data type
+                    let comparison = 0;
+                    if (isNumber) {{
+                        // Number comparison: convert to numeric values first
+                        const valueA = parseFloat(cellA.replace('%', ''));
+                        const valueB = parseFloat(cellB.replace('%', ''));
+                        comparison = valueA - valueB;
+                    }} else if (isDate) {{
+                        // Date comparison: convert to Date objects for comparison
+                        // Check if dates are N/A first
+                        if (cellA === 'N/A' && cellB === 'N/A') {{
+                            comparison = 0;
+                        }} else if (cellA === 'N/A') {{
+                            comparison = -1;
+                        }} else if (cellB === 'N/A') {{
+                            comparison = 1;
+                        }} else {{
+                            const dateA = new Date(cellA);
+                            const dateB = new Date(cellB);
+                            comparison = dateA - dateB;
+                        }}
+                    }} else {{
+                        // String comparison
+                        comparison = cellA.localeCompare(cellB);
+                    }}
+                    
+                    return direction === 'asc' ? comparison : -comparison;
+                }});
+                
+                // Remove existing rows
+                rows.forEach(row => {{
+                    tableBody.removeChild(row);
+                }});
+                
+                // Add new rows in the right order
+                sortedRows.forEach(row => {{
+                    tableBody.appendChild(row);
+                }});
+            }});
+        }});
+    }}
+    
+    // Export functionality
+    function setupExportButton() {{
+        const exportBtn = document.getElementById('export-flw-table');
+        if (!exportBtn) return;
+        
+        exportBtn.addEventListener('click', () => {{
+            // Create CSV content
+            let csv = 'FLW Name,Service Deliveries,First Service Date,Last Service Date,Days Active,Completed Units,Assigned Units,Completion Rate,Units Per Day\\n';
+            
+            flwTableData.forEach(flw => {{
+                // Properly escape fields with quotes if they contain commas
+                const row = [
+                    flw.flw_name, 
+                    flw.service_deliveries,
+                    flw.first_service_delivery_date,
+                    flw.last_service_delivery_date,
+                    flw.days_active,
+                    flw.completed_units,
+                    flw.assigned_units,
+                    flw.completion_rate,
+                    flw.units_per_day
+                ];
+                csv += row.join(',') + '\\n';
+            }});
+            
+            // Create download link
+            const blob = new Blob([csv], {{ type: 'text/csv;charset=utf-8;' }});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'flw_productivity_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }});
+    }}
+
     // Update both charts together
     document.getElementById('update-chart').addEventListener('click', function() {{
         updateChart();
         updateHeatmap();
     }});
+    
     // Initial render
     updateChart();
     updateHeatmap();
-    window.addEventListener('resize', function() {{ chart.resize(); heatmapChart.resize(); }});
+    populateFlwTable();
+    setupTableSorting();
+    setupExportButton();
+    
+    window.addEventListener('resize', function() {{ 
+        chart.resize(); 
+        heatmapChart.resize(); 
+    }});
 }});
 """
 
     # Create JavaScript file
     js_filename = "flw_timeline.js"
-    with open(js_filename, "w") as f:
+    with open(js_filename, "w", encoding="utf-8") as f:
         f.write(js_content)
     
     # Generate the HTML file with ECharts visualization
@@ -396,7 +602,7 @@ document.addEventListener('DOMContentLoaded', function() {{
                 border-radius: 5px;
                 box-shadow: 0 0 10px rgba(0,0,0,0.1);
             }}
-            h1 {{
+            h1, h2 {{
                 color: #333;
                 border-bottom: 1px solid #ddd;
                 padding-bottom: 10px;
@@ -526,6 +732,58 @@ document.addEventListener('DOMContentLoaded', function() {{
                 height: 400px;
                 margin-top: 40px;
             }}
+            .table-container {{
+                margin-top: 40px;
+                overflow-x: auto;
+            }}
+            .flw-table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                table-layout: auto;
+            }}
+            .flw-table th, .flw-table td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }}
+            .flw-table th {{
+                background-color: #f5f5f5;
+                position: relative;
+                cursor: pointer;
+                padding-right: 25px;
+            }}
+            .flw-table th::after {{
+                content: '⇕';
+                position: absolute;
+                right: 8px;
+                color: #999;
+            }}
+            .flw-table th.asc::after {{
+                content: '↑';
+                color: #333;
+            }}
+            .flw-table th.desc::after {{
+                content: '↓';
+                color: #333;
+            }}
+            .flw-table tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .flw-table tr:hover {{
+                background-color: #f0f7ff;
+            }}
+            .export-button {{
+                margin-top: 10px;
+                text-align: right;
+            }}
+            .export-button button {{
+                background-color: #2196F3;
+                margin-left: 10px;
+            }}
+            .export-button button:hover {{
+                background-color: #0b7dda;
+            }}
         </style>
     </head>
     <body>
@@ -589,6 +847,31 @@ document.addEventListener('DOMContentLoaded', function() {{
                 <div id="heatmap-chart"></div>
             </div>
             
+            <div class="table-container">
+                <h2>FLW Productivity Metrics</h2>
+                <div class="export-button">
+                    <button id="export-flw-table">Export to CSV</button>
+                </div>
+                <table id="flw-table" class="flw-table">
+                    <thead>
+                        <tr>
+                            <th>FLW Name</th>
+                            <th data-type="number">Service Deliveries</th>
+                            <th data-type="date">First Service Date</th>
+                            <th data-type="date">Last Service Date</th>
+                            <th data-type="number">Days Active</th>
+                            <th data-type="number">Completed Units</th>
+                            <th data-type="number">Assigned Units</th>
+                            <th data-type="number">Completion Rate</th>
+                            <th data-type="number">Units Per Day</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flw-table-body">
+                        <!-- Table rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
             <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         </div>
     </body>
@@ -597,7 +880,7 @@ document.addEventListener('DOMContentLoaded', function() {{
     
     # Write the HTML to a file
     output_filename = "flw_views.html"
-    with open(output_filename, "w") as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
     print(f"FLW Views report has been created: {output_filename}")

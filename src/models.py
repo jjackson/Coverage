@@ -815,7 +815,6 @@ class CoverageData:
                 print(f"Error creating service delivery point: {e}")
                 continue
         
-        print(f"DEBUG: Final flw_commcare_id_to_name_map contents: {self.flw_commcare_id_to_name_map}")
         return service_df
 
     @classmethod

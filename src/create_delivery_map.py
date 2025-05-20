@@ -809,6 +809,12 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             // Add service points if available
             if (servicePointsData) {{
                 servicePointsData.features.forEach(feature => {{
+                    // Skip service points with invalid coordinates (NaN values)
+                    if (isNaN(feature.geometry.coordinates[0]) || isNaN(feature.geometry.coordinates[1])) {{
+                        console.warn("Skipping service point with invalid coordinates:", feature.properties.visit_id || "unknown");
+                        return; // Skip this iteration
+                    }}
+                    
                     const flwName = feature.properties.flw_name;
                     const markerColor = feature.properties.color || '#FF0000';
                     const visitDate = feature.properties.visit_date || null;
@@ -869,18 +875,18 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             toggleInfoPanel();
                         }}
                         
-                                                    // Update Service Point section
-                            document.getElementById('sp-flw').textContent = flwName;
-                            document.getElementById('sp-date').textContent = feature.properties.visit_date || 'N/A';
-                            document.getElementById('sp-status').textContent = feature.properties.status || 'N/A';
-                            document.getElementById('sp-accuracy').textContent = (feature.properties.accuracy_in_m || 'N/A') + " m";
-                            document.getElementById('sp-flagged').textContent = feature.properties.flagged ? 'Yes' : 'No';
-                            document.getElementById('sp-flag-reason').textContent = feature.properties.flag_reason || 'N/A';
-                            
-                            // If this service point is in the selected service area, highlight it
-                            if (feature.properties.service_area_id && feature.properties.service_area_id === selectedServiceAreaId) {{
-                                // Add a special highlight class or styling if needed
-                            }}
+                        // Update Service Point section
+                        document.getElementById('sp-flw').textContent = flwName;
+                        document.getElementById('sp-date').textContent = feature.properties.visit_date || 'N/A';
+                        document.getElementById('sp-status').textContent = feature.properties.status || 'N/A';
+                        document.getElementById('sp-accuracy').textContent = (feature.properties.accuracy_in_m || 'N/A') + " m";
+                        document.getElementById('sp-flagged').textContent = feature.properties.flagged ? 'Yes' : 'No';
+                        document.getElementById('sp-flag-reason').textContent = feature.properties.flag_reason || 'N/A';
+                        
+                        // If this service point is in the selected service area, highlight it
+                        if (feature.properties.service_area_id && feature.properties.service_area_id === selectedServiceAreaId) {{
+                            // Add a special highlight class or styling if needed
+                        }}
                         
                         // Variables to track if we found DU and service area information
                         let foundDU = false;

@@ -965,8 +965,6 @@ class CoverageData:
         # Collect relevant DUs
         du_list = [du for du in self.delivery_units.values() if du.status == 'completed' and du.last_modified_date]
         
-        print(f"DEBUG: flw_commcare_id_to_name_map in heatmap data: {self.flw_commcare_id_to_name_map}")
-        
         # Convert last_modified_date to date string (YYYY-MM-DD)
         data = []
         for du in du_list:
@@ -991,7 +989,6 @@ class CoverageData:
                 # This is a fallback in case we can't find the CommCare ID
                 flw_name = du.flw_commcare_id
             
-            print(f"DEBUG: Looking up FLW name for ID {du.flw_commcare_id} -> got {flw_name}")
             data.append({'flw_id': du.flw_commcare_id, 'flw_name': flw_name, 'date': date_str})
         
         df = pd.DataFrame(data)
@@ -1015,9 +1012,6 @@ class CoverageData:
             # If no match found, use the flw_id directly
             if not match_found:
                 flw_names.append(flw_id)
-        
-        print(f"DEBUG: Final flw_ids: {flw_ids}")
-        print(f"DEBUG: Final flw_names: {flw_names}")
         
         # Build date range
         if date_start is not None and date_end is not None:

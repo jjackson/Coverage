@@ -341,7 +341,12 @@ document.addEventListener('DOMContentLoaded', function() {{
             }} }},
             grid: {{ left: 80, bottom: 80, right: 40, top: 40 }},
             xAxis: {{ type: 'category', data: heatmapData.dates, axisLabel: {{ rotate: 45 }} }},
-            yAxis: {{ type: 'category', data: heatmapData.flw_names, inverse: true }},
+            yAxis: {{ 
+                type: 'category', 
+                data: heatmapData.flw_names, 
+                inverse: true,
+                axisLabel: {{ fontSize: 8 }}
+            }},
             visualMap: {{ min: 0, max: Math.max(1, ...values.map(v => v[2])), calculable: true, orient: 'horizontal', left: 'center', bottom: 10, inRange: {{ color: ['#ffffe0', '#ffd080', '#ff8040', '#d73027'] }} }},
             series: [{{ name: 'Completed DUs', type: 'heatmap', data: values, label: {{ show: true, color: '#222', fontWeight: 'bold', formatter: function(p) {{ return p.value[2] > 0 ? p.value[2] : ''; }} }}, emphasis: {{ itemStyle: {{ shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }} }} }}]
         }};

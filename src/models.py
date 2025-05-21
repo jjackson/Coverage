@@ -104,6 +104,7 @@ class DeliveryUnit:
     delivery_target: int = 0
     du_checkout_remark: str = "---"
     checked_out_date: str = "---"
+    checked_in_date: str = "---"
     centroid: Optional[tuple] = None
     last_modified_date: Optional[datetime] = None
     
@@ -185,6 +186,9 @@ class DeliveryUnit:
         
         checkout_date_val = data.get('checked_out_date', '---')
         checkout_date = str(checkout_date_val) if not pd.isna(checkout_date_val) else '---'
+
+        checkin_date_val = data.get('checked_in_date', '---')
+        checkin_date = str(checkin_date_val) if not pd.isna(checkin_date_val) else '---'
         
         # Parse last_modified_date if available
         last_modified = None
@@ -213,6 +217,7 @@ class DeliveryUnit:
             delivery_target=delivery_target,
             du_checkout_remark=checkout_remark,
             checked_out_date=checkout_date,
+            checked_in_date=checkin_date,
             centroid=data.get('centroid'),
             last_modified_date=last_modified
         )
@@ -736,8 +741,7 @@ class CoverageData:
         test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
         
         # Filter out rows with missing service area IDs or with value "---"
-        initial_row_count = len(delivery_units_df)
-        delivery_units_df = delivery_units_df[(delivery_units_df['service_area_id'].notna()) & (delivery_units_df['service_area_id'] != "---")].copy()
+        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna()) | (delivery_units_df['service_area_id'] == "---")].index, inplace=True)
         
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()

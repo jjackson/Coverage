@@ -76,514 +76,8 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
         # Load data using the CoverageData model
         coverage_data = CoverageData.from_excel_and_csv(excel_file, service_delivery_csv)
     
-    # Use the DataFrame directly from CoverageData
-    delivery_units_df = coverage_data.delivery_units_df
-    
-    # Use the convenience method to get service points DataFrame
-    service_df = coverage_data.create_service_points_dataframe()
-    
-    # Generate figures for the report
-    figures = []
-    
-    # Use precomputed values from CoverageData for summary statistics
-    total_units = coverage_data.total_delivery_units
-    total_buildings = coverage_data.total_buildings
-    completed_dus = coverage_data.total_completed_dus
-    visited_dus = coverage_data.total_visited_dus
-    unvisited_dus = coverage_data.total_unvisited_dus
-    delivery_progress = coverage_data.completion_percentage
-    
-    unique_service_areas = coverage_data.total_service_areas
-    unique_flws = coverage_data.total_flws
-    
-    # Get status counts from precomputed values
-    status_counts = coverage_data.delivery_status_counts
-    
-    # 1. Status Distribution by FLW
-    # Use pre-computed status distribution for all FLWs
-    status_counts_by_flw = coverage_data.get_status_counts_by_flw()
-    
-    # Create a Plotly figure
-    fig1 = go.Figure()
-    
-    # Add traces for each status
-    for status in coverage_data.unique_status_values:
-        status_data = status_counts_by_flw[status_counts_by_flw['du_status'] == status]
-        
-        fig1.add_trace(go.Bar(
-            x=status_data['flw_name'],
-            y=status_data['count'],
-            name=status.title(),
-            hovertemplate='<b>%{x}</b><br>' +
-                          'Status: ' + status.title() + '<br>' +
-                          'Count: %{y}<extra></extra>'
-        ))
-    
-    # Update layout
-    fig1.update_layout(
-        title='Delivery Unit Status by Field Worker (Filterable)',
-        xaxis_title='Field Worker',
-        yaxis_title='Count',
-        barmode='stack',
-        height=500,
-        legend=dict(
-            title='Status',
-            orientation='h',
-            yanchor='bottom',
-            y=1.02,
-            xanchor='right',
-            x=1
-        ),
-        xaxis=dict(
-            tickangle=45,
-            tickfont=dict(size=10)
-        )
-    )
-    
-    # Total status counts for summary view (use precomputed values)
-    status_counts_df = pd.DataFrame({
-        'Status': coverage_data.unique_status_values,
-        'Count': [coverage_data.delivery_status_counts[status] for status in coverage_data.unique_status_values]
-    })
-    
-    # Create a second figure for summary view (not filterable)
-    fig1_summary = px.bar(
-        status_counts_df, 
-        x='Status', 
-        y='Count',
-        title='Overall Distribution of Delivery Unit Status',
-        text='Count',
-        color='Status',
-        color_discrete_sequence=px.colors.qualitative.Vivid
-    )
-    fig1_summary.update_traces(texttemplate='%{text}', textposition='outside')
-    
-    # Add both charts to figures
-    figures.append(create_plotly_div(fig1) + '<div class="summary-view">' + create_plotly_div(fig1_summary) + '</div>')
-    
-    # 2. Delivery Progress by Service Area and FLW
-    # Get service area progress
-    service_area_progress = coverage_data.get_service_area_progress()
-    
-    # Sort and get top service areas for summary view
-    top_service_areas = service_area_progress.sort_values('percentage', ascending=False).head(10)
-    
-    # Create a summary chart (not filterable)
-    fig2_summary = px.bar(
-        top_service_areas,
-        x='service_area_id',
-        y='percentage',
-        title='Top 10 Service Areas by Delivery Progress (%)',
-        text=top_service_areas['percentage'].round(1).astype(str) + '%',
-        color='percentage',
-        color_continuous_scale='YlGnBu'
-    )
-    fig2_summary.update_traces(textposition='outside')
-    fig2_summary.add_shape(
-        type="line",
-        line=dict(dash='dash', color='red'),
-        y0=100, y1=100, x0=-0.5, x1=len(top_service_areas)-0.5
-    )
-    
-    # Now use pre-computed service area progress by FLW
-    flw_service_area_progress = coverage_data.get_flw_service_area_progress()
-    
-    # Create filterable chart
-    fig2 = go.Figure()
-    
-    # Add a trace for each FLW's service area progress
-    for flw in sorted(flw_service_area_progress['flw_name'].unique()):
-        flw_data = flw_service_area_progress[flw_service_area_progress['flw_name'] == flw]
-        
-        fig2.add_trace(go.Bar(
-            x=flw_data['service_area_id'],
-            y=flw_data['percentage'],
-            name=flw,
-            text=flw_data['percentage'].round(1).astype(str) + '%',
-            textposition='outside',
-            hovertext=flw_data.apply(lambda row: 
-                f"<b>{row['flw_name']}</b><br>" +
-                f"Service Area: {row['service_area_id']}<br>" +
-                f"Progress: {row['percentage']:.1f}%<br>" +
-                f"Completed: {row['completed_dus']}/{row['total_dus']}", 
-                axis=1
-            ),
-            hoverinfo='text'
-        ))
-    
-    # Add a horizontal line at 100%
-    fig2.add_shape(
-        type='line',
-        x0=-0.5,
-        x1=len(flw_service_area_progress['service_area_id'].unique())-0.5,
-        y0=100,
-        y1=100,
-        line=dict(
-            color='red',
-            width=2,
-            dash='dash',
-        )
-    )
-    
-    # Update layout
-    fig2.update_layout(
-        title='Service Area Progress by Field Worker (Filterable)',
-        xaxis_title='Service Area ID',
-        yaxis_title='Completion Percentage (%)',
-        barmode='group',
-        height=600,
-        xaxis=dict(
-            tickangle=45,
-            tickfont=dict(size=10)
-        )
-    )
-    
-    # Add both charts to figures
-    figures.append(create_plotly_div(fig2) + '<div class="summary-view">' + create_plotly_div(fig2_summary) + '</div>')
-    
-    # 3. FLW Performance with interactive filtering
-    # Get all FLWs with their completion rates using pre-computed data
-    flw_data = coverage_data.get_flw_completion_data()
-    
-    # Make sure we sort by completion rate descending for initial view
-    sorted_flw_data = flw_data.sort_values('completion_rate', ascending=False)
-    
-    # Create hover text with detailed information
-    hover_text = [
-        f"<b>{row['flw_name']}</b><br>" +
-        f"Completion Rate: {row['completion_rate']:.1f}%<br>" +
-        f"Completed: {row['completed_units']}/{row['assigned_units']}<br>" +
-        f"Service Areas: {row['service_areas']}"
-        for _, row in sorted_flw_data.iterrows()
-    ]
-    
-    fig3 = go.Figure()
-    
-    # Add the bar trace
-    fig3.add_trace(go.Bar(
-        x=sorted_flw_data['flw_name'],
-        y=sorted_flw_data['completion_rate'],
-        text=sorted_flw_data['completion_rate'].round(1).astype(str) + '%',
-        textposition='outside',
-        marker=dict(
-            color=sorted_flw_data['completion_rate'],
-            colorscale='RdYlGn',
-            colorbar=dict(title='Completion Rate %')
-        ),
-        hovertext=hover_text,
-        hoverinfo='text'
-    ))
-    
-    # Add a horizontal line at 100%
-    fig3.add_shape(
-        type='line',
-        x0=-0.5,
-        x1=len(sorted_flw_data)-0.5,
-        y0=100,
-        y1=100,
-        line=dict(
-            color='red',
-            width=2,
-            dash='dash',
-        )
-    )
-    
-    # Update layout for better appearance
-    fig3.update_layout(
-        title='FLW Completion Rates (Interactive & Filterable)',
-        xaxis=dict(
-            title='Field Worker',
-            tickangle=45,
-            tickfont=dict(size=10),
-            rangeslider=dict(visible=True)
-        ),
-        yaxis=dict(
-            title='Completion Rate (%)',
-            range=[0, max(sorted_flw_data['completion_rate'].max() * 1.1, 100)]
-        ),
-        height=600,
-        margin=dict(b=100)  # Add more bottom margin for the rangeslider
-    )
-    
-    figures.append(create_plotly_div(fig3))
-    
-    # 4. Add a searchable FLW table with completion rates
-    # Create a more interactive and filterable table
-    flw_table = go.Figure(data=[go.Table(
-        header=dict(
-            values=['<b>FLW Name</b>', '<b>Completion Rate (%)</b>', '<b>Completed Units</b>', '<b>Total Units</b>', '<b>Service Areas</b>'],
-            fill_color='#2c3e50',
-            font=dict(color='white', size=12),
-            align='left',
-            height=30
-        ),
-        cells=dict(
-            values=[
-                sorted_flw_data['flw_name'],
-                sorted_flw_data['completion_rate'].round(1),
-                sorted_flw_data['completed_units'],
-                sorted_flw_data['assigned_units'],
-                sorted_flw_data['service_areas']
-            ],
-            fill_color=[['#f8f9fa', '#edf2f7'] * len(sorted_flw_data)],
-            align='left',
-            font=dict(size=11),
-            height=25,
-        ),
-        columnwidth=[3, 2, 2, 2, 5]
-    )])
-    
-    flw_table.update_layout(
-        title='FLW Performance Table (Searchable & Filterable)',
-        height=500,
-        margin=dict(l=10, r=10, t=40, b=10)
-    )
-    
-    # Add custom attributes to help with filtering
-    flw_table_html = create_plotly_div(flw_table)
-    flw_table_html = flw_table_html.replace('<div ', '<div data-flw-table="true" ')
-    figures.append(flw_table_html)
-    
-    # 5. Building density per Service Area and FLW (if building data available)
-    if '#Buildings' in delivery_units_df.columns:
-        # Use pre-computed building density data
-        building_density = coverage_data.get_building_density()
-        
-        # Sort and get top density areas for summary
-        top_density = building_density.sort_values('density', ascending=False).head(10)
-        
-        # Create summary chart
-        fig5_summary = px.bar(
-            top_density,
-            x='service_area_id',
-            y='density',
-            title='Top 10 Service Areas by Building Density',
-            text=top_density['density'].round(1),
-            color='density',
-            color_continuous_scale='YlOrRd'
-        )
-        fig5_summary.update_traces(textposition='outside')
-        
-        # Now use pre-computed FLW building density
-        flw_building_density = coverage_data.get_flw_building_density()
-        
-        # Create filterable chart
-        fig5 = go.Figure()
-        
-        # Add a trace for each FLW
-        for flw in sorted(flw_building_density['flw_name'].unique()):
-            flw_data = flw_building_density[flw_building_density['flw_name'] == flw]
-            
-            fig5.add_trace(go.Bar(
-                x=flw_data['service_area_id'],
-                y=flw_data['density'],
-                name=flw,
-                text=flw_data['density'].round(1).astype(str),
-                textposition='outside',
-                hovertext=flw_data.apply(lambda row: 
-                    f"<b>{row['flw_name']}</b><br>" +
-                    f"Service Area: {row['service_area_id']}<br>" +
-                    f"Density: {row['density']:.1f} buildings/km²<br>" +
-                    f"Buildings: {row['#Buildings']}<br>" +
-                    f"Area: {row['Surface Area (sq. meters)'] / 1000000:.2f} km²", 
-                    axis=1
-                ),
-                hoverinfo='text'
-            ))
-        
-        # Update layout
-        fig5.update_layout(
-            title='Building Density by Field Worker and Service Area (Filterable)',
-            xaxis_title='Service Area ID',
-            yaxis_title='Building Density (buildings/km²)',
-            barmode='group',
-            height=600,
-            xaxis=dict(
-                tickangle=45,
-                tickfont=dict(size=10)
-            )
-        )
-        
-        # Add both charts to figures
-        figures.append(create_plotly_div(fig5) + '<div class="summary-view">' + create_plotly_div(fig5_summary) + '</div>')
-    
-    # 6. Service Delivery by Date (if service data available)
-    if service_df is not None:
-        # Service Delivery by Date (if date column exists)
-        if 'service_date' in service_df.columns or 'date' in service_df.columns:
-            date_col = 'service_date' if 'service_date' in service_df.columns else 'date'
-            
-            # Convert to datetime if not already
-            service_df[date_col] = pd.to_datetime(service_df[date_col], errors='coerce')
-            
-            # Group by date and count for summary
-            date_counts = service_df.groupby(service_df[date_col].dt.date).size().reset_index(name='count')
-            date_counts = date_counts.sort_values(date_col)
-            
-            # Create summary chart (not filterable)
-            fig6_summary = px.line(
-                date_counts,
-                x=date_col,
-                y='count',
-                title='Overall Service Delivery by Date',
-                markers=True
-            )
-            
-            # Check if we have FLW data in the service data
-            if 'flw_name' in service_df.columns or 'flw' in service_df.columns:
-                flw_col = 'flw_name' if 'flw_name' in service_df.columns else 'flw'
-                
-                # Group by date and FLW
-                flw_date_counts = service_df.groupby([service_df[date_col].dt.date, flw_col]).size().reset_index(name='count')
-                flw_date_counts = flw_date_counts.sort_values(date_col)
-                
-                # Create filterable chart
-                fig6 = go.Figure()
-                
-                # Add a trace for each FLW
-                for flw in sorted(flw_date_counts[flw_col].unique()):
-                    flw_data = flw_date_counts[flw_date_counts[flw_col] == flw]
-                    
-                    fig6.add_trace(go.Scatter(
-                        x=flw_data[date_col],
-                        y=flw_data['count'],
-                        mode='lines+markers',
-                        name=flw,
-                        hovertemplate=f"<b>{flw}</b><br>Date: %{{x|%Y-%m-%d}}<br>Count: %{{y}}<extra></extra>"
-                    ))
-                
-                # Update layout
-                fig6.update_layout(
-                    title='Service Delivery by Field Worker Over Time (Filterable)',
-                    xaxis_title='Date',
-                    yaxis_title='Number of Deliveries',
-                    height=500
-                )
-                
-                # Add both charts
-                figures.append(create_plotly_div(fig6) + '<div class="summary-view">' + create_plotly_div(fig6_summary) + '</div>')
-            else:
-                # If no FLW data, just add the summary view
-                figures.append(create_plotly_div(fig6_summary))
-    
-    # Calculate assignment statistics
-    # Use the objects to get the statistics
-    sa_per_user = {flw_name: len(flw.service_areas) for flw_name, flw in coverage_data.flws.items()}
-    min_sa = min(sa_per_user.values()) if sa_per_user else 0
-    max_sa = max(sa_per_user.values()) if sa_per_user else 0
-    stddev_sa = np.std(list(sa_per_user.values())) if sa_per_user else 0
-    median_sa = np.median(list(sa_per_user.values())) if sa_per_user else 0
-
-    # Calculate the number of Delivery Units each user is assigned
-    du_per_user = {flw_name: flw.assigned_units for flw_name, flw in coverage_data.flws.items()}
-    min_du = min(du_per_user.values()) if du_per_user else 0
-    max_du = max(du_per_user.values()) if du_per_user else 0
-    stddev_du = np.std(list(du_per_user.values())) if du_per_user else 0
-    median_du = np.median(list(du_per_user.values())) if du_per_user else 0
-
-    # Get travel distances (if computed in the model)
-    # Calculate travel distances using the CoverageData model
-    coverage_data.calculate_travel_distances()
-    distance_per_user_df = coverage_data.get_travel_distances_by_flw()
-
-    # Check if we have any distance data
-    if not distance_per_user_df.empty:
-        # Calculate statistics for user distances
-        min_user_distance = distance_per_user_df['total_distance'].min()
-        max_user_distance = distance_per_user_df['total_distance'].max() 
-        stddev_user_distance = distance_per_user_df['total_distance'].std()
-        median_user_distance = distance_per_user_df['total_distance'].median()
-    else:
-        # Fallback values if no centroids available
-        min_user_distance = 0
-        max_user_distance = 0
-        stddev_user_distance = 0
-        median_user_distance = 0
-
-    # Calculate the number of SAs with 50 or more DUs
-    sas_50_plus_ids = coverage_data.delivery_units_df.groupby('service_area_id').filter(lambda x: len(x) >= 50)['service_area_id'].unique()
-    sas_50_plus = len(sas_50_plus_ids)
-
-    # Identify unique users with at least one SA having more than 50 DUs
-    flws_with_50_plus_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_50_plus_ids)]['flw_commcare_id'].unique()
-    dus_50_plus_users = len(flws_with_50_plus_dus)  # Count of unique FLWs with SAs having 50+ DUs
-
-    # Calculate the number of SAs with between 35 and 50 DUs
-    sas_35_to_50_ids = coverage_data.delivery_units_df.groupby('service_area_id').filter(lambda x: 35 <= len(x) < 50)['service_area_id'].unique()
-    sas_35_to_50 = len(sas_35_to_50_ids)
-
-    # Identify unique users with SAs having between 35 and 50 DUs
-    flws_with_35_to_50_dus = coverage_data.delivery_units_df[coverage_data.delivery_units_df['service_area_id'].isin(sas_35_to_50_ids)]['flw_commcare_id'].unique()
-    users_sas_35_to_50 = len(flws_with_35_to_50_dus)
-
     # Create the HTML report
-    html_content = create_html_report(delivery_units_df, service_df, figures, coverage_data)
-    
-    # Add statistics for DUs
-    html_content += f"""
-    <section>
-        <h2>User Assignment Statistics</h2>
-        <table style='width:100%; border-collapse: collapse;'>
-            <tr>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Statistic</th>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Min</th>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Max</th>
-                <th style='border: 1px solid #ddd; padding: 8px;'>StdDev</th>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Median</th>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>Service Areas per User</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{min_sa}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{max_sa}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{stddev_sa:.2f}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{median_sa}</td>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>Delivery Units per User</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{min_du}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{max_du}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{stddev_du:.2f}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{median_du}</td>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>User Travel Distance</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{min_user_distance}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{max_user_distance}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{stddev_user_distance:.2f}</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{median_user_distance}</td>
-            </tr>
-        </table>
-    </section>
-    """
-    
-    # Add key metrics section
-    html_content += f"""
-    <section>
-        <h2>Key Metrics</h2>
-        <table style='width:100%; border-collapse: collapse;'>
-            <tr>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Metric</th>
-                <th style='border: 1px solid #ddd; padding: 8px;'>Count</th>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>SAs with >= 50 DUs</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{sas_50_plus}</td>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>Users with >= 50 DUs</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{dus_50_plus_users}</td>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>SAs with 35-50 DUs</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{sas_35_to_50}</td>
-            </tr>
-            <tr>
-                <td style='border: 1px solid #ddd; padding: 8px;'>Users with SAs 35-50 DUs</td>
-                <td style='border: 1px solid #ddd; padding: 8px;'>{users_sas_35_to_50}</td>
-            </tr>
-        </table>
-    </section>
-    """
+    html_content = create_html_report(coverage_data)
     
     # Write the HTML to a file
     output_filename = "coverage_statistics.html"
@@ -593,95 +87,116 @@ def create_statistics_report(excel_file=None, service_delivery_csv=None, coverag
     print(f"Statistics report has been created: {output_filename}")
     return output_filename
 
-def create_plotly_div(fig):
-    """Create a self-contained HTML div with the Plotly figure"""
-    return fig.to_html(full_html=False, include_plotlyjs='cdn')
-
-def create_html_report(delivery_df, service_df, figures, coverage_data):
+def create_html_report(coverage_data):
     """
     Create HTML report with the statistics information
     
     Args:
-        delivery_df: DataFrame with delivery unit data
-        service_df: DataFrame with service delivery data
-        figures: List of base64-encoded figures
         coverage_data: CoverageData object with precomputed values
     """
+
+    # Use the DataFrame directly from CoverageData
+    delivery_df = coverage_data.delivery_units_df
+    
+    # Use the convenience method to get service points DataFrame
+    service_df = coverage_data.create_service_points_dataframe()
+
     # Calculate summary statistics
     total_units = coverage_data.total_delivery_units
     total_buildings = coverage_data.total_buildings
     completed_dus = coverage_data.total_completed_dus
     visited_dus = coverage_data.total_visited_dus
     unvisited_dus = coverage_data.total_unvisited_dus
-    
     delivery_progress = coverage_data.completion_percentage
-    
     unique_service_areas = coverage_data.total_service_areas
     unique_flws = coverage_data.total_flws
-    
-    status_counts = coverage_data.delivery_status_counts
     
     # Service delivery stats
     service_stats = {}
     if service_df is not None:
-        total_service_points = len(service_df)
-        service_stats['total_points'] = total_service_points
+        # Use properties from CoverageData instead of recalculating
+        service_stats['total_points'] = coverage_data.total_service_points if hasattr(coverage_data, 'total_service_points') else len(service_df)
         
-        if 'flw_name' in service_df.columns:
-            service_stats['unique_flws'] = service_df['flw_name'].nunique()
+        # Reuse the FLW count we already have instead of recalculating
+        service_stats['unique_flws'] = coverage_data.total_flws
+      
+    # Prepare delivery units data for the table (exclude status "---")
+    du_table_data = delivery_df[delivery_df['du_status'] != '---'].copy()
     
-    # Create FLW data for filtering
-    # First check which column to use for counting delivery units
-    count_column = 'du_id'
-    if count_column not in delivery_df.columns:
-        # Try alternative column names
-        if 'id' in delivery_df.columns:
-            count_column = 'id'
-        else:
-            # Use the first column as a last resort
-            count_column = delivery_df.columns[0]
+    # Apply FLW name mapping
+    if 'flw_commcare_id' in du_table_data.columns:
+        du_table_data['flw_name'] = du_table_data['flw_commcare_id'].apply(
+            lambda id: coverage_data.flw_commcare_id_to_name_map.get(id, id)  # Use the ID itself if no name mapping exists
+        )
     
-    # Create FLW data for filtering
-    flw_data = delivery_df.groupby('flw_commcare_id').agg({
-        'du_status': lambda x: (x == 'completed').sum(),
-        count_column: 'count',
-        'service_area_id': lambda x: ', '.join(str(i) for i in sorted(set(x)))  # Convert all values to strings before joining
-    }).reset_index()
+    # Add Delivery Count / Buildings column if both columns exist
+    delivery_count_col = None
+    buildings_col = None
     
-    # Create a mapping from flw_commcare_id to display name
-    flw_name_map = {}
-    # First try to use the name mapping from coverage_data
-    if hasattr(coverage_data, 'flw_commcare_id_to_name_map') and coverage_data.flw_commcare_id_to_name_map:
-        flw_name_map = coverage_data.flw_commcare_id_to_name_map
-    # If that's not available, fallback to the FLW objects in coverage_data
-    elif hasattr(coverage_data, 'flws') and coverage_data.flws:
-        for flw_id, flw_obj in coverage_data.flws.items():
-            flw_name_map[flw_id] = flw_obj.name
+    # Find the delivery count column (could be named differently)
+    possible_delivery_cols = ['Delivery Count', 'delivery_count', 'DeliveryCount', 'delivery count']
+    for col in possible_delivery_cols:
+        if col in du_table_data.columns:
+            delivery_count_col = col
+            break
     
-    # Add a display name column using the mapping
-    flw_data['flw_name'] = flw_data['flw_commcare_id'].apply(
-        lambda id: flw_name_map.get(id, id)  # Use the ID itself if no name mapping exists
-    )
+    # Find the buildings column (could be named differently)
+    possible_buildings_cols = ['#Buildings', 'Buildings', 'buildings', 'num_buildings', 'building_count']
+    for col in possible_buildings_cols:
+        if col in du_table_data.columns:
+            buildings_col = col
+            break
     
-    flw_data.rename(columns={
-        count_column: 'assigned_units',
-        'du_status': 'completed_units',
-        'service_area_id': 'service_areas'
-    }, inplace=True)
+    # Calculate the ratio if both columns exist
+    if delivery_count_col and buildings_col:
+        du_table_data['Delivery Count / Buildings'] = du_table_data.apply(
+            lambda row: round(float(row[delivery_count_col]) / float(row[buildings_col]), 2) 
+            if pd.notnull(row[delivery_count_col]) and pd.notnull(row[buildings_col]) and float(row[buildings_col]) > 0 
+            else None, 
+            axis=1
+        )
     
-    flw_data['completion_rate'] = flw_data['completed_units'] / flw_data['assigned_units'] * 100
-    flw_data['completion_rate'] = flw_data['completion_rate'].fillna(0)
+    # Define columns to exclude from the table
+    columns_to_exclude = [
+        'caseid', 'centroid', 'BoundingBox', 'Wkt', 'Delivery Target', 'Closed', 'Closed by username',
+        'Surface Area', 'Surface Area (sq. meters)', 'surface_area', 'Surface_Area',  # Surface Area variations
+        'bounding box', 'Bounding Box', 'boundingbox', 'bounding_box',  # Bounding Box variations
+        'wkt', 'WKT',  # WKT variations
+        'Closed Date', 'closed_date', 'closed date',  # Closed Date variations
+        'Last Modified By Username', 'last_modified_by_username', 'last modified by username',  # Last Modified By Username variations
+        'Last Modified Date', 'last_modified_date', 'last modified date',  # Last Modified Date variations
+        'Opened Date', 'opened_date', 'opened date',  # Opened Date variations
+        'Closed By Username', 'closed_by_username', 'closed by username',  # Additional Closed By Username variations
+        'Last Modified By User Username', 'last_modified_by_user_username', 'last modified by user username',  # Last Modified By User Username variations
+        'Owner Name', 'owner_name', 'owner name',  # Owner Name variations
+        'flw_commcare_id',  # Remove FLW ID from table
+        'Service Area' # Remove Service Area from table
+    ]
     
-    # Convert to JSON for JavaScript
-    flw_json = json.dumps([{
-        'flw_name': row['flw_name'],  # Display name for UI
-        'flw_id': row['flw_commcare_id'],  # Internal ID for filtering
-        'completed_units': int(row['completed_units']),
-        'assigned_units': int(row['assigned_units']),
-        'completion_rate': float(row['completion_rate']),
-        'service_areas': row['service_areas']
-    } for _, row in flw_data.iterrows()])
+    # Get the columns we want to include (filter out excluded columns)
+    du_columns = [col for col in du_table_data.columns if col not in columns_to_exclude]
     
+    # Define preferred column order (edit this array to change the order of columns)
+    preferred_column_order = [
+        'flw_name',              # Field worker name
+        'delivery_unit_id',      # Delivery unit ID
+        'service_area_id',       # Service area ID
+        'du_status',             # Delivery unit status
+        'Delivery Count / Buildings'  # Ratio of delivery count to buildings
+    ]
+    
+    # Reorder columns based on preferred order
+    ordered_columns = []
+    for col in preferred_column_order:
+        if col in du_columns:
+            ordered_columns.append(col)
+            du_columns.remove(col)
+    
+    # Final columns list with preferred columns first, then the rest
+    du_columns = ordered_columns + du_columns
+    
+
+   
     # Create the HTML content
     html_content = f"""
     <!DOCTYPE html>
@@ -694,9 +209,16 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
         <!-- Include jQuery for interactive features -->
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         
-        <!-- Include Select2 for better dropdowns -->
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+        <!-- Include DataTables for sortable and exportable tables -->
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/colreorder/1.5.5/css/colReorder.dataTables.min.css">
+        <script type="text/javascript" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/colreorder/1.5.5/js/dataTables.colReorder.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
         
         <style>
             body {{
@@ -775,332 +297,65 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                 color: white;
                 font-weight: bold;
             }}
-            .filter-controls {{
-                margin: 15px 0;
-                padding: 15px;
-                background-color: #f8f9fa;
-                border-radius: 5px;
-                border: 1px solid #e9ecef;
-            }}
-            .filter-controls label {{
-                display: block;
-                margin-bottom: 8px;
-                font-weight: bold;
-            }}
-            .filter-controls select {{
-                width: 100%;
-                max-width: 600px;
-                margin-bottom: 10px;
-            }}
-            .filter-controls button {{
-                padding: 8px 15px;
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-right: 10px;
-            }}
-            .filter-controls button#reset-flw-filter {{
-                background-color: #6c757d;
-            }}
-            .filter-controls button:hover {{
-                background-color: #0069d9;
-            }}
-            .filter-controls button#reset-flw-filter:hover {{
-                background-color: #5a6268;
-            }}
-            .tab-container {{
-                margin-top: 20px;
-            }}
-            .tab-buttons {{
-                overflow: hidden;
-                border: 1px solid #ccc;
-                background-color: #f1f1f1;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-            }}
-            .tab-buttons button {{
-                background-color: inherit;
-                float: left;
-                border: none;
-                outline: none;
-                cursor: pointer;
-                padding: 14px 16px;
-                transition: 0.3s;
-                font-size: 16px;
-            }}
-            .tab-buttons button:hover {{
-                background-color: #ddd;
-            }}
-            .tab-buttons button.active {{
-                background-color: #ccc;
-            }}
-            .tab-content {{
-                display: none;
-                padding: 20px;
-                border: 1px solid #ccc;
-                border-top: none;
-                border-bottom-left-radius: 5px;
-                border-bottom-right-radius: 5px;
-            }}
-            .tab-content.active {{
-                display: block;
-            }}
-            #search-flw {{
-                width: 100%;
-                max-width: 300px;
-                padding: 8px;
-                margin-bottom: 15px;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-            }}
-            .summary-view {{
+            .delivery-units-table-container {{
                 margin-top: 30px;
-                padding-top: 20px;
-                border-top: 1px dashed #ccc;
+                overflow-x: auto;
             }}
-            .summary-view:before {{
-                content: "Summary View (Not Filtered)";
-                display: block;
-                font-weight: bold;
-                margin-bottom: 10px;
-                color: #6c757d;
+            .table-info {{
+                margin-bottom: 15px;
+                color: #666;
+                font-style: italic;
             }}
-            /* View toggle controls */
-            .view-toggle {{
-                margin: 10px 0;
-                text-align: right;
+            table.dataTable {{
+                width: 100% !important;
+                margin: 15px 0 !important;
             }}
-            .view-toggle button {{
-                padding: 5px 10px;
-                background-color: #f8f9fa;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                cursor: pointer;
+            .dataTables_wrapper .dataTables_filter input {{
                 margin-left: 5px;
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
             }}
-            .view-toggle button.active {{
-                background-color: #007bff;
-                color: white;
-                border-color: #007bff;
+            .dataTables_wrapper .dataTables_length select {{
+                padding: 5px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
             }}
-            /* Hide summary view when filtered */
-            .filtering-active .summary-view {{
-                display: none;
+            .dt-buttons {{
+                margin-bottom: 15px;
+            }}
+            .dt-button {{
+                background-color: #4CAF50 !important;
+                color: white !important;
+                border: none !important;
+                padding: 8px 15px !important;
+                border-radius: 4px !important;
+                cursor: pointer !important;
+                margin-right: 5px !important;
+            }}
+            .dt-button:hover {{
+                background-color: #45a049 !important;
             }}
         </style>
         
-        <!-- Add custom search functionality for FLW table and filtering -->
         <script>
             $(document).ready(function() {{
-                // Search functionality for FLW table
-                $("#search-flw").on("keyup", function() {{
-                    var value = $(this).val().toLowerCase();
-                    $(".flw-row").filter(function() {{
-                        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-                    }});
+                // Initialize the Delivery Units table with DataTables
+                $('#delivery-units-table').DataTable({{
+                    paging: true,
+                    searching: true,
+                    ordering: true,
+                    info: true,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy', 'csv', 'excel'
+                    ],
+                    order: [[0, 'asc']], // Default sort by first column
+                    scrollX: true,
+                    colReorder: true, // Enable column reordering
+                    pageLength: 25 // Default to showing 25 rows
                 }});
-                
-                // Tab functionality
-                $(".tab-button").click(function() {{
-                    var tabId = $(this).attr("data-tab");
-                    
-                    $(".tab-button").removeClass("active");
-                    $(".tab-content").removeClass("active");
-                    
-                    $(this).addClass("active");
-                    $("#" + tabId).addClass("active");
-                }});
-                
-                // Show the first tab by default
-                $(".tab-button:first").click();
-                
-                // FLW Filter functionality
-                // Populate FLW dropdown with all unique FLWs
-                const flwData = {flw_json};
-                const uniqueFlws = [...new Set(flwData.map(item => item.flw_name))].sort();
-                
-                uniqueFlws.forEach(flw => {{
-                    $("#flw-selector").append(`<option value="${{flw}}">${{flw}}</option>`);
-                }});
-                
-                // Make the select element more user-friendly with select2 (if available)
-                if (typeof $.fn.select2 !== 'undefined') {{
-                    $("#flw-selector").select2({{
-                        placeholder: "Select Field Workers",
-                        allowClear: true,
-                        width: '100%',
-                        maximumSelectionLength: 10
-                    }});
-                }}
-                
-                // Apply filter button click handler
-                $("#apply-flw-filter").click(function() {{
-                    const selectedFlws = $("#flw-selector").val();
-                    console.log("Selected FLWs:", selectedFlws);
-                    
-                    // If "All Field Workers" is selected or nothing selected, don't filter
-                    if (selectedFlws.includes("all") || selectedFlws.length === 0) {{
-                        resetFilters();
-                        return;
-                    }}
-                    
-                    // Create a mapping of names to IDs for lookup
-                    const flwNameToIdMap = {{}};
-                    flwData.forEach(item => {{
-                        flwNameToIdMap[item.flw_name] = item.flw_id;
-                    }});
-                    
-                    // Get the corresponding IDs for the selected names
-                    const selectedFlwIds = selectedFlws.map(name => flwNameToIdMap[name]);
-                    console.log("Selected FLW IDs:", selectedFlwIds);
-                    
-                    // Add filtering-active class to hide summary views
-                    $(".tab-content").addClass("filtering-active");
-                    
-                    // Apply filter to all Plotly charts
-                    $(".js-plotly-plot").each(function() {{
-                        const plotDiv = $(this).attr("id");
-                        if (!plotDiv) return;
-                        
-                        // Skip if inside a summary-view div
-                        if ($(this).closest(".summary-view").length > 0) {{
-                            return; // Don't filter summary views
-                        }}
-                        
-                        // Check if this is the FLW table - special handling
-                        const isTable = $(this).attr("data-flw-table") === "true";
-                        
-                        const plotObj = document.getElementById(plotDiv);
-                        if (!plotObj || !window.Plotly) return;
-                        
-                        // Get the plotly data
-                        const data = plotObj.data;
-                        if (!data || data.length === 0) return;
-                        
-                        console.log("Processing chart:", plotDiv, isTable ? "(FLW Table)" : "");
-                        
-                        // Special handling for FLW table - use name-based filtering
-                        if (isTable) {{
-                            // For the table, we'll filter the rows
-                            const tableData = data[0];
-                            
-                            // Save original data if not already saved
-                            if (!plotObj._originalData) {{
-                                plotObj._originalData = JSON.parse(JSON.stringify(data));
-                            }}
-                            
-                            // Get the FLW names column (should be the first column)
-                            const flwNames = tableData.cells.values[0];
-                            
-                            // Create filtered values arrays
-                            const newValues = tableData.cells.values.map(column => 
-                                column.filter((_, i) => selectedFlws.includes(flwNames[i]))
-                            );
-                            
-                            // Update the table with filtered data
-                            Plotly.restyle(plotDiv, {{'cells.values': [newValues]}});
-                            return;
-                        }}
-                        
-                        // Save original data if not already saved
-                        if (!plotObj._originalData) {{
-                            plotObj._originalData = JSON.parse(JSON.stringify(data));
-                        }}
-                        
-                        // The rest of the logic depends on the chart type and how FLW data is displayed
-                        // We need to check how FLW data is represented in this specific chart
-                        
-                        // For charts where traces have FLW names as their 'name' property (like service area progress)
-                        if (data[0].name && uniqueFlws.includes(data[0].name)) {{
-                            const visibility = data.map(trace => 
-                                selectedFlws.includes(trace.name) ? true : 'legendonly'
-                            );
-                            
-                            Plotly.restyle(plotDiv, {{ visible: visibility }});
-                        }}
-                        // For charts where x-axis has FLW names (like FLW performance chart)
-                        else if (data[0].x && uniqueFlws.some(flw => data[0].x.includes(flw))) {{
-                            // Create a new data array that only includes the selected FLWs
-                            const newData = [];
-                            
-                            for (let i = 0; i < data.length; i++) {{
-                                const trace = data[i];
-                                
-                                // Create filtered x and y arrays
-                                const newX = [];
-                                const newY = [];
-                                const newText = trace.text ? [] : undefined;
-                                const newHovertext = trace.hovertext ? [] : undefined;
-                                
-                                for (let j = 0; j < trace.x.length; j++) {{
-                                    if (selectedFlws.includes(trace.x[j])) {{
-                                        newX.push(trace.x[j]);
-                                        newY.push(trace.y[j]);
-                                        if (newText) newText.push(trace.text[j]);
-                                        if (newHovertext) newHovertext.push(trace.hovertext[j]);
-                                    }}
-                                }}
-                                
-                                // Create new trace with filtered data
-                                const newTrace = {{
-                                    x: newX,
-                                    y: newY,
-                                    type: trace.type,
-                                    mode: trace.mode,
-                                    name: trace.name,
-                                    marker: trace.marker
-                                }};
-                                
-                                if (newText) newTrace.text = newText;
-                                if (newHovertext) newTrace.hovertext = newHovertext;
-                                if (trace.hoverinfo) newTrace.hoverinfo = trace.hoverinfo;
-                                if (trace.textposition) newTrace.textposition = trace.textposition;
-                                
-                                newData.push(newTrace);
-                            }}
-                            
-                            // Replace the plot with filtered data
-                            Plotly.react(plotDiv, newData, plotObj.layout);
-                        }}
-                    }});
-                }});
-                
-                // Reset filter button click handler
-                $("#reset-flw-filter").click(resetFilters);
-                
-                function resetFilters() {{
-                    console.log("Resetting filters");
-                    
-                    // Reset dropdown
-                    $("#flw-selector").val(["all"]);
-                    if (typeof $.fn.select2 !== 'undefined') {{
-                        $("#flw-selector").trigger('change');
-                    }}
-                    
-                    // Remove filtering-active class to show summary views again
-                    $(".tab-content").removeClass("filtering-active");
-                    
-                    // Reset all charts to show all data
-                    $(".js-plotly-plot").each(function() {{
-                        // Skip if inside a summary-view div
-                        if ($(this).closest(".summary-view").length > 0) {{
-                            return; // Don't reset summary views
-                        }}
-                        
-                        const plotDiv = $(this).attr("id");
-                        if (!plotDiv) return;
-                        
-                        const plotObj = document.getElementById(plotDiv);
-                        if (!plotObj || !window.Plotly) return;
-                        
-                        // If we have saved the original data, restore it
-                        if (plotObj._originalData) {{
-                            Plotly.react(plotDiv, plotObj._originalData, plotObj.layout);
-                        }}
-                    }});
-                }}
             }});
         </script>
     </head>
@@ -1187,81 +442,59 @@ def create_html_report(delivery_df, service_df, figures, coverage_data):
                         <h3>Total Service Points</h3>
                         <div class="value">{service_stats.get('total_points', 0):,}</div>
                     </div>
-        """
-        
-        if 'unique_flws' in service_stats:
-            html_content += f"""
                     <div class="stat-card">
                         <h3>Field Workers</h3>
-                        <div class="value">{service_stats.get('unique_flws', 0):,}</div>
+                        <div class="value">{unique_flws:,}</div>
                     </div>
-            """
-        
-        html_content += """
                 </div>
             </section>
         """
     
-    # Add interactive visualization section with FLW data for filtering
-    html_content += """
+    # Add Delivery Units table section
+    html_content += f"""
             <section>
-                <h2>Analysis Visualizations</h2>
-                
-                <div class="filter-controls">
-                    <label for="flw-selector">Filter by Field Workers:</label>
-                    <select id="flw-selector" multiple>
-                        <option value="all" selected>All Field Workers</option>
-                        <!-- FLW options will be populated via JavaScript -->
-                    </select>
-                    <button id="apply-flw-filter">Apply Filter</button>
-                    <button id="reset-flw-filter">Reset</button>
+                <h2>Delivery Units Data</h2>
+                <div class="table-info">
+                    Showing {len(du_table_data):,} delivery units with status other than "---". Use the search box to filter.
                 </div>
-                
-                <div class="tab-container">
-                    <div class="tab-buttons">
-                        <button class="tab-button" data-tab="tab-status">Status Distribution</button>
-                        <button class="tab-button" data-tab="tab-service-areas">Service Areas</button>
-                        <button class="tab-button" data-tab="tab-flw">Field Worker Performance</button>
-                        <button class="tab-button" data-tab="tab-density">Building Density</button>
-                        <button class="tab-button" data-tab="tab-delivery">Service Delivery</button>
-                    </div>
-                    
-                    <div id="tab-status" class="tab-content">
-                        <div class="figure-container">
-                            %s
-                        </div>
-                    </div>
-                    
-                    <div id="tab-service-areas" class="tab-content">
-                        <div class="figure-container">
-                            %s
-                        </div>
-                    </div>
-                    
-                    <div id="tab-flw" class="tab-content">
-                        <input type="text" id="search-flw" placeholder="Search for Field Worker...">
-                        <div class="figure-container">
-                            %s
-                        </div>
-                        <div class="figure-container">
-                            %s
-                        </div>
-                    </div>
-                    
-                    <div id="tab-density" class="tab-content">
-                        <div class="figure-container">
-                            %s
-                        </div>
-                    </div>
-                    
-                    <div id="tab-delivery" class="tab-content">
-                        <div class="figure-container">
-                            %s
-                        </div>
-                    </div>
+                <div class="delivery-units-table-container">
+                    <table id="delivery-units-table" class="display">
+                        <thead>
+                            <tr>
+    """
+    
+    # Add table headers based on available columns
+    for col in du_columns:
+        # Format column header (replace underscores with spaces and capitalize)
+        header = col.replace('_', ' ').title()
+        html_content += f"<th>{header}</th>"
+    
+    html_content += """
+                            </tr>
+                        </thead>
+                        <tbody>
+    """
+    
+    # Add table rows with data
+    for _, row in du_table_data.iterrows():
+        html_content += "<tr>"
+        for col in du_columns:
+            value = row[col]
+            # Format the value - handle NaN/None values and format others as strings
+            if pd.isna(value):
+                formatted_value = ""
+            else:
+                formatted_value = str(value)
+            
+            html_content += f"<td>{formatted_value}</td>"
+        html_content += "</tr>"
+    
+    html_content += """
+                        </tbody>
+                    </table>
                 </div>
             </section>
-    """ % tuple(figures[:6] + [''] * (6 - len(figures)))
+    """
     
     # Close the HTML
     html_content += f"""

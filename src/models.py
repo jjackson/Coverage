@@ -749,18 +749,17 @@ class CoverageData:
         delivery_units_df.rename(columns={
             'caseid': 'case_id',
             'service_area_number': 'service_area_id',
-            'buildings': '#Buildings',
-            'surface_area': 'Surface Area (sq. meters)',
             'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
             'number' : 'du_number',
-            'name' : 'du_name',
-            '#Buildings' : 'buildings',
-            'Surface Area (sq. meters)' : 'surface_area',
+            'name' : 'du_name', # xlsx column name
+            'case name': 'du_name', # API column name
+            '#Buildings' : 'buildings', #API column name
+            'Surface Area (sq. meters)' : 'surface_area', #API column name
         }, inplace=True)
 
 
         # Check for several known columns
-        required_columns = ['case_id', 'name', 'service_area', 'flw_commcare_id', 'WKT']
+        required_columns = ['case_id', 'du_name', 'service_area', 'flw_commcare_id', 'WKT']
         missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
         if missing_columns:
             found_columns = list(delivery_units_df.columns)

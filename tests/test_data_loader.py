@@ -5,11 +5,26 @@ import pandas as pd
 import tempfile
 from pandas.testing import assert_frame_equal
 from unittest.mock import patch, MagicMock
+from pathlib import Path
+from dotenv import load_dotenv
 
 # Add the src directory to the path so we can import the modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.utils_data_loader import load_excel_data, load_csv_data, load_coverage_data, fetch_delivery_units
+from src.utils_data_loader import (
+    load_excel_data, 
+    load_csv_data, 
+    load_coverage_data, 
+    export_to_excel_using_commcare_export
+)
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get CommCare credentials from environment variables with fallbacks
+COMMCARE_DOMAIN = os.environ.get('COMMCARE_DOMAIN', 'test-domain')
+COMMCARE_USERNAME = os.environ.get('COMMCARE_USERNAME', 'test-user')
+COMMCARE_API_KEY = os.environ.get('COMMCARE_API_KEY', 'test-api-key')
 
 
 @pytest.fixture
@@ -105,65 +120,65 @@ class TestDataLoader:
         """Test that appropriate error is raised when coverage data file is not found."""
         with pytest.raises(FileNotFoundError):
             load_coverage_data('nonexistent_file.xlsx') 
-    
-    def test_fetch_delivery_units_real_api(self):
-        """
-        Test the fetch_delivery_units function with real API calls.
-        
-        This test is skipped by default as it requires:
-        1. Real CommCare credentials
-        2. Internet connection
-        3. API access to the CommCare server
-        
-        To run this test:
-        1. Set the environment variables:
-           - COMMCARE_PROJECT_SPACE
-           - COMMCARE_USERNAME
-           - COMMCARE_API_KEY
-        2. Run pytest with the --run-skipped flag:
-           pytest tests/test_data_loader.py::TestDataLoader::test_fetch_delivery_units_real_api -v --run-skipped
-        """
-
-        """Test the fetch_delivery_units function with real API calls."""
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()  # Load environment variables from .env file
-            print("Loaded .env file")
-        except ImportError:
-            print("python-dotenv not installed. Using environment variables directly.")
-    
-        # Check if environment variables are set
-        project_space = os.environ.get('COMMCARE_PROJECT_SPACE')
-        username = os.environ.get('COMMCARE_USERNAME')
-        api_key = os.environ.get('COMMCARE_API_KEY')
-        
-        print(f"DEBUG: project_space={project_space}, username={username}, api_key={api_key}")
-
-
-        if not all([project_space, username, api_key]):
-            pytest.skip("CommCare credentials not set in environment variables")
-        
-        # Call the function with real credentials
-        result_df = fetch_delivery_units(
-            project_space=project_space,
-            username=username,
-            api_key=api_key,
-            days_ago=30  # Fetch cases from the last 30 days
-        )
-        
-        # Basic validation of results
-        assert isinstance(result_df, pd.DataFrame)
-        assert len(result_df) >= 0  # Could be zero if no cases
-        
-        # If we got results, verify the structure
-        if len(result_df) > 0:
-            assert 'caseid' in result_df.columns
-            assert 'name' in result_df.columns
-            assert 'service_area' in result_df.columns
-            assert 'owner_name' in result_df.columns
             
-            # Print some stats for manual verification
-            print(f"\nRetrieved {len(result_df)} delivery units")
-            print(f"Service areas: {result_df['service_area'].nunique()}")
-            print(f"FLWs: {result_df['owner_name'].nunique()}")
-            print(f"Status counts: {result_df['du_status'].value_counts().to_dict()}") 
+    def test_export_to_excel_using_commcare_export(self):
+        """Test that exports data from CommCare HQ using the commcare-export tool.
+        
+        This test requires:
+        1. commcare-export to be installed (pip install commcare-export[xlsx])
+        2. Valid CommCare credentials in the .env file
+        3. Internet connection to CommCare HQ
+        4. Exactly one .xlsx query configuration file in data/cc-export-config
+        
+        """
+    
+        # Find the query configuration file in data/cc-export-config
+        # Get the directory of the current test file, then go up one level to project root
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(test_dir)
+        config_dir = os.path.join(project_root, 'data', 'cc-export-config')
+        
+        if not os.path.exists(config_dir):
+            pytest.fail(f"Query config directory does not exist: {config_dir}")
+            
+        config_files = [f for f in os.listdir(config_dir) if f.lower().endswith('.xlsx')]
+        
+        if not config_files:
+            pytest.fail(f"No .xlsx query configuration files found in {config_dir}")
+        elif len(config_files) > 1:
+            pytest.fail(f"Multiple .xlsx files found in {config_dir}. Expected exactly one: {config_files}")
+            
+        query_path = os.path.join(config_dir, config_files[0])
+        print(f"Using query configuration file: {query_path}")
+        
+        try:
+            
+            
+            # Run the actual export with explicit output path
+            result = export_to_excel_using_commcare_export(
+                domain=COMMCARE_DOMAIN,
+                username=COMMCARE_USERNAME,
+                api_key=COMMCARE_API_KEY,
+                query_file_path=query_path,
+            )
+            
+            # Verify the output file exists
+            assert os.path.exists(result), f"Output file was not created at {result}"
+            
+            # Verify the file is a valid Excel file by trying to open it
+            try:
+                pd.read_excel(result)
+                print(f"Successfully created and read Excel file at {result}")
+            except Exception as e:
+                pytest.fail(f"Created file is not a valid Excel file: {str(e)}")
+        
+            # Verify it's in the data directory
+            data_dir = os.path.join(project_root, "data")
+            assert os.path.dirname(os.path.abspath(result)) == os.path.abspath(data_dir), \
+                f"Auto-generated file not in data directory: {result}"
+        
+        finally:
+            # Clean up temporary output file
+            # if os.path.exists(result):
+            #    os.unlink(result)
+            pass

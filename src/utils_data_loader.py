@@ -7,8 +7,10 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 import requests
 import base64
-import json
 import argparse
+import subprocess
+from pathlib import Path
+from datetime import datetime
 
 from src.models import CoverageData
 
@@ -397,6 +399,115 @@ def test_commcare_api_loader(domain: str, user: str, api_key: str):
     except Exception as e:
         print(f"Error testing CommCare API: {str(e)}")
         return None
+
+
+def export_to_excel_using_commcare_export(
+    domain: str,
+    username: str,
+    api_key: str,
+    query_file_path: str,
+    output_file_path: str = None,
+    commcare_hq_url: str = "https://www.commcarehq.org",
+    verbose: bool = False
+) -> str:
+    """
+    Export data from CommCare HQ to Excel using the commcare-export command line tool.
+    
+    Args:
+        domain: CommCare project space/domain name
+        username: CommCare HQ username
+        api_key: CommCare HQ API key
+        query_file_path: Path to the query file (Excel or JSON)
+        output_file_path: Optional path where the output Excel file should be saved.
+                         If not provided, it will generate a file in the data directory 
+                         with a name based on the domain and current timestamp.
+        commcare_hq_url: Base URL for CommCare HQ (default: https://www.commcarehq.org)
+        verbose: Whether to output verbose logs
+        
+    Returns:
+        Path to the created Excel file
+        
+    Raises:
+        FileNotFoundError: If the query file doesn't exist
+        RuntimeError: If the commcare-export command fails
+    """
+    # Verify query file exists
+    if not os.path.exists(query_file_path):
+        raise FileNotFoundError(f"Query file not found: {query_file_path}")
+    
+    # Generate default output path if not provided
+    if output_file_path is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        data_dir = os.path.join(os.getcwd(), "data")
+        
+        # Create data directory if it doesn't exist
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            
+        output_file_path = os.path.join(data_dir, f"{domain}-export-{timestamp}.xlsx")
+    
+    # Make sure output directory exists
+    output_dir = os.path.dirname(output_file_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Build command arguments
+    cmd = [
+        "commcare-export",
+        "--output-format", "xlsx",
+        "--output", output_file_path,
+        "--query", query_file_path,
+        "--project", domain,
+        "--username", username,
+        "--auth-mode", "apikey",
+        "--password", api_key,
+        "--commcare-hq", commcare_hq_url
+    ]
+    
+    if verbose:
+        cmd.append("--verbose")
+    
+    # Execute command
+    try:
+        # Format command string with proper quoting for display
+        def quote_if_needed(arg):
+            if ' ' in arg or '\t' in arg or '"' in arg or "'" in arg:
+                # Use double quotes and escape any existing double quotes
+                return f'"{arg.replace('"', '\\"')}"'
+            return arg
+            
+        cmd_str = ' '.join(quote_if_needed(arg) for arg in cmd)
+        print(f"Executing command: {cmd_str}")
+        
+        # The actual subprocess.run call uses a list which handles spaces correctly
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if verbose:
+            print("Command output:")
+            print(result.stdout)
+        
+        # Verify the file was created
+        if not os.path.exists(output_file_path):
+            raise RuntimeError(
+                f"Command executed successfully but output file not found: {output_file_path}\n"
+                f"Command output: {result.stdout}\n"
+                f"Command error: {result.stderr}"
+            )
+        
+        print(f"Successfully exported data to {output_file_path}")
+        return output_file_path
+    
+    except subprocess.CalledProcessError as e:
+        error_msg = f"CommCare export failed with exit code {e.returncode}\n"
+        error_msg += f"Command: {' '.join(cmd)}\n"
+        error_msg += f"Stdout: {e.stdout}\n"
+        error_msg += f"Stderr: {e.stderr}"
+        raise RuntimeError(error_msg)
 
 
 if __name__ == "__main__":

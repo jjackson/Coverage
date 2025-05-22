@@ -150,11 +150,43 @@ def create_html_report(coverage_data):
     # Calculate the ratio if both columns exist
     if delivery_count_col and buildings_col:
         du_table_data['Delivery Count / Buildings'] = du_table_data.apply(
-            lambda row: round(float(row[delivery_count_col]) / float(row[buildings_col]), 2) 
+            lambda row: round(float(row[delivery_count_col]) / float(row[buildings_col])) 
             if pd.notnull(row[delivery_count_col]) and pd.notnull(row[buildings_col]) and float(row[buildings_col]) > 0 
             else None, 
             axis=1
         )
+    
+    # Calculate days in DU and flag
+    def calculate_days_in_du(row):
+        try:
+            # Convert dates to datetime objects
+            check_in = pd.to_datetime(row['checked_in_date'])
+            today = pd.to_datetime('today').normalize()  # Get today's date at midnight
+            
+            if row['checked_out_date'] == '---':
+                # Calculate days between today and check-in date
+                days = (today - check_in).days
+                return int(days) if days >= 0 else None
+            else:
+                check_out = pd.to_datetime(row['checked_out_date'])
+                # Calculate days between check-out and check-in date
+                days = (check_out - check_in).days
+                return int(days) if days >= 0 else None
+        except:
+            return None
+    
+    # Add days_in_du column
+    du_table_data['days_in_du'] = du_table_data.apply(calculate_days_in_du, axis=1)
+    
+    # Add flag_days_in_du column
+    du_table_data['flag_days_in_du'] = du_table_data['days_in_du'].apply(
+        lambda x: True if pd.notnull(x) and x >= 7 else None
+    )
+    
+    # Add flag_delivery_per_building column
+    du_table_data['flag_delivery_per_building'] = du_table_data['Delivery Count / Buildings'].apply(
+        lambda x: True if pd.notnull(x) and x >= 10 else None
+    )
     
     # Define columns to exclude from the table
     columns_to_exclude = [
@@ -170,7 +202,8 @@ def create_html_report(coverage_data):
         'Last Modified By User Username', 'last_modified_by_user_username', 'last modified by user username',  # Last Modified By User Username variations
         'Owner Name', 'owner_name', 'owner name',  # Owner Name variations
         'flw_commcare_id',  # Remove FLW ID from table
-        'Service Area' # Remove Service Area from table
+        'Service Area', # Remove Service Area from table
+        'closed', 'Closed', 'CLOSED'  # Remove Closed column and its variations
     ]
     
     # Get the columns we want to include (filter out excluded columns)
@@ -180,9 +213,14 @@ def create_html_report(coverage_data):
     preferred_column_order = [
         'flw_name',              # Field worker name
         'delivery_unit_id',      # Delivery unit ID
-        'service_area_id',       # Service area ID
         'du_status',             # Delivery unit status
-        'Delivery Count / Buildings'  # Ratio of delivery count to buildings
+        'service_area_id',       # Service area ID
+        'Delivery Count / Buildings',  # Ratio of delivery count to buildings
+        'flag_delivery_per_building',  # Flag for DUs with 10 or more deliveries per building
+        'checked_in_date',       # Checked in date
+        'checked_out_date',       # Checked out date
+        'days_in_du',           # Number of days in delivery unit
+        'flag_days_in_du'       # Flag for DUs with 7 or more days
     ]
     
     # Reorder columns based on preferred order

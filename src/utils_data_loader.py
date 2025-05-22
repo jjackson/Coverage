@@ -218,7 +218,7 @@ def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = No
         raise RuntimeError(f"Error loading coverage data: {str(e)}") 
 
 
-def load_commcare_data(domain: str, 
+def get_commcare_du_dataframe_from_api(domain: str, 
                        user: str,
                        api_key: str, 
                        case_type: str = "deliver-unit", 
@@ -253,7 +253,7 @@ def load_commcare_data(domain: str,
     # Parameters for the API request
     params = {
         'case_type': case_type,
-        'limit': 100  # Fetch 100 cases at a time
+        'limit': 2000  # Fetch 100 cases at a time
     }
     
     # DEBUG: Print request information
@@ -283,6 +283,7 @@ def load_commcare_data(domain: str,
         else:
             response = requests.get(
                 next_url,
+                params=params,
                 headers=headers
             )
         
@@ -290,14 +291,13 @@ def load_commcare_data(domain: str,
         print(f"Status: {response.status_code}")
         
         if response.status_code != 200:
-            print("Error summary:")
-            error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
-            print(error_text)
+            print(f"Response: {response.text}")
             raise ValueError(f"API request failed with status {response.status_code}")
         
         try:
             data = response.json()
-            
+            # Debug JSON
+            # print(f"Data: {data}")
             # Just show case count and next URL info
             case_count = len(data.get('cases', []))
             print(f"Retrieved {case_count} cases")
@@ -367,40 +367,6 @@ def load_commcare_data(domain: str,
     
     return df
 
-
-def test_commcare_api_loader(domain: str, user: str, api_key: str):
-    """
-    Simple test function to demonstrate loading data from CommCare API.
-    
-    Args:
-        domain: CommCare project space/domain name
-        user: Username for authentication
-        api_key: API key for authentication
-    """
-    print("Testing CommCare API data loader...")
-    
-    try:
-        # Load delivery unit cases
-        print(f"Fetching delivery-unit cases from {domain}...")
-        df = load_commcare_data(domain=domain, user=user, api_key=api_key, case_type="deliver-unit")
-        
-        # Display basic info about the loaded data
-        if not df.empty:
-            print(f"Successfully loaded {len(df)} delivery-unit cases")
-            print("\nColumns found:")
-            print(", ".join(df.columns.tolist()))
-            print("\nSample data:")
-            print(df.head(3))
-        else:
-            print("No delivery-unit cases found")
-        
-        return df
-    
-    except Exception as e:
-        print(f"Error testing CommCare API: {str(e)}")
-        return None
-
-
 def export_to_excel_using_commcare_export(
     domain: str,
     username: str,
@@ -468,46 +434,114 @@ def export_to_excel_using_commcare_export(
         cmd.append("--verbose")
     
     # Execute command
-    try:
-        # Format command string with proper quoting for display
-        def quote_if_needed(arg):
-            if ' ' in arg or '\t' in arg or '"' in arg or "'" in arg:
-                # Use double quotes and escape any existing double quotes
-                return f'"{arg.replace('"', '\\"')}"'
-            return arg
-            
-        cmd_str = ' '.join(quote_if_needed(arg) for arg in cmd)
-        print(f"Executing command: {cmd_str}")
+    # Format command string with proper quoting for display
+    def quote_if_needed(arg):
+        if ' ' in arg or '\t' in arg or '"' in arg or "'" in arg:
+            # Use double quotes and escape any existing double quotes
+            return f'"{arg.replace('"', '\\"')}"'
+        return arg
         
-        # The actual subprocess.run call uses a list which handles spaces correctly
-        result = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        
-        if verbose:
-            print("Command output:")
-            print(result.stdout)
-        
-        # Verify the file was created
-        if not os.path.exists(output_file_path):
-            raise RuntimeError(
-                f"Command executed successfully but output file not found: {output_file_path}\n"
-                f"Command output: {result.stdout}\n"
-                f"Command error: {result.stderr}"
-            )
-        
-        print(f"Successfully exported data to {output_file_path}")
-        return output_file_path
+    cmd_str = ' '.join(quote_if_needed(arg) for arg in cmd)
+    print(f"Executing command: {cmd_str}")
     
-    except subprocess.CalledProcessError as e:
-        error_msg = f"CommCare export failed with exit code {e.returncode}\n"
-        error_msg += f"Command: {' '.join(cmd)}\n"
-        error_msg += f"Stdout: {e.stdout}\n"
-        error_msg += f"Stderr: {e.stderr}"
-        raise RuntimeError(error_msg)
+    # The actual subprocess.run call uses a list which handles spaces correctly
+    result = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True
+    )
+    
+    if verbose:
+        print("Command output:")
+        print(result.stdout)
+    
+    # Verify the file was created
+    if not os.path.exists(output_file_path):
+        raise RuntimeError(
+            f"Command executed successfully but output file not found: {output_file_path}\n"
+            f"Command output: {result.stdout}\n"
+            f"Command error: {result.stderr}"
+        )
+    
+    print(f"Successfully exported data to {output_file_path}")
+    return output_file_path
+
+
+def load_coverage_from_commcare(domain: str, 
+                            user: str,
+                            api_key: str, 
+                            case_type: str = "deliver-unit",
+                            base_url: str = "https://www.commcarehq.org") -> CoverageData:
+    """
+    Load coverage data directly from CommCare API into a CoverageData object.
+    
+    This function combines get_commcare_du_dataframe_from_api with CoverageData.load_delivery_units_from_df
+    to avoid code duplication.
+    
+    Args:
+        domain: CommCare project space/domain
+        user: Username for authentication
+        api_key: API key for authentication
+        case_type: Case type to fetch (default: 'deliver-unit')
+        base_url: Base URL for the CommCare instance
+        
+    Returns:
+        Loaded CoverageData object
+    """
+    # First, get the DataFrame from CommCare
+    df = get_commcare_du_dataframe_from_api(domain, user, api_key, case_type, base_url)
+    
+    if df.empty:
+        print("Warning: No delivery units were loaded from CommCare.")
+        return CoverageData()
+    
+    # Then use the CoverageData.load_delivery_units_from_df method to process the dataframe
+    try:
+        coverage_data = CoverageData.load_delivery_units_from_df(df)
+        
+        # Perform basic validation
+        if not coverage_data.delivery_units:
+            print("Warning: No delivery units were processed from CommCare data.")
+        
+        return coverage_data
+    
+    except Exception as e:
+        raise RuntimeError(f"Error loading coverage data from CommCare: {str(e)}")
+
+
+# Add this function at the end of the file, before the if __name__ == "__main__" block
+def test_commcare_api_coverage_loader(domain: str, user: str, api_key: str):
+    """
+    Test function to demonstrate loading data from CommCare API into a CoverageData object.
+    
+    Args:
+        domain: CommCare project space/domain name
+        user: Username for authentication
+        api_key: API key for authentication
+    """
+    print("Testing CommCare API coverage data loader...")
+    
+    try:
+        # Load delivery unit cases into a CoverageData object
+        print(f"Fetching delivery-unit cases from {domain}...")
+        coverage_data = load_coverage_from_commcare(domain=domain, user=user, api_key=api_key)
+        
+        # Display basic info about the loaded data
+        if coverage_data.delivery_units:
+            print(f"Successfully loaded {len(coverage_data.delivery_units)} delivery units")
+            print(f"Total service areas: {coverage_data.total_service_areas}")
+            print(f"Total buildings: {coverage_data.total_buildings}")
+            print(f"Total FLWs: {coverage_data.total_flws}")
+            print(f"Completion percentage: {coverage_data.completion_percentage:.2f}%")
+        else:
+            print("No delivery units were loaded")
+        
+        return coverage_data
+    
+    except Exception as e:
+        print(f"Error testing CommCare API coverage loader: {str(e)}")
+        return None
 
 
 if __name__ == "__main__":
@@ -519,4 +553,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    test_commcare_api_loader(args.domain, args.user, args.api_key)
+    test_commcare_api_coverage_loader(args.domain, args.user, args.api_key)

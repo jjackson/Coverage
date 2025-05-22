@@ -678,84 +678,8 @@ class CoverageData:
         
         print(f"Processing {len(delivery_units_df)} delivery units from CommCare")
         
-        # Process the dataframe similar to from_excel_and_csv
-        # Ensure required columns exist to avoid KeyError
-        required_columns = ['caseid', 'name', 'service_area', 'owner_id', 'WKT']
-        missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
-        if missing_columns:
-            error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns)
-            raise ValueError(error_msg)
-        
-        # Convert columns to appropriate types
-        try:
-            delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'buildings' not found, setting to default 0")
-            delivery_units_df['buildings'] = 0
-        
-        try:
-            delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'delivery_count' not found, setting to default 0")
-            delivery_units_df['delivery_count'] = 0
-        
-        try:
-            delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'delivery_target' not found, setting to default 0")
-            delivery_units_df['delivery_target'] = 0
-        
-        try:
-            delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
-        except KeyError:
-            print("Column 'surface_area' not found, setting to default 0")
-            delivery_units_df['surface_area'] = 0
-        
-        # Map column names
-        delivery_units_df.rename(columns={
-            'service_area_number': 'service_area_id',
-            'buildings': '#Buildings',
-            'surface_area': 'Surface Area (sq. meters)',
-            'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
-            'flw': 'flw_commcare_id'  # Also map flw to flw_commcare_id if it exists
-        }, inplace=True)
-            
-        # Ensure service_area_id is string type for existing values
-        delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
-        delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
-        
-        # Ensure flw_commcare_id exists and is properly formatted
-        if 'flw_commcare_id' not in delivery_units_df.columns:
-            if 'owner_id' in delivery_units_df.columns:
-                delivery_units_df['flw_commcare_id'] = delivery_units_df['owner_id']
-            elif 'flw' in delivery_units_df.columns:
-                delivery_units_df['flw_commcare_id'] = delivery_units_df['flw']
-            else:
-                print("WARNING: No FLW identifier column found in data")
-                delivery_units_df['flw_commcare_id'] = 'UNKNOWN'
-        
-        # Ensure flw_commcare_id is string type
-        delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
-        
-        # Count rows with missing service area IDs (likely test data)
-        test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
-        
-        # Filter out rows with missing service area IDs or with value "---"
-        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna()) | (delivery_units_df['service_area_id'] == "---")].index, inplace=True)
-        
-        # Print distinct service area counts for debugging
-        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
-        print(f"Found {distinct_service_areas} distinct service areas in the data. Skipped {test_data_count} rows with missing service area ID (likely test data).")
-        
-        # Make sure all key columns are strings to avoid issues
-        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
-        for col in str_columns:
-            if col in delivery_units_df.columns:
-                # Fixed approach: First convert to object type, then to string
-                delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
-                
-        # Make sure the status values are lowercase for consistency
-        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
+        # Clean and prepare the dataframe
+        delivery_units_df = cls.clean_du_dataframe(delivery_units_df)
         
         created_count = 0
         
@@ -805,6 +729,109 @@ class CoverageData:
         data._compute_metadata()
         
         return data
+    
+    @classmethod
+    def clean_du_dataframe(cls, delivery_units_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean and prepare delivery units dataframe
+        
+        Args:
+            delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
+            This will fix mismatched column headings and make sure data is typed correctly.
+            This will manipulate the dataframe in place and return it.
+        
+        Returns:
+            Cleaned and prepared DataFrame
+        """
+        print ("Columns found at start of clean function: " + ", ".join(delivery_units_df.columns))
+            
+        # Map column names
+        delivery_units_df.rename(columns={
+            'caseid': 'case_id',
+            'service_area_number': 'service_area_id',
+            'buildings': '#Buildings',
+            'surface_area': 'Surface Area (sq. meters)',
+            'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
+            'number' : 'du_number',
+            'name' : 'du_name',
+            '#Buildings' : 'buildings',
+            'Surface Area (sq. meters)' : 'surface_area',
+        }, inplace=True)
+
+
+        # Check for several known columns
+        required_columns = ['case_id', 'name', 'service_area', 'flw_commcare_id', 'WKT']
+        missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
+        if missing_columns:
+            found_columns = list(delivery_units_df.columns)
+            error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
+            raise ValueError(error_msg)
+        
+        # Drop rows with missing service area IDs or with value "---" or empty
+        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna()) | (delivery_units_df['service_area_id'] == "---")].index, inplace=True)
+
+        # Convert columns to appropriate types
+        try:
+            delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
+        except KeyError:
+            print("Column 'buildings' not found, setting to default 0")
+            delivery_units_df['buildings'] = 0
+        
+        try:
+            delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
+        except KeyError:
+            print("Column 'delivery_count' not found, setting to default 0")
+            delivery_units_df['delivery_count'] = 0
+        
+        try:
+            delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
+        except KeyError:
+            print("Column 'delivery_target' not found, setting to default 0")
+            delivery_units_df['delivery_target'] = 0
+        
+        try:
+            delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
+        except KeyError:
+            print("Column 'surface_area' not found, setting to default 0")
+            delivery_units_df['surface_area'] = 0
+        
+       
+            
+        # Ensure service_area_id is string type for existing values
+        # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
+        # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
+        
+        # Ensure flw_commcare_id exists and is properly formatted
+        # if 'flw_commcare_id' not in delivery_units_df.columns:
+        #     if 'owner_id' in delivery_units_df.columns:
+        #         delivery_units_df['flw_commcare_id'] = delivery_units_df['owner_id']
+        #     elif 'flw' in delivery_units_df.columns:
+        #         delivery_units_df['flw_commcare_id'] = delivery_units_df['flw']
+        #     else:
+        #         print("WARNING: No FLW identifier column found in data")
+        #         delivery_units_df['flw_commcare_id'] = 'UNKNOWN'
+        
+        # Ensure flw_commcare_id is string type
+        delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
+        
+        # Count rows with missing service area IDs (likely test data)
+        test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
+              
+        # Print distinct service area counts for debugging
+        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
+        print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {test_data_count} rows with missing service area ID (likely test data).")
+        
+        # Make sure all key columns are strings to avoid issues
+        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
+        for col in str_columns:
+            if col in delivery_units_df.columns:
+                # Fixed approach: First convert to object type, then to string
+                delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
+                
+        # Make sure the status values are lowercase for consistency
+        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
+        
+        return delivery_units_df
     
     def load_service_delivery_from_csv(self, service_delivery_csv: str) -> None:
         """

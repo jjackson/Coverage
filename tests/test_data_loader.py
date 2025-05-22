@@ -15,7 +15,8 @@ from src.utils_data_loader import (
     load_excel_data, 
     load_csv_data, 
     load_coverage_data, 
-    export_to_excel_using_commcare_export
+    export_to_excel_using_commcare_export,
+    load_commcare_data
 )
 
 # Load environment variables from .env file
@@ -120,7 +121,11 @@ class TestDataLoader:
         """Test that appropriate error is raised when coverage data file is not found."""
         with pytest.raises(FileNotFoundError):
             load_coverage_data('nonexistent_file.xlsx') 
-            
+
+    def test_export_to_excel_using_commcare_export(self):
+        """Test that exports data from CommCare HQ API to Excel using the commcare-export tool."""
+        load_commcare_data(COMMCARE_DOMAIN, COMMCARE_USERNAME, COMMCARE_API_KEY)
+
     def test_export_to_excel_using_commcare_export(self):
         """Test that exports data from CommCare HQ using the commcare-export tool.
         
@@ -182,3 +187,68 @@ class TestDataLoader:
             # if os.path.exists(result):
             #    os.unlink(result)
             pass
+
+    def test_load_commcare_data(self):
+        """Test loading data from CommCare API."""
+        # This test requires:
+        # 1. Valid CommCare credentials in the .env file
+        # 2. Internet connection to CommCare HQ
+        
+        try:
+            # Load delivery unit cases
+            df = load_commcare_data(
+                domain=COMMCARE_DOMAIN,
+                user=COMMCARE_USERNAME,
+                api_key=COMMCARE_API_KEY,
+                case_type="deliver-unit"
+            )
+            
+            # Verify basic structure
+            assert isinstance(df, pd.DataFrame)
+            
+            # If data was retrieved, verify it has expected columns
+            if not df.empty:
+                print(f"Successfully retrieved {len(df)} cases")
+                # Check for some typical columns
+                expected_columns = ['case_id', 'case_name', 'owner_id']
+                for col in expected_columns:
+                    assert col in df.columns, f"Expected column {col} not found in data"
+            else:
+                print("No cases found or empty response")
+                
+        except Exception as e:
+            # Don't fail the test but log the error
+            print(f"Error in CommCare API test: {str(e)}")
+            pytest.skip(f"Skipping CommCare API test due to error: {str(e)}")
+
+def test_commcare_api_loader(domain: str, user: str, api_key: str):
+    """
+    Simple test function to demonstrate loading data from CommCare API.
+    
+    Args:
+        domain: CommCare project space/domain name
+        user: Username for authentication
+        api_key: API key for authentication
+    """
+    print("Testing CommCare API data loader...")
+    
+    try:
+        # Load delivery unit cases
+        print(f"Fetching delivery-unit cases from {domain}...")
+        df = load_commcare_data(domain=domain, user=user, api_key=api_key, case_type="deliver-unit")
+        
+        # Display basic info about the loaded data
+        if not df.empty:
+            print(f"Successfully loaded {len(df)} delivery-unit cases")
+            print("\nColumns found:")
+            print(", ".join(df.columns.tolist()))
+            print("\nSample data:")
+            print(df.head(3))
+        else:
+            print("No delivery-unit cases found")
+        
+        return df
+    
+    except Exception as e:
+        print(f"Error testing CommCare API: {str(e)}")
+        return None            

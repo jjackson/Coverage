@@ -4,16 +4,9 @@ import argparse
 import subprocess
 import webbrowser
 from datetime import datetime
-
-# Handle imports based on how the module is used
-try:
-    # When imported as a module
-    from .models import CoverageData
-except ImportError:
-    # When run as a script
-    import sys
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from src.models import CoverageData
+from dotenv import load_dotenv
+from . import utils_data_loader
+from .models import CoverageData
 
 def get_available_files():
     """Get available Excel and CSV files in the data subdirectory."""
@@ -69,12 +62,117 @@ def create_output_directory():
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
 
-def generate_index_html(output_dir, map_file, stats_file, flw_views_file=None):
-    """Generate an index HTML file that links to the map and statistics pages."""
-    # Get relative paths to the output files - these are just the filenames since we're in the output directory
-    map_path = map_file
-    stats_path = stats_file
-    flw_views_path = flw_views_file
+def generate_coverage_outputs(output_dir, coverage_data, project_key):
+    """Generate all output files for a single coverage data object."""
+    print(f"\nGenerating outputs for {project_key}...")
+    
+    # Create subdirectory for this project
+    project_dir = os.path.join(output_dir, project_key)
+    os.makedirs(project_dir, exist_ok=True)
+    
+    # Change to project directory
+    current_dir = os.getcwd()
+    os.chdir(project_dir)
+    
+    # Import the required functions
+    try:
+        # When used as a module
+        from .create_delivery_map import create_leaflet_map
+        from .create_statistics import create_statistics_report
+        from .create_flw_views import create_flw_views_report
+    except ImportError:
+        # When run as a script
+        from src.create_delivery_map import create_leaflet_map
+        from src.create_statistics import create_statistics_report
+        from src.create_flw_views import create_flw_views_report
+    
+    # Generate delivery map
+    print(f"  Generating delivery map for {project_key}...")
+    map_file = create_leaflet_map(coverage_data=coverage_data)
+    if not os.path.exists(map_file):
+        print(f"  Warning: Expected map file '{map_file}' was not created.")
+        map_file = None
+    
+    # Generate statistics
+    print(f"  Generating statistics for {project_key}...")
+    stats_file = create_statistics_report(coverage_data=coverage_data)
+    if not os.path.exists(stats_file):
+        print(f"  Warning: Expected statistics file '{stats_file}' was not created.")
+        stats_file = None
+    
+    # Generate FLW views
+    print(f"  Generating FLW views for {project_key}...")
+    flw_views_file = create_flw_views_report(coverage_data=coverage_data)
+    if not os.path.exists(flw_views_file):
+        print(f"  Warning: Expected FLW views file '{flw_views_file}' was not created.")
+        flw_views_file = None
+    
+    # Change back to original directory
+    os.chdir(current_dir)
+    
+    return {
+        'project_key': project_key,
+        'project_dir': project_key,  # relative path from output_dir
+        'map_file': map_file,
+        'stats_file': stats_file,
+        'flw_views_file': flw_views_file,
+        'opportunity_name': getattr(coverage_data, 'opportunity_name', project_key)
+    }
+
+def generate_index_html(output_dir, project_outputs):
+    """Generate an index HTML file that links to all project outputs."""
+    
+    # Generate cards for each project
+    project_cards = ""
+    for output_info in project_outputs:
+        project_key = output_info['project_key']
+        project_dir = output_info['project_dir']
+        opportunity_name = output_info['opportunity_name']
+        map_file = output_info['map_file']
+        stats_file = output_info['stats_file']
+        flw_views_file = output_info['flw_views_file']
+        
+        # Create links with proper paths
+        map_link = f"{project_dir}/{map_file}" if map_file else None
+        stats_link = f"{project_dir}/{stats_file}" if stats_file else None
+        flw_views_link = f"{project_dir}/{flw_views_file}" if flw_views_file else None
+        
+        project_cards += f"""
+        <div class="project-section">
+            <h2>{opportunity_name}</h2>
+            <div class="card-container">
+                {f'''
+                <div class="card">
+                    <div>
+                        <h3>Delivery Coverage Map</h3>
+                        <p>Interactive map showing delivery units, service areas, and delivery points.</p>
+                    </div>
+                    <a href="{map_link}" class="btn">View Map</a>
+                </div>
+                ''' if map_link else ''}
+                
+                {f'''
+                <div class="card">
+                    <div>
+                        <h3>Coverage Statistics</h3>
+                        <p>Statistical analysis of delivery coverage and performance metrics.</p>
+                    </div>
+                    <a href="{stats_link}" class="btn">View Statistics</a>
+                </div>
+                ''' if stats_link else ''}
+                
+                {f'''
+                <div class="card">
+                    <div>
+                        <h3>FLW Analysis</h3>
+                        <p>Detailed analysis of Field-Level Worker performance and activities.</p>
+                    </div>
+                    <a href="{flw_views_link}" class="btn">View FLW Analysis</a>
+                </div>
+                ''' if flw_views_link else ''}
+            </div>
+        </div>
+        """
     
     index_html = f"""<!DOCTYPE html>
 <html>
@@ -102,6 +200,22 @@ def generate_index_html(output_dir, map_file, stats_file, flw_views_file=None):
             border-bottom: 1px solid #ddd;
             padding-bottom: 10px;
         }}
+        h2 {{
+            color: #444;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            margin-top: 30px;
+        }}
+        h3 {{
+            margin-top: 0;
+            color: #555;
+        }}
+        .project-section {{
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #fafafa;
+            border-radius: 5px;
+        }}
         .card {{
             background-color: white;
             border-radius: 5px;
@@ -116,10 +230,6 @@ def generate_index_html(output_dir, map_file, stats_file, flw_views_file=None):
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
-        }}
-        .card h2 {{
-            margin-top: 0;
-            color: #444;
         }}
         .btn {{
             display: inline-block;
@@ -144,42 +254,18 @@ def generate_index_html(output_dir, map_file, stats_file, flw_views_file=None):
 <body>
     <div class="container">
         <h1>Coverage Analysis Dashboard</h1>
+        <p>Analysis results for {len(project_outputs)} project(s)</p>
         
-        <div class="card-container">
-            <div class="card">
-                <div>
-                    <h2>Delivery Coverage Map</h2>
-                    <p>Interactive map showing delivery units, service areas, and delivery points.</p>
-                </div>
-                <a href="{map_path}" class="btn">View Map</a>
-            </div>
-            
-            <div class="card">
-                <div>
-                    <h2>Coverage Statistics</h2>
-                    <p>Statistical analysis of delivery coverage and performance metrics.</p>
-                </div>
-                <a href="{stats_path}" class="btn">View Statistics</a>
-            </div>
-            
-            {f'''
-            <div class="card">
-                <div>
-                    <h2>FLW Analysis</h2>
-                    <p>Detailed analysis of Field-Level Worker performance and activities.</p>
-                </div>
-                <a href="{flw_views_path}" class="btn">View FLW Analysis</a>
-            </div>
-            ''' if flw_views_path else ''}
-        </div>
+        {project_cards}
         
         <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
     </div>
 </body>
 </html>"""
     
-    # Write the index HTML file directly to the current directory (which should be the output directory)
-    with open("index.html", "w") as f:
+    # Write the index HTML file to the output directory
+    index_path = os.path.join(output_dir, "index.html")
+    with open(index_path, "w") as f:
         f.write(index_html)
     
     return "index.html"
@@ -192,19 +278,59 @@ def main():
     parser.add_argument("--output-dir", help="Custom output directory name")
     args = parser.parse_args()
     
+    # Hardcoded mapping to change opportunity names to domain names
+    opportunity_to_domain_mapping = {
+        "ZEGCAWIS | CHC Givewell Scale Up" : "ccc-chc-zegcawis-2024-25",
+        "COWACDI | CHC Givewell Scale Up" : "ccc-chc-cowacdi-2024-25",
+        "ADD NEXT HERE" : "ADD NEXT HERE" 
+    }
+
+    # Load environment variables from .env file
+    load_dotenv()
     
-    
-    use_api = os.environ.get('USE_API', 'false').lower() == 'true'
+    coverage_data_objects = {}
+    use_api = os.environ.get('USE_API', '').upper() == 'TRUE'
     if use_api:
-        print("Loading Delivery Units from API")
+        print("Using API Method")
+        excel_files, csv_files = get_available_files()
+           
+        if not csv_files:
+            print("Error: No CSV files found in the data directory.")
+            return
+        
+        csv_file = select_file(csv_files, "csv", args)
+        service_delivery_by_opportunity_df = utils_data_loader.load_service_delivery_df_by_opportunity(csv_file)
+
+        print("Loading Delivery Units from API, oppurtinty names found in CSV:" + service_delivery_by_opportunity_df.keys().__str__())
         user = os.environ.get('COMMCARE_USERNAME')
         api_key = os.environ.get('COMMCARE_API_KEY')
-        project_spaces = os.environ.get('PROJECT_SPACES', '').split(',')
-        for project_space in project_spaces:
-            coverage_data = CoverageData.from_api_and_csv(project_space, args.user, args.api_key, csv_file)
-            print(f"Coverage data loaded from API for {project_space}")
+        
+        # Loop through each opportunity and create CoverageData objects                
+        for opportunity_name, service_df in service_delivery_by_opportunity_df.items():
+            print(f"\nProcessing opportunity: {opportunity_name}")
+            print(f"Service points for this opportunity: {len(service_df)}")
+
+            # Use mapped domain name if available, otherwise use opportunity name
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
+            
+            coverage_data = CoverageData.from_du_api_and_service_dataframe(
+                domain=domain_name,
+                user=user,
+                api_key=api_key,
+                service_df=service_df)
+
+            coverage_data.project_space = domain_name
+            coverage_data.opportunity_name = opportunity_name
+            
+            # Store with a combined key
+            key = domain_name
+            coverage_data_objects[key] = coverage_data
+            print(f"Successfully loaded coverage data for {key}")
+                        
+        print(f"\nTotal coverage data objects created: {len(coverage_data_objects)}")
+        
     else:     
-        print("Loading Delivery Units from Excel")
+        print("Loading from Local Files")
         # Get available files
         excel_files, csv_files = get_available_files()
         
@@ -221,84 +347,39 @@ def main():
         excel_file = select_file(excel_files, "excel", args)
         csv_file = select_file(csv_files, "csv", args)
     
-        # Create output directory
-        output_dir = args.output_dir if args.output_dir else create_output_directory()
-        # Make sure the directory exists
-        os.makedirs(output_dir, exist_ok=True)
-        
         print(f"\nInput files selected:")
         print(f"Excel file: {excel_file}")
         print(f"CSV file: {csv_file}")
-        print(f"Output directory: {output_dir}")
         
         # Load the data using the CoverageData model
         print("\nLoading data from input files...")
         coverage_data = CoverageData.from_excel_and_csv(excel_file, csv_file)
+        coverage_data.project_space = opportunity_to_domain_mapping.get(coverage_data.opportunity_name)
+
+        # Use project_space if available, otherwise use opportunity_name as key
+        key = coverage_data.project_space if coverage_data.project_space else coverage_data.opportunity_name
+        coverage_data_objects[key] = coverage_data
     
-    # Run the delivery map creation script
-    print("\nGenerating delivery map...")
-    current_dir = os.getcwd()
-    os.chdir(output_dir)
+    # Create output directory
+    output_dir = args.output_dir if args.output_dir else create_output_directory()
+    # Make sure the directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory: {output_dir}")
+
+    # Generate outputs for each coverage data object
+    print(f"\nGenerating outputs for {len(coverage_data_objects)} project(s)...")
+    project_outputs = []
     
-    # Import the map creation function
-    try:
-        # When used as a module
-        from .create_delivery_map import create_leaflet_map
-    except ImportError:
-        # When run as a script
-        from src.create_delivery_map import create_leaflet_map
+    for key, coverage_data in coverage_data_objects.items():
+        output_info = generate_coverage_outputs(output_dir, coverage_data, key)
+        project_outputs.append(output_info)
     
-    map_file = create_leaflet_map(coverage_data=coverage_data)
-    
-    # Check if map file was created successfully
-    if not os.path.exists(map_file):
-        print(f"Warning: Expected map file '{map_file}' was not created.")
-    
-    # Run the statistics script
-    print("\nGenerating statistics...")
-    
-    # Import the statistics report function
-    try:
-        # When used as a module
-        from .create_statistics import create_statistics_report
-    except ImportError:
-        # When run as a script
-        from src.create_statistics import create_statistics_report
-    
-    stats_file = create_statistics_report(coverage_data=coverage_data)
-    
-    # Check if stats file was created successfully
-    if not os.path.exists(stats_file):
-        print(f"Warning: Expected statistics file '{stats_file}' was not created.")
-    
-    # Generate FLW views
-    print("\nGenerating FLW views...")
-    
-    # Import the FLW views function
-    try:
-        # When used as a module
-        from .create_flw_views import create_flw_views_report
-    except ImportError:
-        # When run as a script
-        from src.create_flw_views import create_flw_views_report
-    
-    flw_views_file = create_flw_views_report(coverage_data=coverage_data)
-    
-    # Check if FLW views file was created successfully
-    if not os.path.exists(flw_views_file):
-        print(f"Warning: Expected FLW views file '{flw_views_file}' was not created.")
-        flw_views_file = None
-    
-    # Generate index HTML
-    print("\nCreating dashboard index...")
-    index_file = "index.html"
-    generate_index_html(output_dir, map_file, stats_file, flw_views_file)
+    # Generate main index HTML
+    print("\nCreating main dashboard index...")
+    generate_index_html(output_dir, project_outputs)
     
     # Construct the full path to the index.html file
-    full_path = os.path.join(current_dir, output_dir, index_file)
-    
-    # Change back to original directory
-    os.chdir(current_dir)
+    full_path = os.path.join(os.getcwd(), output_dir, "index.html")
     
     print(f"\nAll done! Open the dashboard at: {full_path}")
     

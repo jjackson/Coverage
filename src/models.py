@@ -8,6 +8,7 @@ import geopandas as gpd
 from geopy.distance import geodesic
 import numpy as np
 import time
+from . import utils_data_loader
 
 
 @dataclass
@@ -283,6 +284,10 @@ class CoverageData:
         self.service_points: List[ServiceDeliveryPoint] = []
         self.flws: Dict[str, FLW] = {}
         self.delivery_units_df: Optional[pd.DataFrame] = None
+        
+        # Project and opportunity identification
+        self.project_space: Optional[str] = None
+        self.opportunity_name: Optional[str] = None
         
         # Mapping between FLW CommCare ID and FLW Name
         self.flw_commcare_id_to_name_map: Dict[str, str] = {}
@@ -898,6 +903,8 @@ class CoverageData:
                 print(f"Error creating service delivery point: {e}")
                 continue
         
+        # Set the opportunity name
+        self.opportunity_name = service_df.iloc[0]['opportunity_name']
         return service_df
 
     @classmethod
@@ -926,25 +933,24 @@ class CoverageData:
         return data
     
     @classmethod
-    def from_api_and_csv(cls, domain: str, user: str, api_key: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+    def from_du_api_and_service_dataframe(cls, domain: str, user: str, api_key: str, service_df: pd.DataFrame) -> 'CoverageData':
         """
-        Load coverage data from API and CSV files
+        Load coverage data from API and service Delivery from DataFrame
         
         Args:
             domain: CommCare project space/domain name
             user: Username for authentication
             api_key: API key for authentication
-            service_delivery_csv: Optional path to service delivery GPS coordinates CSV
+            service_df: DataFrame containing service delivery GPS coordinates
         """
         data = cls()
         
         # retrieve from API and Load
-        delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key, case_type, base_url)
+        delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key)
         data = cls.load_delivery_units_from_df(delivery_units_df)
         
-        # Load service delivery data if provided
-        if service_delivery_csv:
-            data.load_service_delivery_from_csv(service_delivery_csv)
+        # Load service delivery data
+        data.load_service_delivery_from_datafame(service_df)
         
         return data
 

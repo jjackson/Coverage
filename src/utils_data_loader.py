@@ -11,6 +11,7 @@ import argparse
 import subprocess
 from pathlib import Path
 from datetime import datetime
+import time
 
 from src.models import CoverageData
 
@@ -221,7 +222,6 @@ def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = No
 def get_du_dataframe_from_commcare_api(domain: str, 
                        user: str,
                        api_key: str, 
-                       case_type: str = "deliver-unit", 
                        base_url: str = "https://www.commcarehq.org") -> pd.DataFrame:
     """
     Load delivery unit data from CommCare's Case API v2.
@@ -230,12 +230,12 @@ def get_du_dataframe_from_commcare_api(domain: str,
         domain: CommCare project space/domain
         user: Username for authentication
         api_key: API key for authentication
-        case_type: Case type to fetch (default: 'delivery-unit')
         base_url: Base URL for the CommCare instance (default: 'https://www.commcarehq.org')
         
     Returns:
         DataFrame with case data formatted similar to Excel import
     """
+    case_type = "deliver-unit"
 
     # Build API endpoint
     endpoint = f"{base_url}/a/{domain}/api/case/v2/"
@@ -287,7 +287,7 @@ def get_du_dataframe_from_commcare_api(domain: str,
         #         headers=headers
         #     )
         
-        num_retry = 3
+        num_retry = 5
         response = None
         
         for attempt in range(num_retry):
@@ -306,6 +306,7 @@ def get_du_dataframe_from_commcare_api(domain: str,
                 if attempt == num_retry - 1:  # Last attempt failed
                     raise ValueError(f"API request failed with status {response.status_code} after {num_retry} attempts")
                 else:
+                    time.sleep(2)
                     print(f"Retrying API call")
         
         try:
@@ -559,7 +560,7 @@ def export_to_excel_using_commcare_export(
     print(f"Successfully exported data to {output_file_path}")
     return output_file_path
 
-def load_service_delivery_by_opportunity(csv_file: str) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity(csv_file: str) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from CSV and group by unique opportunity_name values.
     

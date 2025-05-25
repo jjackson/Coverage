@@ -743,7 +743,7 @@ class CoverageData:
         Returns:
             Cleaned and prepared DataFrame
         """
-        print ("Columns found at start of clean function: " + ", ".join(delivery_units_df.columns))
+        # print ("Columns found at start of clean function: " + ", ".join(delivery_units_df.columns))
             
         # Map column names
         delivery_units_df.rename(columns={
@@ -752,7 +752,7 @@ class CoverageData:
             'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
             'number' : 'du_number',
             'name' : 'du_name', # xlsx column name
-            'case name': 'du_name', # API column name
+            'case_name': 'du_name', # API column name
             '#Buildings' : 'buildings', #API column name
             'Surface Area (sq. meters)' : 'surface_area', #API column name
         }, inplace=True)
@@ -766,10 +766,18 @@ class CoverageData:
             error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
             raise ValueError(error_msg)
         
-        # Drop rows with missing service area IDs or with value "---" or empty
+        
+        # Drop rows with missing service area IDs or with value "---" or empty, count them first for debugging
+        dropped_data_count = len(delivery_units_df)
         delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna()) | (delivery_units_df['service_area_id'] == "---")].index, inplace=True)
-
-        # Convert columns to appropriate types
+        dropped_data_count = dropped_data_count - len(delivery_units_df)
+              
+        # Print distinct service area counts for debugging
+        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
+        print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
+    
+        # Convert columns to appropriate types; none of the exceptions should trigger if the xlsx or API is correct.
+        # I'm unclear any of this is actually needed.
         try:
             delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
         except KeyError:
@@ -794,8 +802,10 @@ class CoverageData:
             print("Column 'surface_area' not found, setting to default 0")
             delivery_units_df['surface_area'] = 0
         
-       
-            
+        # Make sure the status values are lowercase for consistency
+        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
+        
+        # Commenting out the below as I don't think is needed.
         # Ensure service_area_id is string type for existing values
         # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
         # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
@@ -811,31 +821,21 @@ class CoverageData:
         #         delivery_units_df['flw_commcare_id'] = 'UNKNOWN'
         
         # Ensure flw_commcare_id is string type
-        delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
-        
-        # Count rows with missing service area IDs (likely test data)
-        test_data_count = (delivery_units_df['service_area_id'].isna() | (delivery_units_df['service_area_id'] == "---")).sum()
-              
-        # Print distinct service area counts for debugging
-        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
-        print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {test_data_count} rows with missing service area ID (likely test data).")
-        
+        # delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
+            
         # Make sure all key columns are strings to avoid issues
-        str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
-        for col in str_columns:
-            if col in delivery_units_df.columns:
-                # Fixed approach: First convert to object type, then to string
-                delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
+        #str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
+        # for col in str_columns:
+        #     if col in delivery_units_df.columns:
+        #         # Fixed approach: First convert to object type, then to string
+        #        delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
                 
-        # Make sure the status values are lowercase for consistency
-        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
-        
         return delivery_units_df
     
-    def load_service_delivery_from_csv(self, service_delivery_csv: str) -> None:
+    def load_service_delivery_dataframe_from_csv(self, service_delivery_csv: str) -> None:
         """
         Load service delivery points from a CSV file
-        
+            
         Args:
             service_delivery_csv: Path to service delivery GPS coordinates CSV
         """
@@ -844,7 +844,16 @@ class CoverageData:
             return
             
         service_df = pd.read_csv(service_delivery_csv)
-        print(f"Loaded service delivery data: {len(service_df)} points")
+        return service_df
+    
+    def load_service_delivery_from_datafame(self, service_df: pd.DataFrame) -> None:
+        """
+        Load service delivery points from a dataframe
+
+        Args:
+            service_df: DataFrame containing service delivery GPS coordinates
+        """
+        print(f"Loading service delivery data: {len(service_df)} points in DataFrame")
         
         # Create service delivery points
         for _, row in service_df.iterrows():
@@ -905,9 +914,32 @@ class CoverageData:
         # Read the Excel file
         print(f"Loading Excel file: {excel_file}")
         delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
-        print(f"Excel file loaded, shape: {delivery_units_df.shape}")
         
         # Use the new from_commcare method to process the dataframe
+        data = cls.load_delivery_units_from_df(delivery_units_df)
+        
+        # Load service delivery data if provided
+        if service_delivery_csv:
+            service_df = data.load_service_delivery_dataframe_from_csv(service_delivery_csv)
+            data.load_service_delivery_from_datafame(service_df)
+        
+        return data
+    
+    @classmethod
+    def from_api_and_csv(cls, domain: str, user: str, api_key: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+        """
+        Load coverage data from API and CSV files
+        
+        Args:
+            domain: CommCare project space/domain name
+            user: Username for authentication
+            api_key: API key for authentication
+            service_delivery_csv: Optional path to service delivery GPS coordinates CSV
+        """
+        data = cls()
+        
+        # retrieve from API and Load
+        delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key, case_type, base_url)
         data = cls.load_delivery_units_from_df(delivery_units_df)
         
         # Load service delivery data if provided

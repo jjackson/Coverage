@@ -192,35 +192,48 @@ def main():
     parser.add_argument("--output-dir", help="Custom output directory name")
     args = parser.parse_args()
     
-    # Get available files
-    excel_files, csv_files = get_available_files()
     
-    # Check if files are available
-    if not excel_files:
-        print("Error: No Excel files found in the data directory.")
-        return
     
-    if not csv_files:
-        print("Error: No CSV files found in the data directory.")
-        return
+    use_api = os.environ.get('USE_API', 'false').lower() == 'true'
+    if use_api:
+        print("Loading Delivery Units from API")
+        user = os.environ.get('COMMCARE_USERNAME')
+        api_key = os.environ.get('COMMCARE_API_KEY')
+        project_spaces = os.environ.get('PROJECT_SPACES', '').split(',')
+        for project_space in project_spaces:
+            coverage_data = CoverageData.from_api_and_csv(project_space, args.user, args.api_key, csv_file)
+            print(f"Coverage data loaded from API for {project_space}")
+    else:     
+        print("Loading Delivery Units from Excel")
+        # Get available files
+        excel_files, csv_files = get_available_files()
+        
+        # Check if files are available
+        if not excel_files:
+            print("Error: No Excel files found in the data directory")
+            return
     
-    # Select input files
-    excel_file = select_file(excel_files, "excel", args)
-    csv_file = select_file(csv_files, "csv", args)
+        if not csv_files:
+            print("Error: No CSV files found in the data directory.")
+            return
     
-    # Create output directory
-    output_dir = args.output_dir if args.output_dir else create_output_directory()
-    # Make sure the directory exists
-    os.makedirs(output_dir, exist_ok=True)
+        # Select input files
+        excel_file = select_file(excel_files, "excel", args)
+        csv_file = select_file(csv_files, "csv", args)
     
-    print(f"\nInput files selected:")
-    print(f"Excel file: {excel_file}")
-    print(f"CSV file: {csv_file}")
-    print(f"Output directory: {output_dir}")
-    
-    # Load the data using the CoverageData model
-    print("\nLoading data from input files...")
-    coverage_data = CoverageData.from_excel_and_csv(excel_file, csv_file)
+        # Create output directory
+        output_dir = args.output_dir if args.output_dir else create_output_directory()
+        # Make sure the directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print(f"\nInput files selected:")
+        print(f"Excel file: {excel_file}")
+        print(f"CSV file: {csv_file}")
+        print(f"Output directory: {output_dir}")
+        
+        # Load the data using the CoverageData model
+        print("\nLoading data from input files...")
+        coverage_data = CoverageData.from_excel_and_csv(excel_file, csv_file)
     
     # Run the delivery map creation script
     print("\nGenerating delivery map...")

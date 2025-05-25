@@ -218,7 +218,7 @@ def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = No
         raise RuntimeError(f"Error loading coverage data: {str(e)}") 
 
 
-def get_commcare_du_dataframe_from_api(domain: str, 
+def get_du_dataframe_from_commcare_api(domain: str, 
                        user: str,
                        api_key: str, 
                        case_type: str = "deliver-unit", 
@@ -273,26 +273,40 @@ def get_commcare_du_dataframe_from_api(domain: str,
         page_count += 1
         print(f"\n--- Request #{page_count}: {next_url.split('?')[0]} ---")
         
-        # For debugging, separate the initial request and paginated requests
-        if next_url == endpoint:
-            response = requests.get(
-                next_url,
-                params=params,
-                headers=headers
-            )
-        else:
-            response = requests.get(
-                next_url,
-                params=params,
-                headers=headers
-            )
+        # # For debugging, separate the initial request and paginated requests
+        # if next_url == endpoint:
+        #     response = requests.get(
+        #         next_url,
+        #         params=params,
+        #         headers=headers
+        #     )
+        # else:
+        #     response = requests.get(
+        #         next_url,
+        #         params=params, # AI tried to remove this, but I added it back in... not sure if needed or not.
+        #         headers=headers
+        #     )
         
-        # Debug response status
-        print(f"Status: {response.status_code}")
+        num_retry = 3
+        response = None
         
-        if response.status_code != 200:
-            print(f"Response: {response.text}")
-            raise ValueError(f"API request failed with status {response.status_code}")
+        for attempt in range(num_retry):
+            response = requests.get(
+                    next_url,
+                    params=params,
+                    headers=headers
+            )
+            
+            # Debug response status
+            print(f"Status: {response.status_code} (attempt {attempt + 1}/{num_retry})")
+            
+            if response.status_code == 200:
+                break  # Success, exit the retry loop
+            else:
+                if attempt == num_retry - 1:  # Last attempt failed
+                    raise ValueError(f"API request failed with status {response.status_code} after {num_retry} attempts")
+                else:
+                    print(f"Retrying API call")
         
         try:
             data = response.json()
@@ -367,6 +381,84 @@ def get_commcare_du_dataframe_from_api(domain: str,
     
     return df
 
+def load_delivery_units_from_commcare_api(domain: str, 
+                            user: str,
+                            api_key: str, 
+                            case_type: str = "deliver-unit",
+                            base_url: str = "https://www.commcarehq.org") -> CoverageData:
+    """
+    Load delivery units directly from CommCare API into a CoverageData object.
+    
+    This function combines get_commcare_du_dataframe_from_api with CoverageData.load_delivery_units_from_df
+    to avoid code duplication.
+    
+    Args:
+        domain: CommCare project space/domain
+        user: Username for authentication
+        api_key: API key for authentication
+        case_type: Case type to fetch (default: 'deliver-unit')
+        base_url: Base URL for the CommCare instance
+        
+    Returns:
+        Loaded CoverageData object
+    """
+    # First, get the DataFrame from CommCare
+    df = get_du_dataframe_from_commcare_api(domain, user, api_key, case_type, base_url)
+    
+    if df.empty:
+        print("Warning: No delivery units were loaded from CommCare.")
+        return CoverageData()
+    
+    # Then use the CoverageData.load_delivery_units_from_df method to process the dataframe
+    try:
+        coverage_data = CoverageData.load_delivery_units_from_df(df)
+        
+        # Perform basic validation
+        if not coverage_data.delivery_units:
+            print("Warning: No delivery units were processed from CommCare data.")
+        
+        return coverage_data
+    
+    except Exception as e:
+        raise RuntimeError(f"Error loading coverage data from CommCare: {str(e)}")
+
+
+
+
+# Add this function at the end of the file, before the if __name__ == "__main__" block
+def test_commcare_api_coverage_loader(domain: str, user: str, api_key: str):
+    """
+    Test function to demonstrate loading data from CommCare API into a CoverageData object.
+    
+    Args:
+        domain: CommCare project space/domain name
+        user: Username for authentication
+        api_key: API key for authentication
+    """
+    print("Testing CommCare API coverage data loader...")
+    
+    try:
+        # Load delivery unit cases into a CoverageData object
+        print(f"Fetching delivery-unit cases from {domain}...")
+        coverage_data = load_delivery_units_from_commcare_api(domain=domain, user=user, api_key=api_key)
+        
+        # Display basic info about the loaded data
+        if coverage_data.delivery_units:
+            print(f"Successfully loaded {len(coverage_data.delivery_units)} delivery units")
+            print(f"Total service areas: {coverage_data.total_service_areas}")
+            print(f"Total buildings: {coverage_data.total_buildings}")
+            print(f"Total FLWs: {coverage_data.total_flws}")
+            print(f"Completion percentage: {coverage_data.completion_percentage:.2f}%")
+        else:
+            print("No delivery units were loaded")
+        
+        return coverage_data
+    
+    except Exception as e:
+        print(f"Error testing CommCare API coverage loader: {str(e)}")
+        return None
+
+@DeprecationWarning # TODO: Had several issues and stopped work on this function
 def export_to_excel_using_commcare_export(
     domain: str,
     username: str,
@@ -467,82 +559,48 @@ def export_to_excel_using_commcare_export(
     print(f"Successfully exported data to {output_file_path}")
     return output_file_path
 
-
-def load_coverage_from_commcare(domain: str, 
-                            user: str,
-                            api_key: str, 
-                            case_type: str = "deliver-unit",
-                            base_url: str = "https://www.commcarehq.org") -> CoverageData:
+def load_service_delivery_by_opportunity(csv_file: str) -> Dict[str, pd.DataFrame]:
     """
-    Load coverage data directly from CommCare API into a CoverageData object.
-    
-    This function combines get_commcare_du_dataframe_from_api with CoverageData.load_delivery_units_from_df
-    to avoid code duplication.
+    Load service delivery data from CSV and group by unique opportunity_name values.
     
     Args:
-        domain: CommCare project space/domain
-        user: Username for authentication
-        api_key: API key for authentication
-        case_type: Case type to fetch (default: 'deliver-unit')
-        base_url: Base URL for the CommCare instance
+        csv_file: Path to the CSV file containing service delivery data
         
     Returns:
-        Loaded CoverageData object
+        Dictionary with opportunity_name as key and DataFrame of service points as value
+        
+    Raises:
+        FileNotFoundError: If the CSV file doesn't exist
+        ValueError: If the CSV file doesn't contain an 'opportunity_name' column
     """
-    # First, get the DataFrame from CommCare
-    df = get_commcare_du_dataframe_from_api(domain, user, api_key, case_type, base_url)
+    if not os.path.exists(csv_file):
+        raise FileNotFoundError(f"CSV file not found: {csv_file}")
+       
+    # Check if opportunity_name column exists
+    if 'opportunity_name' not in df.columns:
+        raise ValueError("CSV file must contain an 'opportunity_name' column")
     
-    if df.empty:
-        print("Warning: No delivery units were loaded from CommCare.")
-        return CoverageData()
+    # Group by opportunity_name and create dictionary of DataFrames
+    opportunity_groups = {}
     
-    # Then use the CoverageData.load_delivery_units_from_df method to process the dataframe
-    try:
-        coverage_data = CoverageData.load_delivery_units_from_df(df)
+    # Get unique opportunity names (excluding NaN values)
+    unique_opportunities = df['opportunity_name'].dropna().unique()
+    
+    for opportunity in unique_opportunities:
+        # Filter data for this opportunity
+        opportunity_df = df[df['opportunity_name'] == opportunity].copy()
         
-        # Perform basic validation
-        if not coverage_data.delivery_units:
-            print("Warning: No delivery units were processed from CommCare data.")
+        # Reset index for clean DataFrame
+        opportunity_df.reset_index(drop=True, inplace=True)
         
-        return coverage_data
+        opportunity_groups[opportunity] = opportunity_df
     
-    except Exception as e:
-        raise RuntimeError(f"Error loading coverage data from CommCare: {str(e)}")
-
-
-# Add this function at the end of the file, before the if __name__ == "__main__" block
-def test_commcare_api_coverage_loader(domain: str, user: str, api_key: str):
-    """
-    Test function to demonstrate loading data from CommCare API into a CoverageData object.
+    # Check for rows with missing opportunity_name and throw error if any exist
+    missing_opportunity_count = df['opportunity_name'].isna().sum()
+    if missing_opportunity_count > 0:
+        raise ValueError(f"Found {missing_opportunity_count} rows with missing 'opportunity_name' values. All rows must have a valid opportunity_name.")
     
-    Args:
-        domain: CommCare project space/domain name
-        user: Username for authentication
-        api_key: API key for authentication
-    """
-    print("Testing CommCare API coverage data loader...")
-    
-    try:
-        # Load delivery unit cases into a CoverageData object
-        print(f"Fetching delivery-unit cases from {domain}...")
-        coverage_data = load_coverage_from_commcare(domain=domain, user=user, api_key=api_key)
-        
-        # Display basic info about the loaded data
-        if coverage_data.delivery_units:
-            print(f"Successfully loaded {len(coverage_data.delivery_units)} delivery units")
-            print(f"Total service areas: {coverage_data.total_service_areas}")
-            print(f"Total buildings: {coverage_data.total_buildings}")
-            print(f"Total FLWs: {coverage_data.total_flws}")
-            print(f"Completion percentage: {coverage_data.completion_percentage:.2f}%")
-        else:
-            print("No delivery units were loaded")
-        
-        return coverage_data
-    
-    except Exception as e:
-        print(f"Error testing CommCare API coverage loader: {str(e)}")
-        return None
-
+    return opportunity_groups
 
 if __name__ == "__main__":
     # Only run the test if this file is executed directly

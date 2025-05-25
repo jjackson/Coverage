@@ -575,7 +575,13 @@ def load_service_delivery_by_opportunity(csv_file: str) -> Dict[str, pd.DataFram
     """
     if not os.path.exists(csv_file):
         raise FileNotFoundError(f"CSV file not found: {csv_file}")
-       
+    
+    try:
+        # Load the CSV data
+        df = pd.read_csv(csv_file)
+    except Exception as e:
+        raise ValueError(f"Error reading CSV file: {e}. Please check the file path and try again.")
+
     # Check if opportunity_name column exists
     if 'opportunity_name' not in df.columns:
         raise ValueError("CSV file must contain an 'opportunity_name' column")

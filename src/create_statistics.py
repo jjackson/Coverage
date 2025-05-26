@@ -82,7 +82,7 @@ def create_html_report(coverage_data):
         service_stats['unique_flws'] = coverage_data.total_flws
       
     # Debug: Check unique values in du_status column
-    print("Unique values in du_status column:")
+    # print("Unique values in du_status column:")
     print(delivery_df['du_status'].value_counts(dropna=False))
     print(f"Total rows: {len(delivery_df)}")
     

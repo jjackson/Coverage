@@ -8,6 +8,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from . import utils_data_loader
 from .models import CoverageData
+try:
+    from .opportunity_comparison_statistics import create_opportunity_comparison_report
+except ImportError:
+    from src.opportunity_comparison_statistics import create_opportunity_comparison_report
 
 def get_available_files():
     """Get available Excel and CSV files in the data subdirectory."""
@@ -120,8 +124,30 @@ def generate_coverage_outputs(output_dir, coverage_data, project_key):
         'opportunity_name': getattr(coverage_data, 'opportunity_name', project_key)
     }
 
-def generate_index_html(output_dir, project_outputs):
+def generate_index_html(output_dir, project_outputs, comparison_report_file=None):
     """Generate an index HTML file that links to all project outputs."""
+    
+    # Generate comparison report section if available
+    comparison_section = ""
+    if comparison_report_file:
+        section_title = "Project Analysis" if len(project_outputs) == 1 else "Multi-Project Analysis"
+        card_title = "Opportunity Analysis Report" if len(project_outputs) == 1 else "Opportunity Comparison Report"
+        card_description = f"Detailed analysis including progress charts, statistics, and performance metrics for this project." if len(project_outputs) == 1 else f"Comparative analysis across all {len(project_outputs)} projects including statistics, performance metrics, and cross-project insights."
+        
+        comparison_section = f"""
+        <div class="comparison-section">
+            <h2>{section_title}</h2>
+            <div class="card-container">
+                <div class="card comparison-card">
+                    <div>
+                        <h3>{card_title}</h3>
+                        <p>{card_description}</p>
+                    </div>
+                    <a href="{comparison_report_file}" class="btn btn-comparison">View Analysis</a>
+                </div>
+            </div>
+        </div>
+        """
     
     # Generate cards for each project
     project_cards = ""
@@ -245,6 +271,23 @@ def generate_index_html(output_dir, project_outputs):
         .btn:hover {{
             background-color: #45a049;
         }}
+        .btn-comparison {{
+            background-color: #2196F3;
+        }}
+        .btn-comparison:hover {{
+            background-color: #1976D2;
+        }}
+        .comparison-section {{
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #e3f2fd;
+            border-radius: 5px;
+            border-left: 4px solid #2196F3;
+        }}
+        .comparison-card {{
+            background-color: white;
+            border-left: 4px solid #2196F3;
+        }}
         .timestamp {{
             color: #777;
             font-size: 0.9em;
@@ -256,6 +299,8 @@ def generate_index_html(output_dir, project_outputs):
     <div class="container">
         <h1>Coverage Analysis Dashboard</h1>
         <p>Analysis results for {len(project_outputs)} project(s)</p>
+        
+        {comparison_section}
         
         {project_cards}
         
@@ -402,9 +447,22 @@ def main():
         output_info = generate_coverage_outputs(output_dir, coverage_data, key)
         project_outputs.append(output_info)
     
+    # Generate opportunity comparison report if multiple projects exist
+    comparison_report_file = None
+    if len(coverage_data_objects) >= 1:
+        print("\nGenerating opportunity comparison report...")
+        # Change to output directory to generate the comparison report there
+        current_dir = os.getcwd()
+        os.chdir(output_dir)
+        
+        comparison_report_file = create_opportunity_comparison_report(coverage_data_objects)
+        
+        # Change back to original directory
+        os.chdir(current_dir)
+    
     # Generate main index HTML
     print("\nCreating main dashboard index...")
-    generate_index_html(output_dir, project_outputs)
+    generate_index_html(output_dir, project_outputs, comparison_report_file)
     
     # Construct the full path to the index.html file
     full_path = os.path.join(os.getcwd(), output_dir, "index.html")

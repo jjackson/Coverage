@@ -344,8 +344,9 @@ def get_du_dataframe_from_commcare_api(domain: str,
     # Process case data into a format similar to Excel import
     processed_data = []
     for case in all_cases:
-        # Extract standard case fields
+        # Combine all case properties with top-level case fields
         case_data = {
+            **case.get('properties', {}),
             'case_id': case.get('case_id'),
             'case_name': case.get('case_name'),
             'external_id': case.get('external_id'),
@@ -354,11 +355,6 @@ def get_du_dataframe_from_commcare_api(domain: str,
             'last_modified': case.get('last_modified'),
             'closed': case.get('closed', False)
         }
-        
-        # Extract all custom properties
-        properties = case.get('properties', {})
-        for prop_name, prop_value in properties.items():
-            case_data[prop_name] = prop_value
         
         processed_data.append(case_data)
     

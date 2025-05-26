@@ -152,42 +152,25 @@ class DeliveryUnit:
             raise ValueError(f"Empty WKT for delivery unit {du_id}, du_name: {du_name}")
         
         # Extract numeric fields with proper error handling
-        try:
-            buildings = int(data.get('buildings', data.get('#Buildings', 0)))
-        except (ValueError, TypeError):
-            buildings = 0
+        buildings = int(data.get('buildings', data.get('#Buildings', 0)))
+        surface_area = float(data.get('surface_area', data.get('Surface Area (sq. meters)', 0.0)))
+        delivery_count = int(data.get('delivery_count', 0))
+        delivery_target = int(data.get('delivery_target', 0))
         
-        try:
-            surface_area = float(data.get('surface_area', data.get('Surface Area (sq. meters)', 0.0)))
-        except (ValueError, TypeError):
-            surface_area = 0.0
-        
-        try:
-            delivery_count = int(data.get('delivery_count', 0))
-        except (ValueError, TypeError):
-            delivery_count = 0
-        
-        try:
-            delivery_target = int(data.get('delivery_target', 0))
-        except (ValueError, TypeError):
-            delivery_target = 0
         
         # Handle string fields
         checkout_remark = data.get('du_checkout_remark')
         checkout_date = data.get('checked_out_date')
         checkin_date = data.get('checked_in_date')
-        # Parse last_modified_date if available
+        
+        # Parse last_modified_date
         last_modified = None
         if 'last_modified_date' in data and data['last_modified_date']:
-            try:
-                if isinstance(data['last_modified_date'], datetime):
-                    last_modified = data['last_modified_date']
-                else:
-                    # Try parsing the date string
-                    last_modified = pd.to_datetime(data['last_modified_date'])
-            except Exception:
-                # If parsing fails, leave as None
-                pass
+            if isinstance(data['last_modified_date'], datetime):
+                last_modified = data['last_modified_date']
+            else:
+                # Try parsing the date string
+                last_modified = pd.to_datetime(data['last_modified_date'])
         
         # Create the DeliveryUnit instance
         return cls(
@@ -743,6 +726,7 @@ class CoverageData:
             'case_name': 'du_name', # API column name
             '#Buildings' : 'buildings', #API column name
             'Surface Area (sq. meters)' : 'surface_area', #API column name
+            'last_modified': 'last_modified_date',
         }, inplace=True)
 
 

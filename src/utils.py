@@ -118,7 +118,7 @@ def coverage_data_to_geojson(coverage_data: CoverageData,
                 "type": "Feature",
                 "properties": {
                     "id": du.id,
-                    "name": du.name,
+                    "name": du.du_name,
                     "service_area_id": du.service_area_id,
                     "flw": du.flw_id,
                     "status": du.status,

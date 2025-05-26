@@ -3,6 +3,7 @@ import glob
 import argparse
 import subprocess
 import webbrowser
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 from . import utils_data_loader
@@ -270,6 +271,34 @@ def generate_index_html(output_dir, project_outputs):
     
     return "index.html"
 
+def load_opportunity_domain_mapping():
+    """Load opportunity to domain mapping from environment variable."""
+    mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
+    
+    if not mapping_str:
+        # Return default mapping if no environment variable is set
+        return {
+            "ZEGCAWIS | CHC Givewell Scale Up": "ccc-chc-zegcawis-2024-25",
+            "COWACDI | CHC Givewell Scale Up": "ccc-chc-cowacdi-2024-25",
+            "ADD NEXT HERE": "ADD NEXT HERE"
+        }
+    
+    try:
+        # Try to parse as JSON first
+        return json.loads(mapping_str)
+    except json.JSONDecodeError:
+        # If JSON parsing fails, try pipe-separated format
+        try:
+            mapping = {}
+            pairs = mapping_str.split('|')
+            for pair in pairs:
+                if ':' in pair:
+                    key, value = pair.split(':', 1)  # Split only on first colon
+                    mapping[key.strip()] = value.strip()
+            return mapping
+        except Exception as e:
+            raise ValueError(f"Could not parse OPPORTUNITY_DOMAIN_MAPPING from environment variable. Please check the format. Error: {e}")
+
 def main():
     # Set up command line arguments
     parser = argparse.ArgumentParser(description="Master command for generating coverage analysis")
@@ -278,15 +307,11 @@ def main():
     parser.add_argument("--output-dir", help="Custom output directory name")
     args = parser.parse_args()
     
-    # Hardcoded mapping to change opportunity names to domain names
-    opportunity_to_domain_mapping = {
-        "ZEGCAWIS | CHC Givewell Scale Up" : "ccc-chc-zegcawis-2024-25",
-        "COWACDI | CHC Givewell Scale Up" : "ccc-chc-cowacdi-2024-25",
-        "ADD NEXT HERE" : "ADD NEXT HERE" 
-    }
-
     # Load environment variables from .env file
     load_dotenv()
+    
+    # Load opportunity to domain mapping from environment
+    opportunity_to_domain_mapping = load_opportunity_domain_mapping()
     
     coverage_data_objects = {}
     use_api = os.environ.get('USE_API', '').upper() == 'TRUE'
@@ -301,7 +326,9 @@ def main():
         csv_file = select_file(csv_files, "csv", args)
         service_delivery_by_opportunity_df = utils_data_loader.load_service_delivery_df_by_opportunity(csv_file)
 
-        print("Loading Delivery Units from API, oppurtinty names found in CSV:" + service_delivery_by_opportunity_df.keys().__str__())
+        print("Loading Delivery Units from API, opportunity names found in CSV:")
+        for key, value in service_delivery_by_opportunity_df.items():
+            print(f"  {key}: {len(value)} service points" if hasattr(value, '__len__') else f"  {key}: {value}")
         user = os.environ.get('COMMCARE_USERNAME')
         api_key = os.environ.get('COMMCARE_API_KEY')
         
@@ -354,6 +381,7 @@ def main():
         # Load the data using the CoverageData model
         print("\nLoading data from input files...")
         coverage_data = CoverageData.from_excel_and_csv(excel_file, csv_file)
+        coverage_data.print_summary()
         coverage_data.project_space = opportunity_to_domain_mapping.get(coverage_data.opportunity_name)
 
         # Use project_space if available, otherwise use opportunity_name as key

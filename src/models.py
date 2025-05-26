@@ -94,7 +94,7 @@ class ServiceDeliveryPoint:
 class DeliveryUnit:
     """Delivery Unit Model"""
     id: str
-    name: str
+    du_name: str
     service_area_id: str
     flw_commcare_id: str  # FLW/owner CommCare ID
     status: str  # completed, visited, unvisited represented as "---"
@@ -133,19 +133,10 @@ class DeliveryUnit:
         du_id = str(data.get('du_id', data.get('caseid', '')))
         
         # Handle potentially missing or NaN values
-        name_val = data.get('name', '')
-        name = str(name_val) if not pd.isna(name_val) else ''
+        du_name_val = data.get('du_name', '')
+        du_name = str(du_name_val) if not pd.isna(du_name_val) else ''
         
-        # Better handling for service_area_id, with multiple fallbacks
-        service_area_id = ''
-        for key in ['service_area_id', 'service_area', 'service_area_number']:
-            if key in data and data.get(key) and str(data.get(key)).strip():
-                service_area_id = str(data.get(key))
-                break
-        
-        # If still empty, use a default value
-        if not service_area_id:
-            service_area_id = "UNKNOWN"
+        service_area_id = str(data.get('service_area_id', ''))
         
         # Look for flw_commcare_id first (as it might have been renamed), then fall back to original column names
         flw_val = data.get('flw_commcare_id', data.get('owner_id', data.get('flw', '')))
@@ -207,7 +198,7 @@ class DeliveryUnit:
         # Create the DeliveryUnit instance
         return cls(
             id=du_id,
-            name=name,
+            du_name=du_name,
             service_area_id=service_area_id,
             flw_commcare_id=flw,
             status=status,
@@ -700,33 +691,30 @@ class CoverageData:
             row_dict['du_id'] = row_dict.get('caseid', f"row_{idx}")
             
             # Create delivery unit
-            try:
-                du = DeliveryUnit.from_dict(row_dict)
-                data.delivery_units[du.id] = du
-                created_count += 1
-                
-                # Create or update service area
-                sa_id = du.service_area_id
-                if sa_id not in data.service_areas:
-                    data.service_areas[sa_id] = ServiceArea(id=sa_id)
-                data.service_areas[sa_id].delivery_units.append(du)
-                
-                # Create or update FLW
-                if du.flw_commcare_id not in data.flws:
-                    data.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
-                
-                # Update FLW's assigned units and service areas
-                flw = data.flws[du.flw_commcare_id]
-                flw.assigned_units += 1
-                if du.status == 'completed':
-                    flw.completed_units += 1
-                if sa_id not in flw.service_areas:
-                    flw.service_areas.append(sa_id)
-                # Add this delivery unit to the FLW's delivery_units list
-                flw.delivery_units.append(du)
             
-            except Exception as e:
-                continue
+            du = DeliveryUnit.from_dict(row_dict)
+            data.delivery_units[du.id] = du
+            created_count += 1
+                
+            # Create or update service area
+            sa_id = du.service_area_id
+            if sa_id not in data.service_areas:
+                data.service_areas[sa_id] = ServiceArea(id=sa_id)
+            data.service_areas[sa_id].delivery_units.append(du)
+                
+            # Create or update FLW
+            if du.flw_commcare_id not in data.flws:
+                data.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
+                
+            # Update FLW's assigned units and service areas
+            flw = data.flws[du.flw_commcare_id]
+            flw.assigned_units += 1
+            if du.status == 'completed':
+                flw.completed_units += 1
+            if sa_id not in flw.service_areas:
+                flw.service_areas.append(sa_id)
+            # Add this delivery unit to the FLW's delivery_units list
+            flw.delivery_units.append(du)
         
         print(f"Successfully created {created_count} delivery units across {len(data.service_areas)} service areas")
         
@@ -743,6 +731,7 @@ class CoverageData:
         Args:
             delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
             This will fix mismatched column headings and make sure data is typed correctly.
+            This will replace "---" with None
             This will manipulate the dataframe in place and return it.
         
         Returns:
@@ -782,33 +771,17 @@ class CoverageData:
         print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
     
         # Convert columns to appropriate types; none of the exceptions should trigger if the xlsx or API is correct.
-        # I'm unclear any of this is actually needed.
-        try:
-            delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'buildings' not found, setting to default 0")
-            delivery_units_df['buildings'] = 0
-        
-        try:
-            delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'delivery_count' not found, setting to default 0")
-            delivery_units_df['delivery_count'] = 0
-        
-        try:
-            delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
-        except KeyError:
-            print("Column 'delivery_target' not found, setting to default 0")
-            delivery_units_df['delivery_target'] = 0
-        
-        try:
-            delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
-        except KeyError:
-            print("Column 'surface_area' not found, setting to default 0")
-            delivery_units_df['surface_area'] = 0
+        # JJ: I'm unclear any of this is actually needed.
+        delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
+        delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
+        delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
+        delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
         
         # Make sure the status values are lowercase for consistency
         delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
+        
+        # Replace all "---" values with None throughout the entire dataframe
+        delivery_units_df = delivery_units_df.replace("---", None)
         
         # Commenting out the below as I don't think is needed.
         # Ensure service_area_id is string type for existing values
@@ -905,7 +878,6 @@ class CoverageData:
         
         # Set the opportunity name
         self.opportunity_name = service_df.iloc[0]['opportunity_name']
-        return service_df
 
     @classmethod
     def from_excel_and_csv(cls, excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
@@ -980,7 +952,7 @@ class CoverageData:
                 
                 du_dict = {
                     'du_id': du.id,
-                    'name': du.name,
+                    'name': du.du_name,
                     'service_area_id': du.service_area_id,
                     'flw_commcare_id': du.flw_commcare_id,
                     'du_status': du.status,

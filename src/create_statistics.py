@@ -30,52 +30,13 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from src.models import CoverageData
 
-# Function to calculate the shortest path distance within each Service Area using TSP
-def calculate_shortest_path_distances(df):
-    sa_distances = {}
-    for sa_id, group in df.groupby('service_area_id'):
-        # Improved parsing of centroid data
-        centroids = []
-        for c in group['centroid']:
-            if isinstance(c, str):
-                # Attempt to parse the string into a tuple of floats
-                try:
-                    lat, lon = map(float, c.split())
-                    centroids.append((lat, lon))
-                except ValueError:
-                    raise ValueError(f"Centroid '{c}' for Service Area {sa_id} is not in a valid format.")
-            elif isinstance(c, (list, tuple)) and len(c) == 2:
-                centroids.append(tuple(c))
-            else:
-                raise ValueError(f"Centroid '{c}' for Service Area {sa_id} is not in a valid format.")
-
-        # Calculate total distance using geodesic distance
-        total_distance = 0
-        for i in range(len(centroids) - 1):
-            total_distance += geodesic(centroids[i], centroids[i + 1]).kilometers
-        # Add distance from last to first to complete the cycle
-        total_distance += geodesic(centroids[-1], centroids[0]).kilometers
-
-        sa_distances[sa_id] = total_distance
-    return sa_distances
-
-def create_statistics_report(excel_file=None, service_delivery_csv=None, coverage_data=None):
+def create_statistics_report(coverage_data=None):
     """
-    Create statistics report from the DU Export Excel file and service delivery CSV
-    or directly from a CoverageData object.
+    Create statistics report from a CoverageData object.
     
     Args:
-        excel_file: Path to the DU Export Excel file (not needed if coverage_data is provided)
-        service_delivery_csv: Optional path to service delivery GPS coordinates CSV (not needed if coverage_data is provided)
         coverage_data: Optional CoverageData object containing the already loaded data
     """
-    # Either use provided coverage_data or load from files
-    if coverage_data is None:
-        if excel_file is None:
-            raise ValueError("Either coverage_data or excel_file must be provided")
-        # Load data using the CoverageData model
-        coverage_data = CoverageData.from_excel_and_csv(excel_file, service_delivery_csv)
-    
     # Create the HTML report
     html_content = create_html_report(coverage_data)
     
@@ -543,88 +504,3 @@ def create_html_report(coverage_data):
     """
     
     return html_content
-
-if __name__ == "__main__":
-    # Set up command line arguments
-    parser = argparse.ArgumentParser(description="Create statistics report from Excel and CSV data")
-    parser.add_argument("--excel", help="Excel file containing delivery unit data")
-    parser.add_argument("--csv", help="CSV file containing service delivery data")
-    args = parser.parse_args()
-    
-    excel_file = None
-    delivery_csv = None
-    
-    # If arguments are provided, use them
-    if args.excel and args.csv:
-        excel_file = args.excel
-        delivery_csv = args.csv
-        
-        print(f"\nCreating statistics report using:")
-        print(f"Microplanning file: {excel_file}")
-        print(f"Service delivery file: {delivery_csv}")
-        
-        # Create the statistics report using CoverageData model
-        output_file = create_statistics_report(excel_file=excel_file, service_delivery_csv=delivery_csv)
-        print(f"Statistics report created: {output_file}")
-    else:
-        # Interactive selection
-        # Get all files in the current directory
-        files = glob.glob('*.*')
-        
-        # Filter for Excel and CSV files
-        excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls')) and not f.startswith('~$')]
-        csv_files = [f for f in files if f.lower().endswith('.csv')]
-        
-        # Handle Excel file selection
-        if len(excel_files) == 0:
-            print("No Excel files found in the current directory.")
-            exit(1)
-        elif len(excel_files) == 1:
-            excel_choice = 1
-            print(f"\nAutomatically selected the only available Excel file: {excel_files[0]}")
-        else:
-            # Display Excel files
-            print("\nAvailable Excel files for microplanning:")
-            for i, file in enumerate(excel_files, 1):
-                print(f"{i}. {file}")
-            
-            # Get user selection for Excel file
-            excel_choice = 0
-            while excel_choice < 1 or excel_choice > len(excel_files):
-                try:
-                    excel_choice = int(input(f"\nEnter the number for the microplanning Excel file (1-{len(excel_files)}): "))
-                except ValueError:
-                    print("Please enter a valid number.")
-        
-        # Handle CSV file selection
-        if len(csv_files) == 0:
-            print("No CSV files found in the current directory.")
-            exit(1)
-        elif len(csv_files) == 1:
-            csv_choice = 1
-            print(f"\nAutomatically selected the only available CSV file: {csv_files[0]}")
-        else:
-            # Display CSV files
-            print("\nAvailable CSV files for service delivery data:")
-            for i, file in enumerate(csv_files, 1):
-                print(f"{i}. {file}")
-            
-            # Get user selection for CSV file
-            csv_choice = 0
-            while csv_choice < 1 or csv_choice > len(csv_files):
-                try:
-                    csv_choice = int(input(f"\nEnter the number for the service delivery CSV file (1-{len(csv_files)}): "))
-                except ValueError:
-                    print("Please enter a valid number.")
-        
-        # Get selected files
-        excel_file = excel_files[excel_choice - 1]
-        delivery_csv = csv_files[csv_choice - 1]
-        
-        print(f"\nCreating statistics report using:")
-        print(f"Microplanning file: {excel_file}")
-        print(f"Service delivery file: {delivery_csv}")
-        
-        # Create the statistics report using CoverageData model
-        output_file = create_statistics_report(excel_file=excel_file, service_delivery_csv=delivery_csv)
-        print(f"Statistics report created: {output_file}") 

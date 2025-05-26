@@ -81,8 +81,14 @@ def create_html_report(coverage_data):
         # Reuse the FLW count we already have instead of recalculating
         service_stats['unique_flws'] = coverage_data.total_flws
       
-    # Prepare delivery units data for the table (exclude status "---")
-    du_table_data = delivery_df[delivery_df['du_status'] != '---'].copy()
+    # Debug: Check unique values in du_status column
+    print("Unique values in du_status column:")
+    print(delivery_df['du_status'].value_counts(dropna=False))
+    print(f"Total rows: {len(delivery_df)}")
+    
+    # Prepare delivery units data for the table (exclude status None, NaN)
+    du_table_data = delivery_df[~delivery_df['du_status'].isna()].copy()
+    print(f"Rows after filtering out None, NaN, and empty status: {len(du_table_data)}")
     
     # Apply FLW name mapping
     if 'flw_commcare_id' in du_table_data.columns:
@@ -124,7 +130,7 @@ def create_html_report(coverage_data):
             check_in = pd.to_datetime(row['checked_in_date'])
             today = pd.to_datetime('today').normalize()  # Get today's date at midnight
             
-            if row['checked_out_date'] == '---':
+            if row['checked_out_date'] == None:
                 # Calculate days between today and check-in date
                 days = (today - check_in).days
                 return int(days) if days >= 0 else None
@@ -165,6 +171,7 @@ def create_html_report(coverage_data):
         'flw_commcare_id',  # Remove FLW ID from table
         'Service Area', # Remove Service Area from table
         'closed', 'Closed', 'CLOSED'  # Remove Closed column and its variations
+        'Geometry', 'geometry', 'Geometry', 'geometry'  # Remove Geometry column and its variations
     ]
     
     # Get the columns we want to include (filter out excluded columns)
@@ -454,7 +461,7 @@ def create_html_report(coverage_data):
             <section>
                 <h2>Delivery Units Data</h2>
                 <div class="table-info">
-                    Showing {len(du_table_data):,} delivery units with status other than "---". Use the search box to filter.
+                    Showing {len(du_table_data):,} delivery units with status other than None and empty strings. Use the search box to filter.
                 </div>
                 <div class="delivery-units-table-container">
                     <table id="delivery-units-table" class="display">

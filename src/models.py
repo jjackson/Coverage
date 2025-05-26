@@ -97,15 +97,15 @@ class DeliveryUnit:
     du_name: str
     service_area_id: str
     flw_commcare_id: str  # FLW/owner CommCare ID
-    status: str  # completed, visited, unvisited represented as "---"
+    status: str  # completed, visited, unvisited represented as None
     wkt: str
     buildings: int = 0
     surface_area: float = 0.0
     delivery_count: int = 0
     delivery_target: int = 0
-    du_checkout_remark: str = "---"
-    checked_out_date: str = "---"
-    checked_in_date: str = "---"
+    du_checkout_remark: str = None
+    checked_out_date: str = None
+    checked_in_date: str = None
     centroid: Optional[tuple] = None
     last_modified_date: Optional[datetime] = None
     
@@ -149,7 +149,7 @@ class DeliveryUnit:
         
         # Check if WKT is empty
         if not wkt_str or wkt_str == '':
-            raise ValueError(f"Empty WKT for delivery unit {du_id}, name: {name}")
+            raise ValueError(f"Empty WKT for delivery unit {du_id}, du_name: {du_name}")
         
         # Extract numeric fields with proper error handling
         try:
@@ -173,15 +173,9 @@ class DeliveryUnit:
             delivery_target = 0
         
         # Handle string fields
-        checkout_remark_val = data.get('du_checkout_remark', '---')
-        checkout_remark = str(checkout_remark_val) if not pd.isna(checkout_remark_val) else '---'
-        
-        checkout_date_val = data.get('checked_out_date', '---')
-        checkout_date = str(checkout_date_val) if not pd.isna(checkout_date_val) else '---'
-
-        checkin_date_val = data.get('checked_in_date', '---')
-        checkin_date = str(checkin_date_val) if not pd.isna(checkin_date_val) else '---'
-        
+        checkout_remark = data.get('du_checkout_remark')
+        checkout_date = data.get('checked_out_date')
+        checkin_date = data.get('checked_in_date')
         # Parse last_modified_date if available
         last_modified = None
         if 'last_modified_date' in data and data['last_modified_date']:
@@ -328,7 +322,7 @@ class CoverageData:
     @property
     def total_unvisited_dus(self) -> int:
         """Get the total number of unvisited delivery units"""
-        return sum(1 for du in self.delivery_units.values() if du.status == '---')
+        return sum(1 for du in self.delivery_units.values() if du.status == None)
     
     @property
     def completion_percentage(self) -> float:
@@ -731,7 +725,7 @@ class CoverageData:
         Args:
             delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
             This will fix mismatched column headings and make sure data is typed correctly.
-            This will replace "---" with None
+            This will replace "---", the null value in a CommCare export, with None
             This will manipulate the dataframe in place and return it.
         
         Returns:
@@ -761,26 +755,26 @@ class CoverageData:
             raise ValueError(error_msg)
         
         
-        # Drop rows with missing service area IDs or with value "---" or empty, count them first for debugging
+        # Drop rows with missing service area IDs (value = None), count them first for debugging
         dropped_data_count = len(delivery_units_df)
-        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna()) | (delivery_units_df['service_area_id'] == "---")].index, inplace=True)
+        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna())].index, inplace=True)
         dropped_data_count = dropped_data_count - len(delivery_units_df)
               
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
         print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
     
+        # JJ: I'm unclear any of this is actually needed, commenting out
         # Convert columns to appropriate types; none of the exceptions should trigger if the xlsx or API is correct.
-        # JJ: I'm unclear any of this is actually needed.
-        delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
-        delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
-        delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
-        delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
+        # delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
+        # delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
+        # delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
+        # delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
         
         # Make sure the status values are lowercase for consistency
-        delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
+        # delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
         
-        # Replace all "---" values with None throughout the entire dataframe
+        # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
         delivery_units_df = delivery_units_df.replace("---", None)
         
         # Commenting out the below as I don't think is needed.

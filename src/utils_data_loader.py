@@ -12,8 +12,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import time
-
-from src.models import CoverageData
+from .models import CoverageData
 
 def get_available_files(directory: str = '.', file_types: List[str] = None) -> Dict[str, List[str]]:
     """
@@ -604,6 +603,54 @@ def load_service_delivery_df_by_opportunity(csv_file: str) -> Dict[str, pd.DataF
         raise ValueError(f"Found {missing_opportunity_count} rows with missing 'opportunity_name' values. All rows must have a valid opportunity_name.")
     
     return opportunity_groups
+
+def get_coverage_data_from_du_api_and_service_dataframe(domain: str, user: str, api_key: str, service_df: pd.DataFrame) -> 'CoverageData':
+    """
+    Load coverage data from API and service Delivery from DataFrame
+    
+    Args:
+        domain: CommCare project space/domain name
+        user: Username for authentication
+        api_key: API key for authentication
+        service_df: DataFrame containing service delivery GPS coordinates
+    """
+    # Import here to avoid circular imports
+    from .. import utils_data_loader
+    
+    data = CoverageData()
+    
+    # retrieve from API and Load
+    delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key)
+    data = CoverageData.load_delivery_units_from_df(delivery_units_df)
+    
+    # Load service delivery data
+    data.load_service_delivery_from_datafame(service_df)
+    
+    return data
+
+def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+    """
+    Load coverage data from Excel and CSV files
+    
+    Args:
+        excel_file: Path to the DU Export Excel file
+        service_delivery_csv: Optional path to service delivery GPS coordinates CSV
+    """
+    data = CoverageData()
+    
+    # Read the Excel file
+    print(f"Loading Excel file: {excel_file}")
+    delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
+    
+    # Use the new from_commcare method to process the dataframe
+    data = CoverageData.load_delivery_units_from_df(delivery_units_df)
+    
+    # Load service delivery data if provided
+    if service_delivery_csv:
+        service_df = data.load_service_delivery_dataframe_from_csv(service_delivery_csv)
+        data.load_service_delivery_from_datafame(service_df)
+    
+    return data
 
 if __name__ == "__main__":
     # Only run the test if this file is executed directly

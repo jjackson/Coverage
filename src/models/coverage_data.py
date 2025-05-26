@@ -1,256 +1,26 @@
-from shapely import wkt
-from shapely.geometry import Polygon, Point
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 import pandas as pd
 import geopandas as gpd
 from geopy.distance import geodesic
 import numpy as np
 import time
-from . import utils_data_loader
 
-
-@dataclass
-class FLW:
-    """Field Level Worker (FLW) Model"""
-    id: str
-    name: str
-    service_areas: List[str] = field(default_factory=list)
-    assigned_units: int = 0
-    completed_units: int = 0
-    status_counts: Dict[str, int] = field(default_factory=dict)
-    first_service_delivery_date: Optional[datetime] = None
-    last_service_delivery_date: Optional[datetime] = None
-    dates_active: List[datetime] = field(default_factory=list)
-    service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
-    delivery_units: List['DeliveryUnit'] = field(default_factory=list)
-    
-    @property
-    def completion_rate(self) -> float:
-        """Calculate completion rate as a percentage"""
-        if self.assigned_units == 0:
-            return 0.0
-        return (self.completed_units / self.assigned_units) * 100
-
-    def get_service_areas_str(self) -> str:
-        """Returns service areas as a comma-separated string"""
-        return ', '.join(str(sa) for sa in sorted(self.service_areas))
-        
-    @property
-    def days_active(self) -> int:
-        """Return count of unique days the FLW was active"""
-        return len(self.dates_active)
-
-    @property
-    def delivery_units_completed_per_day(self) -> float:
-        """Calculate the average number of delivery units completed per day worked"""
-        if self.days_active == 0:
-            return 0.0
-        return self.completed_units / self.days_active
-
-
-@dataclass
-class ServiceDeliveryPoint:
-    """Service Delivery Point Model"""
-    id: str
-    latitude: float
-    longitude: float
-    flw_id: str
-    flw_name: str
-    flw_commcare_id: Optional[str] = None
-    status: Optional[str] = None
-    du_name: Optional[str] = None
-    flagged: Optional[bool] = None
-    flag_reason: Optional[str] = None
-    visit_date: Optional[str] = None
-    accuracy_in_m: Optional[float] = None
-    
-    @property
-    def geometry(self) -> Point:
-        """Get point geometry"""
-        return Point(self.longitude, self.latitude)
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ServiceDeliveryPoint':
-        """Create a ServiceDeliveryPoint from a dictionary"""
-        return cls(
-            id=str(data.get('visit_id', '')),
-            latitude=float(data.get('lattitude', 0.0)),  # Note: using 'lattitude' as in original code
-            longitude=float(data.get('longitude', 0.0)),
-            flw_id=str(data.get('flw_id', '')),
-            flw_name=str(data.get('flw_name', '')),
-            flw_commcare_id=data.get('cchq_user_owner_id'),
-            status=data.get('status'),
-            du_name=data.get('du_name'),
-            flagged=bool(data.get('flagged')) if data.get('flagged') is not None else None,
-            flag_reason=data.get('flag_reason'),
-            visit_date=data.get('visit_date'),
-            accuracy_in_m=float(data.get('accuracy_in_m', 0.0)) if data.get('accuracy_in_m') else None
-        )
-
-
-@dataclass
-class DeliveryUnit:
-    """Delivery Unit Model"""
-    id: str
-    du_name: str
-    service_area_id: str
-    flw_commcare_id: str  # FLW/owner CommCare ID
-    status: str  # completed, visited, unvisited represented as None
-    wkt: str
-    buildings: int = 0
-    surface_area: float = 0.0
-    delivery_count: int = 0
-    delivery_target: int = 0
-    du_checkout_remark: str = None
-    checked_out_date: str = None
-    checked_in_date: str = None
-    centroid: Optional[tuple] = None
-    last_modified_date: Optional[datetime] = None
-    
-    @property
-    def geometry(self) -> Polygon:
-        """Convert WKT to Shapely geometry"""
-        try:
-            if not self.wkt or self.wkt == '':
-                raise ValueError(f"Empty WKT string for delivery unit {self.id}")
-            return wkt.loads(self.wkt)
-        except Exception as e:
-            raise ValueError(f"Invalid WKT for delivery unit {self.id}: {str(e)}")
-    
-    @property
-    def completion_percentage(self) -> float:
-        """Calculate completion percentage"""
-        if self.delivery_target == 0:
-            return 0.0
-        return (self.delivery_count / self.delivery_target) * 100
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DeliveryUnit':
-        """Create a DeliveryUnit from a dictionary"""
-        # Extract required fields with defaults
-        du_id = str(data.get('du_id', data.get('caseid', '')))
-        
-        # Handle potentially missing or NaN values
-        du_name_val = data.get('du_name', '')
-        du_name = str(du_name_val) if not pd.isna(du_name_val) else ''
-        
-        service_area_id = str(data.get('service_area_id', ''))
-        
-        # Look for flw_commcare_id first (as it might have been renamed), then fall back to original column names
-        flw_val = data.get('flw_commcare_id', data.get('owner_id', data.get('flw', '')))
-        flw = str(flw_val) if not pd.isna(flw_val) else ''
-        
-        status_val = data.get('du_status', 'unvisited')
-        status = str(status_val).lower() if not pd.isna(status_val) else 'unvisited'
-        
-        wkt_str = str(data.get('WKT', '')) if not pd.isna(data.get('WKT', '')) else ''
-        
-        # Check if WKT is empty
-        if not wkt_str or wkt_str == '':
-            raise ValueError(f"Empty WKT for delivery unit {du_id}, du_name: {du_name}")
-        
-        # Extract numeric fields with proper error handling
-        buildings = int(data.get('buildings', data.get('#Buildings', 0)))
-        surface_area = float(data.get('surface_area', data.get('Surface Area (sq. meters)', 0.0)))
-        delivery_count = int(data.get('delivery_count', 0))
-        delivery_target = int(data.get('delivery_target', 0))
-        
-        
-        # Handle string fields
-        checkout_remark = data.get('du_checkout_remark')
-        checkout_date = data.get('checked_out_date')
-        checkin_date = data.get('checked_in_date')
-        
-        # Parse last_modified_date
-        last_modified = None
-        if 'last_modified_date' in data and data['last_modified_date']:
-            if isinstance(data['last_modified_date'], datetime):
-                last_modified = data['last_modified_date']
-            else:
-                # Try parsing the date string
-                last_modified = pd.to_datetime(data['last_modified_date'])
-        
-        # Create the DeliveryUnit instance
-        return cls(
-            id=du_id,
-            du_name=du_name,
-            service_area_id=service_area_id,
-            flw_commcare_id=flw,
-            status=status,
-            wkt=wkt_str,
-            buildings=buildings,
-            surface_area=surface_area,
-            delivery_count=delivery_count,
-            delivery_target=delivery_target,
-            du_checkout_remark=checkout_remark,
-            checked_out_date=checkout_date,
-            checked_in_date=checkin_date,
-            centroid=data.get('centroid'),
-            last_modified_date=last_modified
-        )
-
-
-@dataclass
-class ServiceArea:
-    """Service Area Model"""
-    id: str
-    delivery_units: List[DeliveryUnit] = field(default_factory=list)
-    
-    @property
-    def total_buildings(self) -> int:
-        """Calculate total buildings in the service area"""
-        return sum(du.buildings for du in self.delivery_units)
-    
-    @property
-    def total_surface_area(self) -> float:
-        """Calculate total surface area in the service area"""
-        return sum(du.surface_area for du in self.delivery_units)
-    
-    @property
-    def total_units(self) -> int:
-        """Get total number of delivery units"""
-        return len(self.delivery_units)
-    
-    @property
-    def completed_units(self) -> int:
-        """Get number of completed delivery units"""
-        return sum(1 for du in self.delivery_units if du.status == 'completed')
-    
-    @property
-    def completion_percentage(self) -> float:
-        """Calculate completion percentage"""
-        if self.total_units == 0:
-            return 0.0
-        return (self.completed_units / self.total_units) * 100
-    
-    @property
-    def assigned_flws(self) -> List[str]:
-        """Get list of FLWs assigned to this service area"""
-        return list(set(du.flw_commcare_id for du in self.delivery_units))
-    
-    @property
-    def total_deliveries(self) -> int:
-        """Get the total number of service deliveries in this service area"""
-        return sum(du.delivery_count for du in self.delivery_units)
-    
-    @property
-    def building_density(self) -> float:
-        """Calculate building density (buildings per sq km)"""
-        if self.total_surface_area == 0:
-            return 0.0
-        return self.total_buildings / (self.total_surface_area / 1000000)
+if TYPE_CHECKING:
+    from .service_area import ServiceArea
+    from .delivery_unit import DeliveryUnit
+    from .service_delivery_point import ServiceDeliveryPoint
+    from .flw import FLW
 
 
 class CoverageData:
     """Data container for coverage analysis"""
     
     def __init__(self):
-        self.service_areas: Dict[str, ServiceArea] = {}
-        self.delivery_units: Dict[str, DeliveryUnit] = {}
-        self.service_points: List[ServiceDeliveryPoint] = []
-        self.flws: Dict[str, FLW] = {}
+        self.service_areas: Dict[str, 'ServiceArea'] = {}
+        self.delivery_units: Dict[str, 'DeliveryUnit'] = {}
+        self.service_points: List['ServiceDeliveryPoint'] = []
+        self.flws: Dict[str, 'FLW'] = {}
         self.delivery_units_df: Optional[pd.DataFrame] = None
         
         # Project and opportunity identification
@@ -644,6 +414,11 @@ class CoverageData:
         Args:
             delivery_units_df: DataFrame containing delivery units data from CommCare
         """
+        # Import here to avoid circular imports
+        from .delivery_unit import DeliveryUnit
+        from .service_area import ServiceArea
+        from .flw import FLW
+        
         data = cls()
         
         # Store the processed dataframe
@@ -668,7 +443,6 @@ class CoverageData:
             row_dict['du_id'] = row_dict.get('caseid', f"row_{idx}")
             
             # Create delivery unit
-            
             du = DeliveryUnit.from_dict(row_dict)
             data.delivery_units[du.id] = du
             created_count += 1
@@ -714,8 +488,6 @@ class CoverageData:
         Returns:
             Cleaned and prepared DataFrame
         """
-        # print ("Columns found at start of clean function: " + ", ".join(delivery_units_df.columns))
-            
         # Map column names
         delivery_units_df.rename(columns={
             'caseid': 'case_id',
@@ -729,7 +501,6 @@ class CoverageData:
             'last_modified': 'last_modified_date',
         }, inplace=True)
 
-
         # Check for several known columns
         required_columns = ['case_id', 'du_name', 'service_area', 'flw_commcare_id', 'WKT']
         missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
@@ -737,7 +508,6 @@ class CoverageData:
             found_columns = list(delivery_units_df.columns)
             error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
             raise ValueError(error_msg)
-        
         
         # Drop rows with missing service area IDs (value = None), count them first for debugging
         dropped_data_count = len(delivery_units_df)
@@ -748,44 +518,9 @@ class CoverageData:
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
         print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
     
-        # JJ: I'm unclear any of this is actually needed, commenting out
-        # Convert columns to appropriate types; none of the exceptions should trigger if the xlsx or API is correct.
-        # delivery_units_df['buildings'] = pd.to_numeric(delivery_units_df['buildings'], errors='coerce').fillna(0).astype(int)
-        # delivery_units_df['delivery_count'] = pd.to_numeric(delivery_units_df['delivery_count'], errors='coerce').fillna(0).astype(int)
-        # delivery_units_df['delivery_target'] = pd.to_numeric(delivery_units_df['delivery_target'], errors='coerce').fillna(0).astype(int)
-        # delivery_units_df['surface_area'] = pd.to_numeric(delivery_units_df['surface_area'], errors='coerce').fillna(0)
-        
-        # Make sure the status values are lowercase for consistency
-        # delivery_units_df['du_status'] = delivery_units_df['du_status'].fillna('').astype(object).astype(str).str.lower()
-        
         # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
         delivery_units_df = delivery_units_df.replace("---", None)
         
-        # Commenting out the below as I don't think is needed.
-        # Ensure service_area_id is string type for existing values
-        # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].fillna('')
-        # delivery_units_df['service_area_id'] = delivery_units_df['service_area_id'].astype(str)
-        
-        # Ensure flw_commcare_id exists and is properly formatted
-        # if 'flw_commcare_id' not in delivery_units_df.columns:
-        #     if 'owner_id' in delivery_units_df.columns:
-        #         delivery_units_df['flw_commcare_id'] = delivery_units_df['owner_id']
-        #     elif 'flw' in delivery_units_df.columns:
-        #         delivery_units_df['flw_commcare_id'] = delivery_units_df['flw']
-        #     else:
-        #         print("WARNING: No FLW identifier column found in data")
-        #         delivery_units_df['flw_commcare_id'] = 'UNKNOWN'
-        
-        # Ensure flw_commcare_id is string type
-        # delivery_units_df['flw_commcare_id'] = delivery_units_df['flw_commcare_id'].fillna('').astype(str)
-            
-        # Make sure all key columns are strings to avoid issues
-        #str_columns = ['caseid', 'name', 'service_area', 'du_status', 'flw_commcare_id']
-        # for col in str_columns:
-        #     if col in delivery_units_df.columns:
-        #         # Fixed approach: First convert to object type, then to string
-        #        delivery_units_df[col] = delivery_units_df[col].fillna('').astype(object).astype(str)
-                
         return delivery_units_df
     
     def load_service_delivery_dataframe_from_csv(self, service_delivery_csv: str) -> None:
@@ -809,6 +544,9 @@ class CoverageData:
         Args:
             service_df: DataFrame containing service delivery GPS coordinates
         """
+        # Import here to avoid circular imports
+        from .service_delivery_point import ServiceDeliveryPoint
+        
         print(f"Loading service delivery data: {len(service_df)} points in DataFrame")
         
         # Create service delivery points
@@ -893,6 +631,9 @@ class CoverageData:
             api_key: API key for authentication
             service_df: DataFrame containing service delivery GPS coordinates
         """
+        # Import here to avoid circular imports
+        from .. import utils_data_loader
+        
         data = cls()
         
         # retrieve from API and Load
@@ -949,7 +690,6 @@ class CoverageData:
                 print(f"Error creating geometry for delivery unit {du_id}: {e}")
                 print(f"WKT string: {du.wkt[:100]}..." if len(du.wkt) > 100 else du.wkt)
                 invalid_geoms += 1
-        
         
         if not delivery_units_data:
             print("WARNING: No valid delivery units with geometries found")

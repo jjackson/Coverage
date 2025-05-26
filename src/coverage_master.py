@@ -425,7 +425,7 @@ def main():
         
         # Load the data using the CoverageData model
         print("\nLoading data from input files...")
-        coverage_data = CoverageData.from_excel_and_csv(excel_file, csv_file)
+        coverage_data = utils_data_loader.get_coverage_data_from_excel_and_csv(excel_file, csv_file)
         coverage_data.project_space = opportunity_to_domain_mapping.get(coverage_data.opportunity_name)
 
         # Use project_space if available, otherwise use opportunity_name as key

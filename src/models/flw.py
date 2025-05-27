@@ -18,6 +18,8 @@ class FLW:
     status_counts: Dict[str, int] = field(default_factory=dict)
     first_service_delivery_date: Optional[datetime] = None
     last_service_delivery_date: Optional[datetime] = None
+    first_du_checkin: Optional[datetime] = None
+    last_du_checkin: Optional[datetime] = None    
     dates_active: List[datetime] = field(default_factory=list)
     service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
     delivery_units: List['DeliveryUnit'] = field(default_factory=list)

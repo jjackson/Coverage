@@ -614,13 +614,11 @@ def get_coverage_data_from_du_api_and_service_dataframe(domain: str, user: str, 
         api_key: API key for authentication
         service_df: DataFrame containing service delivery GPS coordinates
     """
-    # Import here to avoid circular imports
-    from .. import utils_data_loader
     
     data = CoverageData()
     
     # retrieve from API and Load
-    delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key)
+    delivery_units_df = get_du_dataframe_from_commcare_api(domain, user, api_key)
     data = CoverageData.load_delivery_units_from_df(delivery_units_df)
     
     # Load service delivery data

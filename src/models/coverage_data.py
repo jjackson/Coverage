@@ -123,6 +123,9 @@ class CoverageData:
         # Pre-compute FLW service area statistics
         self._compute_flw_service_area_stats()
         
+        # Pre-compute FLW active dates from delivery units
+        self._compute_additional_flw_active_dates_from_delivery_units()
+
         # Pre-compute travel distances
         self.calculate_travel_distances()
     
@@ -144,6 +147,30 @@ class CoverageData:
         for sa_id, service_area in self.service_areas.items():
             self.service_area_building_density[sa_id] = service_area.building_density
     
+    def _compute_additional_flw_active_dates_from_delivery_units(self):
+        """Pre-compute FLW active dates from delivery units"""
+        
+        for du in self.delivery_units.values():
+            # Update Active Dates for FLW if a DU was checked in but no service delivery was made that day
+            if(du.checked_in_date):
+                flw = self.flws[du.flw_commcare_id]
+                # Convert checked_in_date from string to datetime object
+                checked_in_date = pd.to_datetime(du.checked_in_date).date()
+                
+                # Skip if the date conversion resulted in NaT (Not a Time)
+                if pd.isna(checked_in_date) == False:
+                    if checked_in_date not in flw.dates_active:
+                        flw.dates_active.append(checked_in_date)
+                            
+                    # Update first and last du checkin dates
+                    if (flw.first_du_checkin is None or 
+                        checked_in_date < flw.first_du_checkin):
+                        flw.first_du_checkin = checked_in_date
+                                
+                    if (flw.last_du_checkin is None or 
+                        checked_in_date > flw.last_du_checkin):
+                        flw.last_du_checkin = checked_in_date
+
     def _compute_flw_service_area_stats(self):
         """Pre-compute FLW statistics per service area"""
         self.flw_service_area_stats = {}
@@ -153,13 +180,13 @@ class CoverageData:
         
         for du in self.delivery_units.values():
             sa_id = du.service_area_id
-            flw_name = du.flw_commcare_id
+            flw_commcare_id = du.flw_commcare_id
             
             if sa_id not in temp_stats:
                 temp_stats[sa_id] = {}
             
-            if flw_name not in temp_stats[sa_id]:
-                temp_stats[sa_id][flw_name] = {
+            if flw_commcare_id not in temp_stats[sa_id]:
+                temp_stats[sa_id][flw_commcare_id] = {
                     'total_dus': 0,
                     'completed_dus': 0,
                     'buildings': 0,
@@ -167,17 +194,18 @@ class CoverageData:
                 }
             
             # Update stats
-            temp_stats[sa_id][flw_name]['total_dus'] += 1
+            temp_stats[sa_id][flw_commcare_id]['total_dus'] += 1
             if du.status == 'completed':
-                temp_stats[sa_id][flw_name]['completed_dus'] += 1
-            temp_stats[sa_id][flw_name]['buildings'] += du.buildings
-            temp_stats[sa_id][flw_name]['surface_area'] += du.surface_area
-        
+                temp_stats[sa_id][flw_commcare_id]['completed_dus'] += 1
+            temp_stats[sa_id][flw_commcare_id]['buildings'] += du.buildings
+            temp_stats[sa_id][flw_commcare_id]['surface_area'] += du.surface_area
+
+
         # Calculate percentages and restructure for easier access
         for sa_id, flws in temp_stats.items():
-            for flw_name, stats in flws.items():
-                if flw_name not in self.flw_service_area_stats:
-                    self.flw_service_area_stats[flw_name] = {}
+            for flw_commcare_id, stats in flws.items():
+                if flw_commcare_id not in self.flw_service_area_stats:
+                    self.flw_service_area_stats[flw_commcare_id] = {}
                 
                 # Calculate completion percentage
                 total = stats['total_dus']
@@ -189,7 +217,7 @@ class CoverageData:
                 density = (stats['buildings'] / surface_area_sqkm) if surface_area_sqkm > 0 else 0
                 
                 # Store stats
-                self.flw_service_area_stats[flw_name][sa_id] = {
+                self.flw_service_area_stats[flw_commcare_id][sa_id] = {
                     'total_dus': total,
                     'completed_dus': completed,
                     'percentage': percentage,
@@ -568,25 +596,21 @@ class CoverageData:
                 
                 # Update FLW's active dates if visit_date is present
                 if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
-                    try:
-                        visit_date = pd.to_datetime(point.visit_date).date()
-                        flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
+                    visit_date = pd.to_datetime(point.visit_date).date()
+                    flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
+                    
+                    if flw_id in self.flws:
+                        if visit_date not in self.flws[flw_id].dates_active:
+                            self.flws[flw_id].dates_active.append(visit_date)
                         
-                        if flw_id in self.flws:
-                            if visit_date not in self.flws[flw_id].dates_active:
-                                self.flws[flw_id].dates_active.append(visit_date)
+                        # Update first and last service delivery dates
+                        if (self.flws[flw_id].first_service_delivery_date is None or 
+                            visit_date < self.flws[flw_id].first_service_delivery_date):
+                            self.flws[flw_id].first_service_delivery_date = visit_date
                             
-                            # Update first and last service delivery dates
-                            if (self.flws[flw_id].first_service_delivery_date is None or 
-                                visit_date < self.flws[flw_id].first_service_delivery_date):
-                                self.flws[flw_id].first_service_delivery_date = visit_date
-                                
-                            if (self.flws[flw_id].last_service_delivery_date is None or 
-                                visit_date > self.flws[flw_id].last_service_delivery_date):
-                                self.flws[flw_id].last_service_delivery_date = visit_date
-                    except:
-                        # Skip if date parsing fails
-                        pass
+                        if (self.flws[flw_id].last_service_delivery_date is None or 
+                            visit_date > self.flws[flw_id].last_service_delivery_date):
+                            self.flws[flw_id].last_service_delivery_date = visit_date
                 
             except Exception as e:
                 print(f"Error creating service delivery point: {e}")
@@ -594,56 +618,6 @@ class CoverageData:
         
         # Set the opportunity name
         self.opportunity_name = service_df.iloc[0]['opportunity_name']
-
-    @classmethod
-    def from_excel_and_csv(cls, excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
-        """
-        Load coverage data from Excel and CSV files
-        
-        Args:
-            excel_file: Path to the DU Export Excel file
-            service_delivery_csv: Optional path to service delivery GPS coordinates CSV
-        """
-        data = cls()
-        
-        # Read the Excel file
-        print(f"Loading Excel file: {excel_file}")
-        delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
-        
-        # Use the new from_commcare method to process the dataframe
-        data = cls.load_delivery_units_from_df(delivery_units_df)
-        
-        # Load service delivery data if provided
-        if service_delivery_csv:
-            service_df = data.load_service_delivery_dataframe_from_csv(service_delivery_csv)
-            data.load_service_delivery_from_datafame(service_df)
-        
-        return data
-    
-    @classmethod
-    def from_du_api_and_service_dataframe(cls, domain: str, user: str, api_key: str, service_df: pd.DataFrame) -> 'CoverageData':
-        """
-        Load coverage data from API and service Delivery from DataFrame
-        
-        Args:
-            domain: CommCare project space/domain name
-            user: Username for authentication
-            api_key: API key for authentication
-            service_df: DataFrame containing service delivery GPS coordinates
-        """
-        # Import here to avoid circular imports
-        from .. import utils_data_loader
-        
-        data = cls()
-        
-        # retrieve from API and Load
-        delivery_units_df = utils_data_loader.get_du_dataframe_from_commcare_api(domain, user, api_key)
-        data = cls.load_delivery_units_from_df(delivery_units_df)
-        
-        # Load service delivery data
-        data.load_service_delivery_from_datafame(service_df)
-        
-        return data
 
     def create_delivery_units_geodataframe(self) -> gpd.GeoDataFrame:
         """Create a GeoDataFrame from delivery units for mapping"""

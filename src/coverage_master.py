@@ -385,7 +385,7 @@ def main():
             # Use mapped domain name if available, otherwise use opportunity name
             domain_name = opportunity_to_domain_mapping.get(opportunity_name)
             
-            coverage_data = CoverageData.from_du_api_and_service_dataframe(
+            coverage_data = utils_data_loader.get_coverage_data_from_du_api_and_service_dataframe(
                 domain=domain_name,
                 user=user,
                 api_key=api_key,

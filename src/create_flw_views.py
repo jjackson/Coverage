@@ -154,6 +154,13 @@ def create_flw_views_report(excel_file=None, service_delivery_csv=None, coverage
         print(f"Error processing heatmap data: {e}")
         heatmap_data = {'flws': [], 'flw_names': [], 'dates': [], 'matrix': []}
         
+    # Prepare GPS accuracy heatmap data
+    try:
+        gps_accuracy_heatmap_data = coverage_data.get_gps_accuracy_heatmap_data()
+    except Exception as e:
+        print(f"Error processing GPS accuracy heatmap data: {e}")
+        gps_accuracy_heatmap_data = {'flws': [], 'flw_names': [], 'dates': [], 'matrix': []}
+        
     # Extract FLW table data for productivity metrics
     try:
         flw_table_data = extract_flw_table_data(coverage_data)
@@ -172,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {{
     const chart = echarts.init(chartElement);
     const timelineData = {json.dumps(timeline_data)};
     const heatmapData = {json.dumps(heatmap_data)};
+    const gpsAccuracyHeatmapData = {json.dumps(gps_accuracy_heatmap_data)};
     const flwTableData = {json.dumps(flw_table_data)};
 
     // Populate FLW select
@@ -394,6 +402,80 @@ document.addEventListener('DOMContentLoaded', function() {{
         heatmapChart.setOption(option);
     }}
 
+    // GPS Accuracy Heatmap chart setup
+    const gpsAccuracyHeatmapElement = document.getElementById('gps-accuracy-heatmap-chart');
+    const gpsAccuracyHeatmapChart = echarts.init(gpsAccuracyHeatmapElement);
+    function updateGpsAccuracyHeatmap() {{
+        console.log("DEBUG: gpsAccuracyHeatmapData structure:", JSON.stringify(gpsAccuracyHeatmapData, null, 2));
+        
+        let values = [];
+        // Iterate using the same order as the matrix data to ensure alignment
+        (gpsAccuracyHeatmapData.flws || []).forEach((flw, i) => {{
+            (gpsAccuracyHeatmapData.dates || []).forEach((date, j) => {{
+                let accuracy = (gpsAccuracyHeatmapData.matrix && gpsAccuracyHeatmapData.matrix[i]) ? gpsAccuracyHeatmapData.matrix[i][j] : null;
+                values.push([j, i, accuracy]);
+            }});
+        }});
+        
+        // Filter out null values and calculate min/max for color scale
+        const validValues = values.filter(v => v[2] !== null).map(v => v[2]);
+        const minAccuracy = validValues.length > 0 ? Math.min(...validValues) : 0;
+        const maxAccuracy = validValues.length > 0 ? Math.max(...validValues) : 100;
+        
+        const option = {{
+            title: {{ text: 'GPS Accuracy Heatmap (meters)', left: 'center', top: 10 }},
+            tooltip: {{ position: 'top', formatter: function(params) {{ 
+                const flwName = gpsAccuracyHeatmapData.flw_names[params.value[1]];
+                const accuracy = params.value[2];
+                if (accuracy === null) {{
+                    return (flwName || 'Unknown') + '<br>' + (gpsAccuracyHeatmapData.dates[params.value[0]] || '') + ': <b>No data</b>'; 
+                }} else {{
+                    return (flwName || 'Unknown') + '<br>' + (gpsAccuracyHeatmapData.dates[params.value[0]] || '') + ': <b>' + accuracy + ' m</b> (mean GPS accuracy)'; 
+                }}
+            }} }},
+            grid: {{ left: 80, bottom: 80, right: 40, top: 50 }},
+            xAxis: {{ type: 'category', data: gpsAccuracyHeatmapData.dates, axisLabel: {{ rotate: 45 }} }},
+            yAxis: {{ 
+                type: 'category', 
+                data: gpsAccuracyHeatmapData.flw_names, 
+                inverse: true,
+                axisLabel: {{ fontSize: 8 }}
+            }},
+            visualMap: {{ 
+                min: minAccuracy, 
+                max: maxAccuracy, 
+                calculable: true, 
+                orient: 'horizontal', 
+                left: 'center', 
+                bottom: 10, 
+                inRange: {{ color: ['#00ff00', '#ffff00', '#ff8000', '#ff0000'] }},  // Green (good) to Red (poor)
+                text: ['Poor', 'Good'],
+                textStyle: {{ color: '#333' }}
+            }},
+            series: [{{ 
+                name: 'GPS Accuracy', 
+                type: 'heatmap', 
+                data: values, 
+                label: {{ 
+                    show: true, 
+                    color: '#222', 
+                    fontWeight: 'bold', 
+                    formatter: function(p) {{ 
+                        return p.value[2] !== null ? p.value[2].toString() : ''; 
+                    }} 
+                }}, 
+                emphasis: {{ itemStyle: {{ shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }} }},
+                itemStyle: {{
+                    color: function(params) {{
+                        // Handle null values by making them gray
+                        return params.value[2] === null ? '#ddd' : undefined;
+                    }}
+                }}
+            }}]
+        }};
+        gpsAccuracyHeatmapChart.setOption(option);
+    }}
+
     // FLW Table functionality
     function populateFlwTable() {{
         const tableBody = document.getElementById('flw-table-body');
@@ -555,11 +637,13 @@ document.addEventListener('DOMContentLoaded', function() {{
     document.getElementById('update-chart').addEventListener('click', function() {{
         updateChart();
         updateHeatmap();
+        updateGpsAccuracyHeatmap();
     }});
     
     // Initial render
     updateChart();
     updateHeatmap();
+    updateGpsAccuracyHeatmap();
     populateFlwTable();
     setupTableSorting();
     setupExportButton();
@@ -567,6 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {{
     window.addEventListener('resize', function() {{ 
         chart.resize(); 
         heatmapChart.resize(); 
+        gpsAccuracyHeatmapChart.resize(); 
     }});
 }});
 """
@@ -732,6 +817,11 @@ document.addEventListener('DOMContentLoaded', function() {{
                 height: 400px;
                 margin-top: 40px;
             }}
+            #gps-accuracy-heatmap-chart {{
+                width: 100%;
+                height: 400px;
+                margin-top: 40px;
+            }}
             .table-container {{
                 margin-top: 40px;
                 overflow-x: auto;
@@ -845,6 +935,10 @@ document.addEventListener('DOMContentLoaded', function() {{
             </div>
             <div class="chart-container">
                 <div id="heatmap-chart"></div>
+            </div>
+            
+            <div class="chart-container">
+                <div id="gps-accuracy-heatmap-chart"></div>
             </div>
             
             <div class="table-container">

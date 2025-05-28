@@ -823,4 +823,91 @@ class CoverageData:
             'flw_names': flw_names,  # Display names for UI
             'dates': dates,
             'matrix': matrix
+        }
+
+    def get_gps_accuracy_heatmap_data(self, flw_filter=None, date_start=None, date_end=None):
+        """
+        Returns a heatmap matrix of mean GPS accuracy per FLW per day.
+        - flw_filter: optional list of FLW IDs to include
+        - date_start, date_end: optional date strings (YYYY-MM-DD) to filter date range
+        Returns a dict: { 'flws': [...], 'flw_names': [...], 'dates': [...], 'matrix': [[mean_accuracy,...], ...] }
+        """
+        # Collect service points with GPS accuracy data
+        data = []
+        for sp in self.service_points:
+            if sp.accuracy_in_m is not None and sp.visit_date:
+                try:
+                    # Parse visit_date and convert to date string
+                    visit_date = pd.to_datetime(sp.visit_date)
+                    if pd.isna(visit_date):
+                        continue
+                    date_str = visit_date.strftime('%Y-%m-%d')
+                    
+                    # Get FLW name for display
+                    flw_name = self.flw_commcare_id_to_name_map.get(sp.flw_commcare_id, sp.flw_id)
+                    
+                    data.append({
+                        'flw_id': sp.flw_commcare_id or sp.flw_id,
+                        'flw_name': flw_name,
+                        'date': date_str,
+                        'accuracy_in_m': sp.accuracy_in_m
+                    })
+                except Exception:
+                    continue
+        
+        df = pd.DataFrame(data)
+        
+        # Determine FLWs and dates to use for axes
+        if flw_filter is not None:
+            flw_ids = sorted(list(flw_filter))
+        else:
+            flw_ids = sorted(df['flw_id'].unique().tolist()) if not df.empty else []
+        
+        # Get display names for the FLWs
+        flw_names = []
+        for flw_id in flw_ids:
+            # Find the display name for this FLW
+            flw_name = self.flw_commcare_id_to_name_map.get(flw_id, flw_id)
+            flw_names.append(flw_name)
+        
+        # Build date range
+        if date_start is not None and date_end is not None:
+            try:
+                date_range = pd.date_range(start=date_start, end=date_end)
+                dates = [d.strftime('%Y-%m-%d') for d in date_range]
+            except Exception:
+                dates = []
+        else:
+            dates = sorted(df['date'].unique().tolist()) if not df.empty else []
+        
+        # If no FLWs or dates, return empty
+        if not flw_ids or not dates:
+            return {'flws': flw_ids, 'flw_names': flw_names, 'dates': dates, 'matrix': []}
+        
+        # Filter df to only selected FLWs and dates
+        if not df.empty:
+            df = df[df['flw_id'].isin(flw_ids) & df['date'].isin(dates)]
+        
+        # Build matrix: rows=FLWs, cols=dates, calculate mean accuracy for each day
+        matrix = []
+        for flw_id in flw_ids:
+            row = []
+            for date in dates:
+                if not df.empty:
+                    day_data = df[(df['flw_id'] == flw_id) & (df['date'] == date)]
+                    if len(day_data) > 0:
+                        mean_accuracy = day_data['accuracy_in_m'].mean()
+                        # Round to 1 decimal place for cleaner display
+                        row.append(round(mean_accuracy, 1))
+                    else:
+                        row.append(None)  # No data for this day
+                else:
+                    row.append(None)
+            matrix.append(row)
+        
+        return {
+            'flws': flw_ids,  # FLW IDs for internal use
+            'flw_names': flw_names,  # Display names for UI
+            'dates': dates,
+            'matrix': matrix
         } 

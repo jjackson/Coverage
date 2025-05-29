@@ -542,6 +542,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     <h3>Delivery Unit</h3>
                     <p><span class="info-panel-label">Name:</span> <span id="du-name" class="info-panel-value">-</span></p>
                     <p><span class="info-panel-label">Status:</span> <span id="du-status" class="info-panel-value">-</span></p>
+                    <p><span class="info-panel-label">Status Remark:</span> <span id="du-checkout-remark" class="info-panel-value">-</span></p>
                     <p><span class="info-panel-label">Delivery Target:</span> <span id="du-target" class="info-panel-value">-</span></p>
                     <p><span class="info-panel-label">Delivery Count:</span> <span id="du-count" class="info-panel-value">-</span></p>
                     <p><span class="info-panel-label">Buildings:</span> <span id="du-buildings" class="info-panel-value">-</span></p>
@@ -750,6 +751,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             // Update Delivery Unit section
                             document.getElementById('du-name').textContent = feature.properties.name;
                             document.getElementById('du-status').textContent = feature.properties.du_status || 'Unknown';
+                            document.getElementById('du-checkout-remark').textContent = feature.properties.du_checkout_remark || 'No remark';
                             document.getElementById('du-target').textContent = feature.properties.delivery_target;
                             document.getElementById('du-count').textContent = feature.properties.delivery_count;
                             document.getElementById('du-buildings').textContent = feature.properties['#Buildings'];
@@ -904,6 +906,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                                 if (du.properties.name === duName) {{
                                     // Found the DU, update DU fields with full information
                                     document.getElementById('du-status').textContent = du.properties.du_status || 'Unknown';
+                                    document.getElementById('du-checkout-remark').textContent = du.properties.du_checkout_remark || 'No remark';
                                     document.getElementById('du-target').textContent = du.properties.delivery_target || '-';
                                     document.getElementById('du-count').textContent = du.properties.delivery_count || '-';
                                     document.getElementById('du-buildings').textContent = du.properties['#Buildings'] || '-';
@@ -920,6 +923,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             // Reset DU values if no DU is associated
                             document.getElementById('du-name').textContent = '-';
                             document.getElementById('du-status').textContent = '-';
+                            document.getElementById('du-checkout-remark').textContent = '-';
                             document.getElementById('du-target').textContent = '-';
                             document.getElementById('du-count').textContent = '-';
                             document.getElementById('du-buildings').textContent = '-';

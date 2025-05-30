@@ -653,24 +653,298 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
     return data
 
 # TODO: This function is not working, it is not retrieving the data from the query.
-def retrieve_service_delivery_csv_from_superset(
+# def retrieve_service_delivery_csv_from_superset(
+#     superset_url: str,
+#     username: str,
+#     password: str,
+#     query_id: str,
+#     output_filename: Optional[str] = None,
+#     timeout: int = 300
+# ) -> str:
+#     """
+#     Retrieve service delivery point data from Apache Superset as CSV and save to data directory.
+    
+#     Args:
+#         superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
+#         username: Superset username for authentication
+#         password: Superset password for authentication
+#         query_id: Query ID or Chart ID to export data from
+#         output_filename: Optional custom filename for the CSV (without extension)
+#         timeout: Request timeout in seconds (default: 300)
+        
+#     Returns:
+#         Path to the saved CSV file
+        
+#     Raises:
+#         ValueError: If required parameters are missing or invalid
+#         RuntimeError: If authentication or data retrieval fails
+#         FileNotFoundError: If the Superset instance is not accessible
+#     """
+#     # Validate input parameters
+#     if not superset_url or not username or not password or not query_id:
+#         raise ValueError("superset_url, username, password, and query_id are required")
+    
+#     # Clean up the base URL
+#     superset_url = superset_url.rstrip('/')
+    
+#     # Create data directory if it doesn't exist
+#     project_root = Path(__file__).parent.parent.parent  # Go up from src/utils/data_loader.py to project root
+#     data_dir = project_root / "data"
+#     if not data_dir.exists():
+#         data_dir.mkdir(parents=True, exist_ok=True)
+#         print(f"Created data directory: {data_dir}")
+    
+#     # Generate output filename if not provided
+#     if output_filename is None:
+#         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#         output_filename = f"superset_service_delivery_{query_id}_{timestamp}"
+    
+#     output_path = data_dir / f"{output_filename}.csv"
+    
+#     try:
+#         print(f"Authenticating with Superset at {superset_url}...")
+        
+#         # 1. Authenticate and get access token
+#         auth_url = f'{superset_url}/api/v1/security/login'
+#         auth_payload = {
+#             'username': username,
+#             'password': password,
+#             'provider': 'db',
+#             'refresh': True
+#         }
+
+#         session = requests.Session()
+#         auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
+#         auth_response.raise_for_status()
+        
+#         # Check if authentication was successful
+#         auth_data = auth_response.json()
+#         if 'access_token' not in auth_data:
+#             raise RuntimeError("Authentication failed - no access token received")
+        
+#         access_token = auth_data['access_token']
+#         headers = {'Authorization': f'Bearer {access_token}'}
+        
+#         print("Successfully authenticated with Superset")
+
+#         # 2. Get CSRF token which is required for SQL Lab operations
+#         print("Getting CSRF token...")
+#         csrf_url = f'{superset_url}/api/v1/security/csrf_token/'
+#         csrf_response = session.get(csrf_url, headers=headers, timeout=timeout)
+        
+#         if csrf_response.status_code == 200:
+#             csrf_data = csrf_response.json()
+#             csrf_token = csrf_data.get('result')
+#             if csrf_token:
+#                 headers['X-CSRFToken'] = csrf_token
+#                 # Also add Referer header which is required by Superset
+#                 headers['Referer'] = superset_url
+#                 print("Successfully obtained CSRF token")
+#             else:
+#                 print("Warning: No CSRF token in response, continuing without it")
+#         else:
+#             print(f"Warning: Could not get CSRF token (status {csrf_response.status_code}), continuing without it")
+
+#         # 3. Try multiple approaches to get the data
+#         csv_response = None
+#         successful_endpoint = None
+        
+#         try:
+#             # Approach 1: Try to get saved query information first
+#             print(f"Retrieving saved query information for ID: {query_id}")
+#             saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
+            
+#             saved_query_response = session.get(saved_query_url, headers=headers, timeout=timeout)
+            
+#             if saved_query_response.status_code == 200:
+#                 saved_query_data = saved_query_response.json()
+#                 print(f"Successfully retrieved saved query: {saved_query_data.get('result', {}).get('label', 'Unknown')}")
+                
+#                 # Extract SQL from saved query
+#                 sql_query = saved_query_data.get('result', {}).get('sql', '')
+#                 database_id = saved_query_data.get('result', {}).get('database', {}).get('id', '')
+                
+#                 if sql_query and database_id:
+#                     # Approach 1a: Execute the SQL directly via SQL Lab API
+#                     print("Executing SQL query directly...")
+#                     execute_url = f'{superset_url}/api/v1/sqllab/execute/'
+                    
+#                     execute_payload = {
+#                         'database_id': database_id,
+#                         'sql': sql_query,
+#                         'runAsync': False,
+#                         # 'schema': saved_query_data.get('result', {}).get('schema', ''),
+#                         'sql_editor_id': f'saved_query_{query_id}',
+#                         # 'tab_name': f'Query {query_id}',
+#                         # 'tmp_table_name': '',
+#                         #'select_as_cta': False,
+#                         #'ctas_method': 'TABLE',
+#                         'queryLimit': 1000000,  # Large limit to get all data
+#                         #'expand_data': True
+#                     }
+                    
+#                     execute_response = session.post(
+#                         execute_url, 
+#                         json=execute_payload,
+#                         headers=headers,
+#                         timeout=timeout
+#                     )
+                    
+#                     if execute_response.status_code == 200:
+#                         execution_result = execute_response.json()
+#                         print(f"Query execution status: {execution_result.get('status', 'unknown')}")
+                        
+#                         # Check if we have data in the response
+#                         if 'data' in execution_result:
+#                             data_rows = execution_result['data']
+#                             print(f"Retrieved {len(data_rows)} rows via synchronous execution")
+                            
+#                             if len(data_rows) < 50000:  # If we got fewer rows, try async for more
+#                                 print("Trying async execution for larger dataset...")
+                                
+#                                 # Try async execution for larger datasets
+#                                 async_payload = {
+#                                     'database_id': database_id,
+#                                     'sql': sql_query,
+#                                     'runAsync': True,
+#                                     'queryLimit': 1000000,
+#                                 }
+                                
+#                                 async_response = session.post(
+#                                     execute_url, 
+#                                     json=async_payload,
+#                                     headers=headers,
+#                                     timeout=timeout
+#                                 )
+                                
+#                                 if async_response.status_code == 202:  # Async queries return 202
+#                                     async_result = async_response.json()
+#                                     query_id_result = async_result.get('query', {}).get('id')
+#                                     print(f"Async query started with ID: {query_id_result}")
+                                    
+#                                     if query_id_result:
+#                                         # Poll for results
+#                                         print("Polling for async results...")
+#                                         import time
+                                        
+#                                         for attempt in range(30):  # Try for up to 60 seconds
+#                                             time.sleep(2)
+#                                             status_url = f'{superset_url}/api/v1/query/{query_id_result}'
+#                                             status_response = session.get(status_url, headers=headers, timeout=timeout)
+                                            
+#                                             if status_response.status_code == 200:
+#                                                 status_data = status_response.json()
+#                                                 result_data = status_data.get('result', {})
+#                                                 query_status = result_data.get('status', 'unknown')
+                                                
+#                                                 print(f"Attempt {attempt + 1}: Status = {query_status}")
+                                                
+#                                                 if query_status == 'success':
+#                                                     # Get the results
+#                                                     if 'data' in result_data:
+#                                                         async_data = result_data['data']
+#                                                         print(f"Async query completed! Retrieved {len(async_data)} rows")
+#                                                         # Use async data if it has more rows
+#                                                         if len(async_data) > len(data_rows):
+#                                                             data_rows = async_data
+#                                                             execution_result = result_data
+#                                                         break
+#                                                 elif query_status in ['failed', 'error']:
+#                                                     print(f"Async query failed: {result_data.get('errorMessage', 'Unknown error')}")
+#                                                     break
+#                                             else:
+#                                                 print(f"Could not check async status: {status_response.status_code}")
+#                                         else:
+#                                             print("Async query timeout - using synchronous results")
+                                
+#                                 # Convert the result data to DataFrame
+#                                 columns = [col['name'] for col in execution_result.get('columns', [])]
+                                
+#                                 if columns and data_rows:
+#                                     print(f"Converting {len(data_rows)} rows to CSV...")
+#                                     import pandas as pd
+#                                     df = pd.DataFrame(data_rows, columns=columns)
+#                                     csv_data = df.to_csv(index=False)
+                                    
+#                                     # Create a mock response object
+#                                     class MockResponse:
+#                                         def __init__(self, content):
+#                                             self.content = content.encode('utf-8')
+#                                             self.status_code = 200
+#                                         def raise_for_status(self):
+#                                             pass
+                                    
+#                                     csv_response = MockResponse(csv_data)
+#                                     successful_endpoint = "direct_sql_execution"
+#                                 else:
+#                                     print("Warning: Query executed but returned no data")
+#                         else:
+#                             print("Warning: Query executed but no data field in response")
+#                     else:
+#                         print(f"SQL execution failed with status: {execute_response.status_code}")
+#                         print(f"Error response: {execute_response.text}")
+                
+#         except Exception as e:
+#             print(f"Approach 1 failed: {str(e)}")
+        
+#         # If all approaches failed, raise an error
+#         if not csv_response:
+#             raise RuntimeError(f"Failed to retrieve data using any available method for ID {query_id}")
+        
+#         print(f"Successfully retrieved data using method: {successful_endpoint}")
+#         csv_response.raise_for_status()
+
+#         # 3. Save CSV to file
+#         with open(output_path, 'wb') as f:
+#             f.write(csv_response.content)
+
+#         print(f"Successfully saved service delivery data to: {output_path}")
+        
+#         # Verify file was created and has content
+#         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+#             # Load and display basic info about the data
+#             try:
+#                 df_verify = pd.read_csv(output_path)
+#                 print(f"CSV file contains {len(df_verify)} rows and {len(df_verify.columns)} columns")
+#                 if len(df_verify.columns) > 0:
+#                     print(f"Columns: {', '.join(df_verify.columns.tolist())}")
+#             except Exception as e:
+#                 print(f"Warning: Could not verify CSV content: {e}")
+            
+#             return output_path
+#         else:
+#             raise RuntimeError(f"Failed to create or write to output file: {output_path}")
+    
+#     except requests.exceptions.RequestException as e:
+#         raise RuntimeError(f"Network error while connecting to Superset: {str(e)}")
+#     except Exception as e:
+#         raise RuntimeError(f"Error retrieving data from Superset: {str(e)}")
+#     finally:
+#         session.close()
+
+def export_superset_query_with_pagination(
     superset_url: str,
     username: str,
     password: str,
     query_id: str,
     output_filename: Optional[str] = None,
-    timeout: int = 300
+    chunk_size: int = 10000,
+    timeout: int = 120
 ) -> str:
     """
-    Retrieve service delivery point data from Apache Superset as CSV and save to data directory.
+    Export all data from a Superset saved query using pagination to bypass the 10,000 row limit.
+    
+    This method uses the same approach as the superset_export.py script to fetch data in chunks
+    and combine them into a single CSV file.
     
     Args:
         superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
         username: Superset username for authentication
         password: Superset password for authentication
-        query_id: Query ID or Chart ID to export data from
+        query_id: Saved query ID to export data from
         output_filename: Optional custom filename for the CSV (without extension)
-        timeout: Request timeout in seconds (default: 300)
+        chunk_size: Number of rows to fetch per chunk (default: 10000)
+        timeout: Request timeout in seconds (default: 120)
         
     Returns:
         Path to the saved CSV file
@@ -678,7 +952,6 @@ def retrieve_service_delivery_csv_from_superset(
     Raises:
         ValueError: If required parameters are missing or invalid
         RuntimeError: If authentication or data retrieval fails
-        FileNotFoundError: If the Superset instance is not accessible
     """
     # Validate input parameters
     if not superset_url or not username or not password or not query_id:
@@ -686,24 +959,33 @@ def retrieve_service_delivery_csv_from_superset(
     
     # Clean up the base URL
     superset_url = superset_url.rstrip('/')
+    if not superset_url.startswith(('http://', 'https://')):
+        superset_url = f'https://{superset_url}'
     
     # Create data directory if it doesn't exist
-    data_dir = os.path.join(os.getcwd(), "data")
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
+    project_root = Path(__file__).parent.parent.parent  # Go up from src/utils/data_loader.py to project root
+    data_dir = project_root / "data"
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, exist_ok=True)
         print(f"Created data directory: {data_dir}")
     
     # Generate output filename if not provided
     if output_filename is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"superset_service_delivery_{query_id}_{timestamp}"
+        output_filename = f"superset_export_{query_id}_{timestamp}"
     
-    output_path = os.path.join(data_dir, f"{output_filename}.csv")
+    output_path = data_dir / f"{output_filename}.csv"
     
     try:
-        print(f"Authenticating with Superset at {superset_url}...")
+        print("=== Superset Paginated Data Export ===")
+        print(f"Query ID: {query_id}")
+        print()
         
-        # 1. Authenticate and get access token
+        # Set up session and authenticate
+        print("🔐 Authenticating with Superset...")
+        session = requests.Session()
+        
+        # Authenticate
         auth_url = f'{superset_url}/api/v1/security/login'
         auth_payload = {
             'username': username,
@@ -711,118 +993,165 @@ def retrieve_service_delivery_csv_from_superset(
             'provider': 'db',
             'refresh': True
         }
-
-        session = requests.Session()
-        auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
-        auth_response.raise_for_status()
         
-        # Check if authentication was successful
+        auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
+        if auth_response.status_code != 200:
+            raise RuntimeError(f"Authentication failed: {auth_response.text}")
+        
         auth_data = auth_response.json()
         if 'access_token' not in auth_data:
-            raise RuntimeError("Authentication failed - no access token received")
+            raise RuntimeError(f"No access token in response: {auth_data}")
         
         access_token = auth_data['access_token']
         headers = {'Authorization': f'Bearer {access_token}'}
         
-        print("Successfully authenticated with Superset")
-
-        # 2. Download the CSV from the saved SQL query
-        print(f"Retrieving data from saved query ID: {query_id}")
+        # Get CSRF token
+        csrf_url = f'{superset_url}/api/v1/security/csrf_token/'
+        csrf_response = session.get(csrf_url, headers=headers, timeout=timeout)
+        if csrf_response.status_code == 200:
+            csrf_data = csrf_response.json()
+            csrf_token = csrf_data.get('result')
+            if csrf_token:
+                headers['X-CSRFToken'] = csrf_token
+                headers['Referer'] = superset_url
         
-        try:
-            # Step 1: Execute the saved query
-            print("Executing the saved query...")
-            execute_url = f'{superset_url}/api/v1/sqllab/execute/'
+        # Get saved query details
+        print("📋 Getting saved query details...")
+        saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
+        response = session.get(saved_query_url, headers=headers, timeout=timeout)
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to get saved query: {response.text}")
+        
+        query_data = response.json()
+        result = query_data.get('result', {})
+        
+        query_details = {
+            'sql': result.get('sql', ''),
+            'database_id': result.get('database', {}).get('id', ''),
+            'label': result.get('label', 'Unknown'),
+            'schema': result.get('schema', '')
+        }
+        
+        print(f"   Query: {query_details['label']}")
+        print(f"   Database ID: {query_details['database_id']}")
+        print(f"   Schema: {query_details['schema']}")
+        print()
+        
+        # Execute paginated query
+        execute_url = f'{superset_url}/api/v1/sqllab/execute/'
+        all_data = []
+        all_columns = None
+        offset = 0
+        total_rows = 0
+        chunk_num = 1
+        base_sql = query_details['sql']
+        
+        print(f"🔄 Starting paginated data fetch (chunk size: {chunk_size:,})")
+        print(f"📝 Base SQL preview: {base_sql[:100]}...")
+        print()
+        
+        while True:
+            # Add OFFSET and LIMIT to the SQL
+            paginated_sql = f"""
+{base_sql.rstrip(';')}
+OFFSET {offset}
+LIMIT {chunk_size}
+"""
             
-            # Payload for executing a saved query
-            execute_payload = {
-                'saved_query_id': int(query_id),
-                'client_id': f'saved_query_{query_id}',
+            payload = {
+                'database_id': int(query_details['database_id']),
+                'sql': paginated_sql,
                 'runAsync': False,
-                'database_id': 1,
-                'json': True
+                'queryLimit': chunk_size + 1000,  # Add buffer
             }
             
-            execute_response = session.post(
-                execute_url, 
-                json=execute_payload,
-                headers=headers,
-                timeout=timeout
-            )
-            execute_response.raise_for_status()
+            print(f"📦 Fetching chunk {chunk_num} (rows {offset + 1:,} to {offset + chunk_size:,})...")
             
-            execution_result = execute_response.json()
-            print(f"Query execution status: {execution_result.get('status', 'unknown')}")
-            
-            # Step 2: Get the query result ID for CSV export
-            if 'query' in execution_result and 'resultsKey' in execution_result['query']:
-                results_key = execution_result['query']['resultsKey']
-                print(f"Got results key: {results_key}")
-                
-                # Step 3: Download CSV using the results key
-                csv_export_url = f'{superset_url}/api/v1/sqllab/results/{results_key}/csv'
-                print(f"Downloading CSV from: {csv_export_url}")
-                
-                csv_response = session.get(csv_export_url, headers=headers, timeout=timeout)
-                csv_response.raise_for_status()
-                
-                successful_endpoint = csv_export_url
-                
-            elif 'data' in execution_result:
-                # If results are returned directly, convert to CSV
-                print("Converting direct results to CSV...")
-                import pandas as pd
-                df = pd.DataFrame(execution_result['data'])
-                csv_data = df.to_csv(index=False)
-                
-                # Create a mock response object
-                class MockResponse:
-                    def __init__(self, content):
-                        self.content = content.encode('utf-8')
-                        self.status_code = 200
-                
-                csv_response = MockResponse(csv_data)
-                successful_endpoint = "direct_conversion"
-                
-            else:
-                raise RuntimeError(f"No results found in query execution response. Response: {execution_result}")
-                
-        except Exception as e:
-            raise RuntimeError(f"Failed to execute and retrieve saved query {query_id}: {str(e)}")
-        
-        if not successful_endpoint:
-            raise RuntimeError(f"Failed to retrieve CSV data for saved query ID {query_id}")
-        
-        print(f"Successfully retrieved data using method: {successful_endpoint}")
-        csv_response.raise_for_status()
-
-        # 3. Save CSV to file
-        with open(output_path, 'wb') as f:
-            f.write(csv_response.content)
-
-        print(f"Successfully saved service delivery data to: {output_path}")
-        
-        # Verify file was created and has content
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            # Load and display basic info about the data
             try:
-                df_verify = pd.read_csv(output_path)
-                print(f"CSV file contains {len(df_verify)} rows and {len(df_verify.columns)} columns")
-                if len(df_verify.columns) > 0:
-                    print(f"Columns: {', '.join(df_verify.columns.tolist())}")
+                response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
+                
+                if response.status_code != 200:
+                    print(f"❌ Chunk {chunk_num} failed: {response.text}")
+                    break
+                
+                result = response.json()
+                
+                if result.get('status') != 'success':
+                    print(f"❌ Chunk {chunk_num} query failed: {result}")
+                    break
+                
+                # Get data and columns
+                chunk_data = result.get('data', [])
+                columns = result.get('columns', [])
+                
+                if not chunk_data:
+                    print(f"✅ No more data found. Stopping at chunk {chunk_num - 1}")
+                    break
+                
+                # Store columns from first chunk
+                if all_columns is None:
+                    all_columns = columns
+                    print(f"📊 Columns found: {len(columns)} columns")
+                    column_names = [col.get('name', '') for col in columns]
+                    print(f"   Column names: {', '.join(column_names[:5])}{'...' if len(column_names) > 5 else ''}")
+                
+                # Add chunk data to overall results
+                all_data.extend(chunk_data)
+                chunk_rows = len(chunk_data)
+                total_rows += chunk_rows
+                
+                print(f"✅ Chunk {chunk_num}: {chunk_rows:,} rows fetched (Total: {total_rows:,})")
+                
+                # If we got fewer rows than chunk_size, we've reached the end
+                if chunk_rows < chunk_size:
+                    print(f"🎉 Reached end of data (chunk had {chunk_rows:,} < {chunk_size:,} rows)")
+                    break
+                
+                # Prepare for next chunk
+                offset += chunk_size
+                chunk_num += 1
+                
+                # Small delay to be nice to the server
+                time.sleep(0.5)
+                
             except Exception as e:
-                print(f"Warning: Could not verify CSV content: {e}")
-            
-            return output_path
-        else:
-            raise RuntimeError(f"Failed to create or write to output file: {output_path}")
-    
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Network error while connecting to Superset: {str(e)}")
+                print(f"❌ Error fetching chunk {chunk_num}: {e}")
+                break
+        
+        print(f"\n🎯 Pagination complete!")
+        print(f"   Total rows fetched: {total_rows:,}")
+        print(f"   Total chunks: {chunk_num - 1}")
+        
+        # Export data to CSV
+        if not all_data or not all_columns:
+            raise RuntimeError("No data was retrieved from the query")
+        
+        # Create DataFrame
+        column_names = [col.get('name', f'col_{i}') for i, col in enumerate(all_columns)]
+        df = pd.DataFrame(all_data, columns=column_names)
+        
+        # Export to CSV
+        df.to_csv(output_path, index=False, encoding='utf-8')
+        
+        print(f"💾 Data exported to: {output_path}")
+        print(f"   Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+        print(f"   File size: {os.path.getsize(output_path) / 1024 / 1024:.2f} MB")
+        
+        # Show preview
+        print(f"\n📋 Data preview:")
+        print(df.head().to_string())
+        
+        print(f"\n🎉 Export completed successfully!")
+        print(f"   Final row count: {len(all_data):,}")
+        
+        return output_path
+        
     except Exception as e:
-        raise RuntimeError(f"Error retrieving data from Superset: {str(e)}")
+        raise RuntimeError(f"Error exporting data from Superset: {str(e)}")
     finally:
-        session.close()
+        if 'session' in locals():
+            session.close()
 
 if __name__ == "__main__":
     # Only run the test if this file is executed directly
@@ -862,7 +1191,7 @@ if __name__ == "__main__":
     
     try:
         print("Testing Superset CSV retrieval...")
-        csv_path = retrieve_service_delivery_csv_from_superset(
+        csv_path = export_superset_query_with_pagination(   
             superset_url=superset_url,
             username=superset_username,
             password=superset_password,

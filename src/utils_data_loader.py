@@ -252,7 +252,7 @@ def get_du_dataframe_from_commcare_api(domain: str,
     # Parameters for the API request
     params = {
         'case_type': case_type,
-        'limit': 2000  # Fetch 100 cases at a time
+        'limit': 4000  # Fetch 100 cases at a time
     }
     
     # DEBUG: Print request information

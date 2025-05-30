@@ -71,119 +71,119 @@ def geo_dataframe_to_geojson(gdf: gpd.GeoDataFrame, filename: Optional[str] = No
     return geojson_data
 
 
-def coverage_data_to_geojson(coverage_data: CoverageData, 
-                            include_delivery_units: bool = True,
-                            include_service_points: bool = True) -> Dict[str, Dict]:
-    """
-    Convert CoverageData to GeoJSON format.
+# def coverage_data_to_geojson(coverage_data: CoverageData, 
+#                             include_delivery_units: bool = True,
+#                             include_service_points: bool = True) -> Dict[str, Dict]:
+#     """
+#     Convert CoverageData to GeoJSON format.
     
-    Args:
-        coverage_data: CoverageData instance
-        include_delivery_units: Whether to include delivery units
-        include_service_points: Whether to include service points
+#     Args:
+#         coverage_data: CoverageData instance
+#         include_delivery_units: Whether to include delivery units
+#         include_service_points: Whether to include service points
         
-    Returns:
-        Dictionary with GeoJSON data for delivery units and service points
-    """
-    result = {}
+#     Returns:
+#         Dictionary with GeoJSON data for delivery units and service points
+#     """
+#     result = {}
     
-    if include_delivery_units:
-        # Create a list of all delivery unit features
-        features = []
-        for du_id, du in coverage_data.delivery_units.items():
-            # Get the geometry as a dict directly
-            geo_series = gpd.GeoSeries([du.geometry])
-            # Handle the conversion more carefully
-            try:
-                # If __geo_interface__ returns a string, parse it
-                if isinstance(geo_series.__geo_interface__, str):
-                    geometry = json.loads(geo_series.__geo_interface__)
-                # If it's already a dict, use it directly
-                else:
-                    geometry = geo_series.__geo_interface__
+#     if include_delivery_units:
+#         # Create a list of all delivery unit features
+#         features = []
+#         for du_id, du in coverage_data.delivery_units.items():
+#             # Get the geometry as a dict directly
+#             geo_series = gpd.GeoSeries([du.geometry])
+#             # Handle the conversion more carefully
+#             try:
+#                 # If __geo_interface__ returns a string, parse it
+#                 if isinstance(geo_series.__geo_interface__, str):
+#                     geometry = json.loads(geo_series.__geo_interface__)
+#                 # If it's already a dict, use it directly
+#                 else:
+#                     geometry = geo_series.__geo_interface__
                     
-                # For single geometry in a collection, extract the first one
-                if isinstance(geometry, list) and len(geometry) > 0:
-                    geometry = geometry[0]
-            except Exception as e:
-                # Fallback to a basic polygon if conversion fails
-                print(f"Warning: Error converting geometry for DU {du_id}: {e}")
-                geometry = {
-                    "type": "Polygon",
-                    "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]
-                }
+#                 # For single geometry in a collection, extract the first one
+#                 if isinstance(geometry, list) and len(geometry) > 0:
+#                     geometry = geometry[0]
+#             except Exception as e:
+#                 # Fallback to a basic polygon if conversion fails
+#                 print(f"Warning: Error converting geometry for DU {du_id}: {e}")
+#                 geometry = {
+#                     "type": "Polygon",
+#                     "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]
+#                 }
             
-            # Convert DeliveryUnit to a GeoJSON feature
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "id": du.id,
-                    "name": du.du_name,
-                    "service_area_id": du.service_area_id,
-                    "flw": du.flw_id,
-                    "status": du.status,
-                    "buildings": du.buildings,
-                    "surface_area": du.surface_area,
-                    "delivery_count": du.delivery_count,
-                    "delivery_target": du.delivery_target,
-                    "du_checkout_remark": du.du_checkout_remark,
-                    "checked_out_date": du.checked_out_date,
-                },
-                "geometry": geometry
-            }
-            features.append(feature)
+#             # Convert DeliveryUnit to a GeoJSON feature
+#             feature = {
+#                 "type": "Feature",
+#                 "properties": {
+#                     "id": du.id,
+#                     "name": du.du_name,
+#                     "service_area_id": du.service_area_id,
+#                     "flw": du.flw_id,
+#                     "status": du.status,
+#                     "buildings": du.buildings,
+#                     "surface_area": du.surface_area,
+#                     "delivery_count": du.delivery_count,
+#                     "delivery_target": du.delivery_target,
+#                     "du_checkout_remark": du.du_checkout_remark,
+#                     "checked_out_date": du.checked_out_date,
+#                 },
+#                 "geometry": geometry
+#             }
+#             features.append(feature)
         
-        # Create GeoJSON structure
-        result["delivery_units"] = {
-            "type": "FeatureCollection",
-            "features": features
-        }
+#         # Create GeoJSON structure
+#         result["delivery_units"] = {
+#             "type": "FeatureCollection",
+#             "features": features
+#         }
     
-    if include_service_points and coverage_data.service_points:
-        # Create a list of all service point features
-        features = []
-        for point in coverage_data.service_points:
-            # Get point geometry safely
-            try:
-                geo_series = gpd.GeoSeries([point.geometry])
-                # Handle the conversion more carefully
-                if isinstance(geo_series.__geo_interface__, str):
-                    geometry = json.loads(geo_series.__geo_interface__)
-                else:
-                    geometry = geo_series.__geo_interface__
+#     if include_service_points and coverage_data.service_points:
+#         # Create a list of all service point features
+#         features = []
+#         for point in coverage_data.service_points:
+#             # Get point geometry safely
+#             try:
+#                 geo_series = gpd.GeoSeries([point.geometry])
+#                 # Handle the conversion more carefully
+#                 if isinstance(geo_series.__geo_interface__, str):
+#                     geometry = json.loads(geo_series.__geo_interface__)
+#                 else:
+#                     geometry = geo_series.__geo_interface__
                     
-                # For single geometry in a collection, extract the first one
-                if isinstance(geometry, list) and len(geometry) > 0:
-                    geometry = geometry[0]
-            except Exception as e:
-                # Fallback to a basic point if conversion fails
-                print(f"Warning: Error converting geometry for point {point.id}: {e}")
-                geometry = {
-                    "type": "Point",
-                    "coordinates": [point.longitude, point.latitude]
-                }
+#                 # For single geometry in a collection, extract the first one
+#                 if isinstance(geometry, list) and len(geometry) > 0:
+#                     geometry = geometry[0]
+#             except Exception as e:
+#                 # Fallback to a basic point if conversion fails
+#                 print(f"Warning: Error converting geometry for point {point.id}: {e}")
+#                 geometry = {
+#                     "type": "Point",
+#                     "coordinates": [point.longitude, point.latitude]
+#                 }
             
-            # Convert ServiceDeliveryPoint to a GeoJSON feature
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "id": point.id,
-                    "flw_id": point.flw_id,
-                    "flw_name": point.flw_name,
-                    "visit_date": point.visit_date,
-                    "accuracy_in_m": point.accuracy_in_m
-                },
-                "geometry": geometry
-            }
-            features.append(feature)
+#             # Convert ServiceDeliveryPoint to a GeoJSON feature
+#             feature = {
+#                 "type": "Feature",
+#                 "properties": {
+#                     "id": point.id,
+#                     "flw_id": point.flw_id,
+#                     "flw_name": point.flw_name,
+#                     "visit_date": point.visit_date,
+#                     "accuracy_in_m": point.accuracy_in_m
+#                 },
+#                 "geometry": geometry
+#             }
+#             features.append(feature)
         
-        # Create GeoJSON structure
-        result["service_points"] = {
-            "type": "FeatureCollection",
-            "features": features
-        }
+#         # Create GeoJSON structure
+#         result["service_points"] = {
+#             "type": "FeatureCollection",
+#             "features": features
+#         }
     
-    return result
+#     return result
 
 
 def create_output_directory(prefix: str = "coverage_output") -> str:

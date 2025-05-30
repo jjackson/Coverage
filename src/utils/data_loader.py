@@ -929,7 +929,8 @@ def export_superset_query_with_pagination(
     query_id: str,
     output_filename: Optional[str] = None,
     chunk_size: int = 10000,
-    timeout: int = 120
+    timeout: int = 120,
+    verbose: bool = False
 ) -> str:
     """
     Export all data from a Superset saved query using pagination to bypass the 10,000 row limit.
@@ -945,6 +946,7 @@ def export_superset_query_with_pagination(
         output_filename: Optional custom filename for the CSV (without extension)
         chunk_size: Number of rows to fetch per chunk (default: 10000)
         timeout: Request timeout in seconds (default: 120)
+        verbose: Whether to show detailed progress output (default: False)
         
     Returns:
         Path to the saved CSV file
@@ -977,12 +979,6 @@ def export_superset_query_with_pagination(
     output_path = data_dir / f"{output_filename}.csv"
     
     try:
-        print("=== Superset Paginated Data Export ===")
-        print(f"Query ID: {query_id}")
-        print()
-        
-        # Set up session and authenticate
-        print("🔐 Authenticating with Superset...")
         session = requests.Session()
         
         # Authenticate
@@ -1016,7 +1012,6 @@ def export_superset_query_with_pagination(
                 headers['Referer'] = superset_url
         
         # Get saved query details
-        print("📋 Getting saved query details...")
         saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
         response = session.get(saved_query_url, headers=headers, timeout=timeout)
         
@@ -1033,10 +1028,11 @@ def export_superset_query_with_pagination(
             'schema': result.get('schema', '')
         }
         
-        print(f"   Query: {query_details['label']}")
-        print(f"   Database ID: {query_details['database_id']}")
-        print(f"   Schema: {query_details['schema']}")
-        print()
+        if verbose:
+            print(f"   Query: {query_details['label']}")
+            print(f"   Database ID: {query_details['database_id']}")
+            print(f"   Schema: {query_details['schema']}")
+            print()
         
         # Execute paginated query
         execute_url = f'{superset_url}/api/v1/sqllab/execute/'
@@ -1046,10 +1042,6 @@ def export_superset_query_with_pagination(
         total_rows = 0
         chunk_num = 1
         base_sql = query_details['sql']
-        
-        print(f"🔄 Starting paginated data fetch (chunk size: {chunk_size:,})")
-        print(f"📝 Base SQL preview: {base_sql[:100]}...")
-        print()
         
         while True:
             # Add OFFSET and LIMIT to the SQL
@@ -1063,65 +1055,53 @@ LIMIT {chunk_size}
                 'database_id': int(query_details['database_id']),
                 'sql': paginated_sql,
                 'runAsync': False,
-                'queryLimit': chunk_size + 1000,  # Add buffer
+                'queryLimit': chunk_size
             }
             
-            print(f"📦 Fetching chunk {chunk_num} (rows {offset + 1:,} to {offset + chunk_size:,})...")
-            
-            try:
-                response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
-                
-                if response.status_code != 200:
-                    print(f"❌ Chunk {chunk_num} failed: {response.text}")
-                    break
-                
-                result = response.json()
-                
-                if result.get('status') != 'success':
-                    print(f"❌ Chunk {chunk_num} query failed: {result}")
-                    break
-                
-                # Get data and columns
-                chunk_data = result.get('data', [])
-                columns = result.get('columns', [])
-                
-                if not chunk_data:
-                    print(f"✅ No more data found. Stopping at chunk {chunk_num - 1}")
-                    break
-                
-                # Store columns from first chunk
-                if all_columns is None:
-                    all_columns = columns
-                    print(f"📊 Columns found: {len(columns)} columns")
-                    column_names = [col.get('name', '') for col in columns]
-                    print(f"   Column names: {', '.join(column_names[:5])}{'...' if len(column_names) > 5 else ''}")
-                
-                # Add chunk data to overall results
-                all_data.extend(chunk_data)
-                chunk_rows = len(chunk_data)
-                total_rows += chunk_rows
-                
-                print(f"✅ Chunk {chunk_num}: {chunk_rows:,} rows fetched (Total: {total_rows:,})")
-                
-                # If we got fewer rows than chunk_size, we've reached the end
-                if chunk_rows < chunk_size:
-                    print(f"🎉 Reached end of data (chunk had {chunk_rows:,} < {chunk_size:,} rows)")
-                    break
-                
-                # Prepare for next chunk
-                offset += chunk_size
-                chunk_num += 1
-                
-                # Small delay to be nice to the server
-                time.sleep(0.5)
-                
-            except Exception as e:
-                print(f"❌ Error fetching chunk {chunk_num}: {e}")
-                break
         
-        print(f"\n🎯 Pagination complete!")
-        print(f"   Total rows fetched: {total_rows:,}")
-        print(f"   Total chunks: {chunk_num - 1}")
+            response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
+            
+            if response.status_code != 200:
+                break
+            
+            result = response.json()
+            
+            if result.get('status') != 'success':
+                break
+            
+            # Get data and columns
+            chunk_data = result.get('data', [])
+            columns = result.get('columns', [])
+            
+            if not chunk_data:
+                break
+            
+            # Store columns from first chunk
+            if all_columns is None:
+                all_columns = columns
+                
+            # Add chunk data to overall results
+            all_data.extend(chunk_data)
+            chunk_rows = len(chunk_data)
+            total_rows += chunk_rows
+            
+            # If we got fewer rows than chunk_size, we've reached the end
+            if chunk_rows < chunk_size:
+                break
+            
+            # Prepare for next chunk
+            offset += chunk_size
+            chunk_num += 1
+            
+            # Small delay to be nice to the server
+            time.sleep(0.5)
+         
+        if verbose:
+            print(f"\n🎯 Pagination complete!")
+            print(f"   Total rows fetched: {total_rows:,}")
+            print(f"   Total chunks: {chunk_num - 1}")
+        else:
+            print(f"Exported {total_rows:,} rows from Superset query {query_id}")
         
         # Export data to CSV
         if not all_data or not all_columns:
@@ -1134,17 +1114,9 @@ LIMIT {chunk_size}
         # Export to CSV
         df.to_csv(output_path, index=False, encoding='utf-8')
         
-        print(f"💾 Data exported to: {output_path}")
-        print(f"   Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
-        print(f"   File size: {os.path.getsize(output_path) / 1024 / 1024:.2f} MB")
-        
-        # Show preview
-        print(f"\n📋 Data preview:")
-        print(df.head().to_string())
-        
-        print(f"\n🎉 Export completed successfully!")
-        print(f"   Final row count: {len(all_data):,}")
-        
+        print(f"Data exported to: {output_path}")
+        print(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+            
         return output_path
         
     except Exception as e:
@@ -1152,6 +1124,81 @@ LIMIT {chunk_size}
     finally:
         if 'session' in locals():
             session.close()
+
+def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password, superset_query_id) -> Dict[str, pd.DataFrame]:
+    """
+    Load service delivery data from Superset and group by unique opportunity_name values.
+    
+    Uses the Superset export functionality to get all service delivery data and then
+    groups it by opportunity_name, similar to load_service_delivery_df_by_opportunity
+    but fetching from Superset instead of a local CSV file.
+    
+    Returns:
+        Dictionary with opportunity_name as key and DataFrame of service points as value
+        
+    Raises:
+        ValueError: If required environment variables are missing or if data has issues
+        RuntimeError: If Superset export fails
+    """
+    try:
+        # Use the new export function to get the data
+        csv_path = export_superset_query_with_pagination(
+            superset_url=superset_url,
+            username=superset_username,
+            password=superset_password,
+            query_id=superset_query_id
+        )
+        
+        # Load the exported CSV data
+        df = pd.read_csv(csv_path)
+        
+        # Check if opportunity_name column exists
+        if 'opportunity_name' not in df.columns:
+            raise ValueError("CSV data from Superset must contain an 'opportunity_name' column")
+        
+        return df
+        
+    except Exception as e:
+        raise RuntimeError(f"Error loading service delivery data from Superset: {str(e)}")
+
+def load_service_delivery_df_by_opportunity_from_csv_dataframe(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """
+    Group service delivery DataFrame by unique opportunity_name values.
+    
+    Args:
+        df: DataFrame containing service delivery data with 'opportunity_name' column
+        
+    Returns:
+        Dictionary with opportunity_name as key and DataFrame of service points as value
+        
+    Raises:
+        ValueError: If the DataFrame doesn't contain an 'opportunity_name' column
+    """
+    # Check if opportunity_name column exists
+    if 'opportunity_name' not in df.columns:
+        raise ValueError("DataFrame must contain an 'opportunity_name' column")
+    
+    # Group by opportunity_name and create dictionary of DataFrames
+    opportunity_groups = {}
+    
+    # Get unique opportunity names (excluding NaN values)
+    unique_opportunities = df['opportunity_name'].dropna().unique()
+    
+    for opportunity in unique_opportunities:
+        # Filter data for this opportunity
+        opportunity_df = df[df['opportunity_name'] == opportunity].copy()
+        
+        # Reset index for clean DataFrame
+        opportunity_df.reset_index(drop=True, inplace=True)
+        
+        opportunity_groups[opportunity] = opportunity_df
+    
+    # Check for rows with missing opportunity_name and throw error if any exist
+    missing_opportunity_count = df['opportunity_name'].isna().sum()
+    if missing_opportunity_count > 0:
+        raise ValueError(f"Found {missing_opportunity_count} rows with missing 'opportunity_name' values. All rows must have a valid opportunity_name.")
+    
+    return opportunity_groups
 
 if __name__ == "__main__":
     # Only run the test if this file is executed directly

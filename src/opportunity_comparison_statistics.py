@@ -126,6 +126,7 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
                 service_delivery_by_day[visit_date] += 1
         
         # Process DU completion data
+        # JJ: When this was first written was having a lot of issues with the NaT and str issues, I think now resolved.-
         du_completion_by_day = {}
         for du in coverage_data.delivery_units.values():
             if du.status == 'completed':
@@ -133,7 +134,7 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
                     completion_date = du.computed_du_completion_date.date()
                     # Add this check to catch NaT that slipped through
                     if pd.isna(completion_date):
-                        print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")
+                        #print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")
                         continue
                     if completion_date not in du_completion_by_day:
                         du_completion_by_day[completion_date] = 0
@@ -153,7 +154,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
                 #     except Exception as e:
                 #         print(f"Error converting computed completion date for DU {du.du_name}: {e}, ignoring this DU in opportunity statistics")
                 else:
-                    print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")    
+                    #print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")    
+                    continue
                  
         # Convert to days since start for each opportunity
         if service_delivery_by_day:

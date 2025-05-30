@@ -131,31 +131,30 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
             if du.status == 'completed':
                 if isinstance(du.computed_du_completion_date, datetime):
                     completion_date = du.computed_du_completion_date.date()
+                    # Add this check to catch NaT that slipped through
+                    if pd.isna(completion_date):
+                        print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")
+                        continue
                     if completion_date not in du_completion_by_day:
                         du_completion_by_day[completion_date] = 0
                     du_completion_by_day[completion_date] += 1
-                elif isinstance(du.computed_du_completion_date, str):
-                    print(f"DU {du.du_name} has a computed completion date that is a string: {du.computed_du_completion_date}")
-                    try:
-                        parsed_datetime = pd.to_datetime(du.computed_du_completion_date)
-                        # Check if the parsed datetime is not NaT (Not a Time)
-                        if pd.notna(parsed_datetime):
-                            completion_date = parsed_datetime.date()
-                            if completion_date not in du_completion_by_day:
-                                du_completion_by_day[completion_date] = 0
-                            du_completion_by_day[completion_date] += 1
-                        else:
-                            print(f"DU {du.du_name} has an invalid computed completion date (NaT), ignoring this DU in opportunity statistics")
-                    except Exception as e:
-                        print(f"Error converting computed completion date for DU {du.du_name}: {e}, ignoring this DU in opportunity statistics")
+                # elif isinstance(du.computed_du_completion_date, str):
+                #     print(f"DU {du.du_name} has a computed completion date that is a string: {du.computed_du_completion_date}")
+                #     try:
+                #         parsed_datetime = pd.to_datetime(du.computed_du_completion_date)
+                #         # Check if the parsed datetime is not NaT (Not a Time)
+                #         if pd.notna(parsed_datetime):
+                #             completion_date = parsed_datetime.date()
+                #             if completion_date not in du_completion_by_day:
+                #                 du_completion_by_day[completion_date] = 0
+                #             du_completion_by_day[completion_date] += 1
+                #         else:
+                #             print(f"DU {du.du_name} has an invalid computed completion date (NaT), ignoring this DU in opportunity statistics")
+                #     except Exception as e:
+                #         print(f"Error converting computed completion date for DU {du.du_name}: {e}, ignoring this DU in opportunity statistics")
                 else:
-                    print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistcis")    
+                    print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")    
                  
-        # Debug: Print what's in the du_completion_by_day dictionary
-        print(f"DEBUG - du_completion_by_day for {opportunity_name}: {du_completion_by_day}")
-        print(f"DEBUG - du_completion_by_day keys: {list(du_completion_by_day.keys())}")
-        print(f"DEBUG - du_completion_by_day key types: {[type(k) for k in du_completion_by_day.keys()]}")
-        
         # Convert to days since start for each opportunity
         if service_delivery_by_day:
             first_service_date = min(service_delivery_by_day.keys())

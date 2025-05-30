@@ -182,8 +182,11 @@ class CoverageData:
             if du.status == 'completed':
                 if du.delivery_count == 0:
                     # this will be None or NaN if the DU was closed manually
-                    du.computed_du_completion_date = pd.to_datetime(du.checked_in_date).to_pydatetime()
-                    # print(f"DU {du.id}: Using checked_in_date -> {du.computed_du_completion_date}")
+                    if pd.isna(du.checked_in_date) == False:
+                        du.computed_du_completion_date = pd.to_datetime(du.checked_in_date).to_pydatetime()
+                        print(f"DU {du.id}: Using checked_in_date -> {du.computed_du_completion_date}")
+                    else:
+                        print(f"DU {du.id}: DU is marked as completed but has no deliveries and no checked_in_date")
                 else:
                     if(len(du.service_points) != du.delivery_count):
                         print(f"DU {du.id}: Service points count {len(du.service_points)} does not match delivery count {du.delivery_count}")
@@ -192,7 +195,7 @@ class CoverageData:
                         sp_date: datetime = pd.to_datetime(sp.visit_date).to_pydatetime()
                         if du.computed_du_completion_date is None or sp_date < du.computed_du_completion_date:
                             du.computed_du_completion_date = sp_date  
-                    # print(f"DU {du.id}: From {len(du.service_points)} service points -> {du.computed_du_completion_date}")
+                    print(f"DU {du.id}: From {len(du.service_points)} service points -> {du.computed_du_completion_date}")
    
     def _compute_flw_service_area_stats(self):
         """Pre-compute FLW statistics per service area"""

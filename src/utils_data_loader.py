@@ -12,7 +12,9 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import time
-from .models import CoverageData
+import json
+from dotenv import load_dotenv
+from src.models import CoverageData
 
 def get_available_files(directory: str = '.', file_types: List[str] = None) -> Dict[str, List[str]]:
     """
@@ -650,13 +652,225 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
     
     return data
 
+# TODO: This function is not working, it is not retrieving the data from the query.
+def retrieve_service_delivery_csv_from_superset(
+    superset_url: str,
+    username: str,
+    password: str,
+    query_id: str,
+    output_filename: Optional[str] = None,
+    timeout: int = 300
+) -> str:
+    """
+    Retrieve service delivery point data from Apache Superset as CSV and save to data directory.
+    
+    Args:
+        superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
+        username: Superset username for authentication
+        password: Superset password for authentication
+        query_id: Query ID or Chart ID to export data from
+        output_filename: Optional custom filename for the CSV (without extension)
+        timeout: Request timeout in seconds (default: 300)
+        
+    Returns:
+        Path to the saved CSV file
+        
+    Raises:
+        ValueError: If required parameters are missing or invalid
+        RuntimeError: If authentication or data retrieval fails
+        FileNotFoundError: If the Superset instance is not accessible
+    """
+    # Validate input parameters
+    if not superset_url or not username or not password or not query_id:
+        raise ValueError("superset_url, username, password, and query_id are required")
+    
+    # Clean up the base URL
+    superset_url = superset_url.rstrip('/')
+    
+    # Create data directory if it doesn't exist
+    data_dir = os.path.join(os.getcwd(), "data")
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+        print(f"Created data directory: {data_dir}")
+    
+    # Generate output filename if not provided
+    if output_filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"superset_service_delivery_{query_id}_{timestamp}"
+    
+    output_path = os.path.join(data_dir, f"{output_filename}.csv")
+    
+    try:
+        print(f"Authenticating with Superset at {superset_url}...")
+        
+        # 1. Authenticate and get access token
+        auth_url = f'{superset_url}/api/v1/security/login'
+        auth_payload = {
+            'username': username,
+            'password': password,
+            'provider': 'db',
+            'refresh': True
+        }
+
+        session = requests.Session()
+        auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
+        auth_response.raise_for_status()
+        
+        # Check if authentication was successful
+        auth_data = auth_response.json()
+        if 'access_token' not in auth_data:
+            raise RuntimeError("Authentication failed - no access token received")
+        
+        access_token = auth_data['access_token']
+        headers = {'Authorization': f'Bearer {access_token}'}
+        
+        print("Successfully authenticated with Superset")
+
+        # 2. Download the CSV from the saved SQL query
+        print(f"Retrieving data from saved query ID: {query_id}")
+        
+        try:
+            # Step 1: Execute the saved query
+            print("Executing the saved query...")
+            execute_url = f'{superset_url}/api/v1/sqllab/execute/'
+            
+            # Payload for executing a saved query
+            execute_payload = {
+                'saved_query_id': int(query_id),
+                'client_id': f'saved_query_{query_id}',
+                'runAsync': False,
+                'database_id': 1,
+                'json': True
+            }
+            
+            execute_response = session.post(
+                execute_url, 
+                json=execute_payload,
+                headers=headers,
+                timeout=timeout
+            )
+            execute_response.raise_for_status()
+            
+            execution_result = execute_response.json()
+            print(f"Query execution status: {execution_result.get('status', 'unknown')}")
+            
+            # Step 2: Get the query result ID for CSV export
+            if 'query' in execution_result and 'resultsKey' in execution_result['query']:
+                results_key = execution_result['query']['resultsKey']
+                print(f"Got results key: {results_key}")
+                
+                # Step 3: Download CSV using the results key
+                csv_export_url = f'{superset_url}/api/v1/sqllab/results/{results_key}/csv'
+                print(f"Downloading CSV from: {csv_export_url}")
+                
+                csv_response = session.get(csv_export_url, headers=headers, timeout=timeout)
+                csv_response.raise_for_status()
+                
+                successful_endpoint = csv_export_url
+                
+            elif 'data' in execution_result:
+                # If results are returned directly, convert to CSV
+                print("Converting direct results to CSV...")
+                import pandas as pd
+                df = pd.DataFrame(execution_result['data'])
+                csv_data = df.to_csv(index=False)
+                
+                # Create a mock response object
+                class MockResponse:
+                    def __init__(self, content):
+                        self.content = content.encode('utf-8')
+                        self.status_code = 200
+                
+                csv_response = MockResponse(csv_data)
+                successful_endpoint = "direct_conversion"
+                
+            else:
+                raise RuntimeError(f"No results found in query execution response. Response: {execution_result}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to execute and retrieve saved query {query_id}: {str(e)}")
+        
+        if not successful_endpoint:
+            raise RuntimeError(f"Failed to retrieve CSV data for saved query ID {query_id}")
+        
+        print(f"Successfully retrieved data using method: {successful_endpoint}")
+        csv_response.raise_for_status()
+
+        # 3. Save CSV to file
+        with open(output_path, 'wb') as f:
+            f.write(csv_response.content)
+
+        print(f"Successfully saved service delivery data to: {output_path}")
+        
+        # Verify file was created and has content
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            # Load and display basic info about the data
+            try:
+                df_verify = pd.read_csv(output_path)
+                print(f"CSV file contains {len(df_verify)} rows and {len(df_verify.columns)} columns")
+                if len(df_verify.columns) > 0:
+                    print(f"Columns: {', '.join(df_verify.columns.tolist())}")
+            except Exception as e:
+                print(f"Warning: Could not verify CSV content: {e}")
+            
+            return output_path
+        else:
+            raise RuntimeError(f"Failed to create or write to output file: {output_path}")
+    
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Network error while connecting to Superset: {str(e)}")
+    except Exception as e:
+        raise RuntimeError(f"Error retrieving data from Superset: {str(e)}")
+    finally:
+        session.close()
+
 if __name__ == "__main__":
     # Only run the test if this file is executed directly
-    parser = argparse.ArgumentParser(description='Test CommCare API data loader')
-    parser.add_argument('domain', help='CommCare project space/domain name')
-    parser.add_argument('user', help='Username for authentication')
-    parser.add_argument('api_key', help='API key for authentication')
     
-    args = parser.parse_args()
+    # Load environment variables from .env file
+    load_dotenv()
     
-    test_commcare_api_coverage_loader(args.domain, args.user, args.api_key)
+    # Get Superset configuration from environment variables
+    # Replace these variable names with your actual .env variable names
+    superset_url = os.getenv('SUPERSET_URL')  # e.g., 'https://superset.example.com'
+    superset_username = os.getenv('SUPERSET_USERNAME')  # Your Superset username
+    superset_password = os.getenv('SUPERSET_PASSWORD')  # Your Superset password
+    superset_query_id = os.getenv('SUPERSET_QUERY_ID')  # The query/chart ID to download
+    
+    # Add https:// scheme if missing
+    if superset_url and not superset_url.startswith(('http://', 'https://')):
+        superset_url = f'https://{superset_url}'
+        print(f"Added https:// scheme to URL: {superset_url}")
+    
+    # Validate that all required environment variables are set
+    missing_vars = []
+    if not superset_url:
+        missing_vars.append('SUPERSET_URL')
+    if not superset_username:
+        missing_vars.append('SUPERSET_USERNAME')
+    if not superset_password:
+        missing_vars.append('SUPERSET_PASSWORD')
+    if not superset_query_id:
+        missing_vars.append('SUPERSET_QUERY_ID')
+    
+    if missing_vars:
+        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
+        print("Please set the following in your .env file:")
+        for var in missing_vars:
+            print(f"- {var}")
+        exit(1)
+    
+    try:
+        print("Testing Superset CSV retrieval...")
+        csv_path = retrieve_service_delivery_csv_from_superset(
+            superset_url=superset_url,
+            username=superset_username,
+            password=superset_password,
+            query_id=superset_query_id
+        )
+        print(f"Success! CSV saved to: {csv_path}")
+        
+    except Exception as e:
+        print(f"Error retrieving data from Superset: {str(e)}")
+        exit(1)
+    

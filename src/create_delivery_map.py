@@ -448,7 +448,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
         <div id="control-panel">
             <div class="row">
                 <div class="control-section" style="width: 100%;">
-                    <div class="section-title">FLW Toggle Controls</div>
+                    <div class="section-title">FLW Toggle Controls (Delivery Units & Service Points)</div>
                     <div class="flw-toggle-controls">
                         <button id="select-all-flw" class="toggle-all-btn">Select All FLWs</button>
                         <button id="deselect-all-flw" class="toggle-all-btn">Deselect All FLWs</button>
@@ -997,6 +997,90 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             // Add FLW toggle controls
             const flwTogglesContainer = document.getElementById('flw-toggles');
             
+            // Function to update service point visibility based on selected FLWs
+            function updateServicePointVisibility() {{
+                // Get all checked FLW IDs
+                const checkedFlwIds = Array.from(document.querySelectorAll('.flw-toggle input:checked'))
+                    .map(input => input.dataset.flw);
+                
+                // Convert FLW IDs to names for comparison with service points
+                const checkedFlwNames = checkedFlwIds.map(id => flwIdToNameMap[id] || id);
+                
+                // Clear service points layer
+                servicePointsLayer.clearLayers();
+                
+                // Add back only service points for selected FLWs, also respecting date filter
+                allServicePoints.forEach(point => {{
+                    const pointFlwName = point.feature.properties.flw_name;
+                    const pointFlwId = String(point.feature.properties.flw_commcare_id);
+                    
+                    // Check if this service point's FLW is selected (check both name and ID)
+                    const flwSelected = checkedFlwNames.includes(pointFlwName) || 
+                                      checkedFlwIds.includes(pointFlwId);
+                    
+                    if (!flwSelected) {{
+                        return; // Skip this point if FLW is not selected
+                    }}
+                    
+                    // Apply date filtering if active
+                    let shouldShow = true;
+                    if (dateFilterActive && point.date) {{
+                        let pointDate;
+                        try {{
+                            pointDate = new Date(point.date);
+                            if (isNaN(pointDate.getTime())) {{
+                                throw new Error("Invalid date format");
+                            }}
+                        }} catch (e) {{
+                            // Try manual parsing for different date formats
+                            const dateParts = point.date.split(/[\/\-T ]/);
+                            if (dateParts.length >= 3) {{
+                                let year, month, day;
+                                if (dateParts[0].length === 4) {{
+                                    // YYYY-MM-DD format
+                                    year = parseInt(dateParts[0]);
+                                    month = parseInt(dateParts[1]) - 1;
+                                    day = parseInt(dateParts[2]);
+                                }} else {{
+                                    // MM/DD/YYYY format
+                                    month = parseInt(dateParts[0]) - 1;
+                                    day = parseInt(dateParts[1]);
+                                    year = parseInt(dateParts[2]);
+                                }}
+                                pointDate = new Date(year, month, day);
+                            }} else {{
+                                // If we can't parse, show the point
+                                shouldShow = true;
+                                return;
+                            }}
+                        }}
+                        
+                        const pointYMD = new Date(pointDate.getFullYear(), pointDate.getMonth(), pointDate.getDate());
+                        
+                        if (startDateFilter) {{
+                            if (pointYMD < startDateFilter) {{
+                                console.log("Point date before start date (using Nigeria time filter), filtering out");
+                                shouldShow = false;
+                            }}
+                        }}
+                        
+                        if (endDateFilter) {{
+                            if (pointYMD > endDateFilter) {{
+                                console.log("Point date after end date (using Nigeria time filter), filtering out");
+                                shouldShow = false;
+                            }}
+                        }}
+                    }} else if (dateFilterActive && !point.date) {{
+                        shouldShow = false;
+                    }}
+                    
+                    // Add to layer if it passes all filters
+                    if (shouldShow) {{
+                        point.marker.addTo(servicePointsLayer);
+                    }}
+                }});
+            }}
+            
             // Organize by FLW names but store IDs for filtering
             Object.entries(flwIdToNameMap).forEach(([flwId, flwName]) => {{
                 const label = document.createElement('label');
@@ -1026,6 +1110,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                             }}
                         }});
                     }}
+                    
+                    // Update service point visibility based on FLW selection
+                    updateServicePointVisibility();
                     
                     // Update status toggles to reflect current state
                     updateStatusToggles();
@@ -1085,6 +1172,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         }});
                     }}
                 }});
+                // Update service point visibility based on FLW selection
+                updateServicePointVisibility();
                 // Update status filters
                 filterByStatus();
             }});
@@ -1103,6 +1192,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         }});
                     }}
                 }});
+                // Update service point visibility based on FLW selection
+                updateServicePointVisibility();
                 // Update status filters
                 filterByStatus();
             }});
@@ -1428,14 +1519,16 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         endDateFilter = null;
                     }}
                     
-                    filterServicePointsByDate();
+                    // Use the updated service point visibility function that respects both FLW and date filters
+                    updateServicePointVisibility();
                 }} else {{
                     // If both are empty, clear the filter
                     console.log("No dates set, clearing filter");
                     dateFilterActive = false;
                     startDateFilter = null;
                     endDateFilter = null;
-                    resetServicePointsFilter();
+                    // Use the updated service point visibility function
+                    updateServicePointVisibility();
                 }}
                 
                 // Visual feedback that the filter was applied
@@ -1461,8 +1554,8 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                 startDateFilter = null;
                 endDateFilter = null;
                 
-                // Restore all service points
-                resetServicePointsFilter();
+                // Use the updated service point visibility function
+                updateServicePointVisibility();
             }});
             
             // Function to filter service points by date
@@ -1728,6 +1821,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                         map.fitBounds(bounds, {{ padding: [50, 50] }});
                     }}
                 }}
+                
+                // Update service point visibility based on FLW selection
+                updateServicePointVisibility();
                 
                 // Reset status filters when service area changes
                 document.querySelectorAll('.status-toggle input').forEach(input => {{

@@ -13,18 +13,6 @@ try:
 except ImportError:
     from src.opportunity_comparison_statistics import create_opportunity_comparison_report
 
-def get_available_files():
-    """Get available Excel and CSV files in the data subdirectory."""
-    # Ensure data directory exists
-    data_dir = 'data'
-    os.makedirs(data_dir, exist_ok=True)
-    
-    # Look for files in the data directory
-    files = glob.glob(os.path.join(data_dir, '*.*'))
-    excel_files = [f for f in files if f.lower().endswith(('.xlsx', '.xls')) and not os.path.basename(f).startswith('~')]
-    csv_files = [f for f in files if f.lower().endswith('.csv')]
-    return excel_files, csv_files
-
 def select_file(file_list, file_type, args=None):
     """Allow user to select a file interactively or use command line argument."""
     if args and file_type == 'excel' and args.excel_file:
@@ -362,11 +350,7 @@ def main():
     use_api = os.environ.get('USE_API', '').upper() == 'TRUE'
     if use_api:
         print("Using API Method")
-        excel_files, csv_files = get_available_files()
-           
-        if not csv_files:
-            print("Error: No CSV files found in the data directory.")
-            return
+
         
         # csv_file = select_file(csv_files, "csv", args)
         # service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_file)
@@ -433,34 +417,78 @@ def main():
         
     else:     
         print("Loading from Local Files")
-        # Get available files
-        excel_files, csv_files = get_available_files()
         
-        # Check if files are available
-        if not excel_files:
-            print("Error: No Excel files found in the data directory")
-            return
-    
+        # Get available CSV files
+        csv_files = data_loader.get_available_files('data', 'csv')
+        
         if not csv_files:
             print("Error: No CSV files found in the data directory.")
             return
-    
-        # Select input files
-        excel_file = select_file(excel_files, "excel", args)
-        csv_file = select_file(csv_files, "csv", args)
-    
-        print(f"\nInput files selected:")
-        print(f"Excel file: {excel_file}")
-        print(f"CSV file: {csv_file}")
         
-        # Load the data using the CoverageData model
-        print("\nLoading data from input files...")
-        coverage_data = data_loader.get_coverage_data_from_excel_and_csv(excel_file, csv_file)
-        coverage_data.project_space = opportunity_to_domain_mapping.get(coverage_data.opportunity_name)
+        # Select CSV file (use existing select_file logic)
+        csv_file = select_file(csv_files, "csv", args)
+        
+        print(f"\nSelected CSV file: {csv_file}")
+        
+        # Load service delivery data and group by opportunity
+        print("Loading Service Delivery Points from CSV...")
+        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_file)
+        
+        print("Opportunity names found in CSV:")
+        for key, value in service_delivery_by_opportunity_df.items():
+            print(f"  {key}: {len(value)} service points" if hasattr(value, '__len__') else f"  {key}: {value}")
+        
+        # Get available Excel files
+        excel_files = data_loader.get_available_files('data', 'xlsx')
+        
+        if not excel_files:
+            print("Error: No Excel files found in the data directory")
+            return
+        
+        print(f"\nAvailable Excel files: {excel_files}")
+        
+        # Loop through each opportunity and try to find matching Excel file
+        for opportunity_name, service_df in service_delivery_by_opportunity_df.items():
+            print(f"\nProcessing opportunity: {opportunity_name}")
+            print(f"Service points for this opportunity: {len(service_df)}")
 
-        # Use project_space if available, otherwise use opportunity_name as key
-        key = coverage_data.project_space if coverage_data.project_space else coverage_data.opportunity_name
-        coverage_data_objects[key] = coverage_data
+            # Use mapped domain name if available, otherwise use opportunity name
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
+            
+            if not domain_name:
+                print(f"  Warning: No domain mapping found for opportunity '{opportunity_name}', skipping")
+                continue
+            
+            print(f"  Looking for Excel file containing domain: {domain_name}")
+            
+            # Look for Excel file that contains the domain name
+            matching_excel_file = None
+            for excel_file in excel_files:
+                if domain_name in excel_file:
+                    matching_excel_file = excel_file
+                    break
+            
+            if not matching_excel_file:
+                print(f"  Warning: No Excel file found containing domain '{domain_name}', skipping opportunity")
+                continue
+            
+            print(f"  Found matching Excel file: {matching_excel_file}")
+            
+            # Load the data using the CoverageData model
+            print(f"  Loading data from Excel file and CSV data...")
+            coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel_file, None)
+            
+            # Load service delivery data from the dataframe for this opportunity
+            coverage_data.load_service_delivery_from_datafame(service_df)
+            
+            coverage_data.project_space = domain_name
+            coverage_data.opportunity_name = opportunity_name
+            
+            # Store with domain name as key
+            coverage_data_objects[domain_name] = coverage_data
+            print(f"  Successfully loaded coverage data for {domain_name}")
+        
+        print(f"\nTotal coverage data objects created: {len(coverage_data_objects)}")
     
     # Create output directory
     output_dir = args.output_dir if args.output_dir else create_output_directory()

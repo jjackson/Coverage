@@ -39,6 +39,11 @@ class ServiceArea:
         return (self.completed_units / self.total_units) * 100
     
     @property
+    def is_completed(self) -> bool:
+        """Check if the service area is 100% completed"""
+        return self.completion_percentage == 100.0
+    
+    @property
     def assigned_flws(self) -> List[str]:
         """Get list of FLWs assigned to this service area"""
         return list(set(du.flw_commcare_id for du in self.delivery_units))

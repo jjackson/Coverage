@@ -189,7 +189,7 @@ class CoverageData:
                         #print(f"DU {du.id}: DU is marked as completed but has no deliveries and no checked_in_date")
                 else:
                     if(len(du.service_points) != du.delivery_count):
-                        print(f"DU {du.id}: Service points count {len(du.service_points)} does not match delivery count {du.delivery_count}")
+                        print(f"DU {du.du_name}: Service Deliver Point count {len(du.service_points)} does not match delivery count in DU:{du.delivery_count}, FLW ID: {du.flw_commcare_id}")
                     #loop through the service_points and find the earliest date of a service delivery point
                     for sp in du.service_points:
                         sp_date: datetime = pd.to_datetime(sp.visit_date).to_pydatetime()
@@ -461,6 +461,62 @@ class CoverageData:
         return pd.DataFrame(rows)
 
     @classmethod
+    def clean_du_dataframe(cls, delivery_units_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean and prepare delivery units dataframe
+        
+        Args:
+            delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
+            This will fix mismatched column headings and make sure data is typed correctly.
+            This will chnage the value of the service_area_id to be a combination of the oa_id and sa_id
+            This will replace "---", the null value in a CommCare export, with None
+            This will manipulate the dataframe in place and return it.
+        
+        Returns:
+            Cleaned and prepared DataFrame
+        """
+        # Map column names
+        delivery_units_df.rename(columns={
+            'caseid': 'case_id',
+            'oa': 'oa_id',
+            'service_area_number': 'service_area_id',
+            'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
+            'number' : 'du_number',
+            'name' : 'du_name', # xlsx column name
+            'case_name': 'du_name', # API column name
+            '#Buildings' : 'buildings', #API column name
+            'Surface Area (sq. meters)' : 'surface_area', #API column name
+            'last_modified': 'last_modified_date',
+        }, inplace=True)
+
+        # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
+        delivery_units_df = delivery_units_df.replace("---", None)
+
+        # Check for several known columns
+        required_columns = ['case_id', 'du_name', 'service_area', 'flw_commcare_id', 'WKT']
+        missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
+        if missing_columns:
+            found_columns = list(delivery_units_df.columns)
+            error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
+            raise ValueError(error_msg)
+        
+        # Drop rows with missing service area IDs (value = None), count them first for debugging
+        dropped_data_count = len(delivery_units_df)
+        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna())].index, inplace=True)
+        dropped_data_count = dropped_data_count - len(delivery_units_df)
+
+        # Create new service_area_id that combines OA and SA
+        delivery_units_df['service_area_id'] = delivery_units_df['oa_id'].astype(str) + '-' + delivery_units_df['service_area_id'].astype(str)
+
+        # Print distinct service area counts for debugging
+        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
+        print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
+    
+
+        
+        return delivery_units_df
+
+    @classmethod
     def load_delivery_units_from_df(cls, delivery_units_df: pd.DataFrame) -> 'CoverageData':
         """
         Load coverage data from CommCare dataframe
@@ -526,63 +582,7 @@ class CoverageData:
         data._compute_metadata_from_delivery_unit_data()
         
         return data
-    
-    @classmethod
-    def clean_du_dataframe(cls, delivery_units_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Clean and prepare delivery units dataframe
-        
-        Args:
-            delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
-            This will fix mismatched column headings and make sure data is typed correctly.
-            This will chnage the value of the service_area_id to be a combination of the oa_id and sa_id
-            This will replace "---", the null value in a CommCare export, with None
-            This will manipulate the dataframe in place and return it.
-        
-        Returns:
-            Cleaned and prepared DataFrame
-        """
-        # Map column names
-        delivery_units_df.rename(columns={
-            'caseid': 'case_id',
-            'oa': 'oa_id',
-            'service_area_number': 'service_area_id',
-            'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
-            'number' : 'du_number',
-            'name' : 'du_name', # xlsx column name
-            'case_name': 'du_name', # API column name
-            '#Buildings' : 'buildings', #API column name
-            'Surface Area (sq. meters)' : 'surface_area', #API column name
-            'last_modified': 'last_modified_date',
-        }, inplace=True)
 
-        # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
-        delivery_units_df = delivery_units_df.replace("---", None)
-
-        # Check for several known columns
-        required_columns = ['case_id', 'du_name', 'service_area', 'flw_commcare_id', 'WKT']
-        missing_columns = [col for col in required_columns if col not in delivery_units_df.columns]
-        if missing_columns:
-            found_columns = list(delivery_units_df.columns)
-            error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
-            raise ValueError(error_msg)
-        
-        # Drop rows with missing service area IDs (value = None), count them first for debugging
-        dropped_data_count = len(delivery_units_df)
-        delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna())].index, inplace=True)
-        dropped_data_count = dropped_data_count - len(delivery_units_df)
-
-        # Create new service_area_id that combines OA and SA
-        delivery_units_df['service_area_id'] = delivery_units_df['oa_id'].astype(str) + '-' + delivery_units_df['service_area_id'].astype(str)
-
-        # Print distinct service area counts for debugging
-        distinct_service_areas = delivery_units_df['service_area_id'].nunique()
-        print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
-    
-
-        
-        return delivery_units_df
-    
     def load_service_delivery_dataframe_from_csv(self, service_delivery_csv: str) -> None:
         """
         Load service delivery points from a CSV file

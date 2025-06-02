@@ -16,33 +16,32 @@ import json
 from dotenv import load_dotenv
 from src.models import CoverageData
 
-def get_available_files(directory: str = '.', file_types: List[str] = None) -> Dict[str, List[str]]:
+def get_available_files(directory: str = 'data', file_type: str = None) -> List[str]:
     """
-    Find available files of specific types in the specified directory.
+    Find available files of a specific type in the specified directory.
     
     Args:
-        directory: Directory to search in
-        file_types: List of file extensions to find (without dot, e.g. ['xlsx', 'csv'])
+        directory: Directory to search in (defaults to 'data')
+        file_type: File extension to find (without dot, e.g. 'xlsx', 'csv')
         
     Returns:
-        Dictionary with file type as key and list of matching files as value
+        List of matching files
     """
-    if file_types is None:
-        file_types = ['xlsx', 'xls', 'csv']
+    if file_type is None:
+        raise ValueError("file_type must be specified (e.g., 'xlsx', 'csv')")
     
-    result = {}
+    # Ensure directory exists
+    os.makedirs(directory, exist_ok=True)
     
-    for file_type in file_types:
-        pattern = os.path.join(directory, f'*.{file_type}')
-        files = glob.glob(pattern)
-        
-        # Filter out temporary Excel files
-        if file_type in ['xlsx', 'xls']:
-            files = [f for f in files if not os.path.basename(f).startswith('~$')]
-        
-        result[file_type] = files
+    # Search for files with the specified extension
+    pattern = os.path.join(directory, f'*.{file_type}')
+    files = glob.glob(pattern)
     
-    return result
+    # Filter out temporary Excel files
+    if file_type in ['xlsx', 'xls']:
+        files = [f for f in files if not os.path.basename(f).startswith('~$')]
+    
+    return files
 
 
 def select_files_interactive(available_files: Dict[str, List[str]]) -> Dict[str, str]:
@@ -362,6 +361,7 @@ def get_du_dataframe_from_commcare_api(domain: str,
     # Create DataFrame
     df = pd.DataFrame(processed_data)
     
+
     # Convert columns to appropriate types (numeric) and handle missing values
     numeric_columns = ['buildings', 'delivery_count', 'delivery_target', 'surface_area']
     for col in numeric_columns:
@@ -376,6 +376,16 @@ def get_du_dataframe_from_commcare_api(domain: str,
             df = convert_to_geo_dataframe(df)
         except Exception as e:
             print(f"Warning: Could not convert WKT to geometry: {e}")
+    
+    # Save DataFrame to Excel file in data directory
+    excel_path = ensure_data_directory_and_get_filename(
+        file_prefix="du_export",
+        file_id=domain,
+        file_suffix="xlsx"
+    )
+    
+    df.to_excel(excel_path, index=False)
+    print(f"Delivery units data saved to: {excel_path}")
     
     return df
 
@@ -640,7 +650,7 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
     
     # Read the Excel file
     print(f"Loading Excel file: {excel_file}")
-    delivery_units_df = pd.read_excel(excel_file, sheet_name="Cases")
+    delivery_units_df = pd.read_excel(excel_file, sheet_name=0)
     
     # Use the new from_commcare method to process the dataframe
     data = CoverageData.load_delivery_units_from_df(delivery_units_df)
@@ -652,275 +662,59 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
     
     return data
 
-# TODO: This function is not working, it is not retrieving the data from the query.
-# def retrieve_service_delivery_csv_from_superset(
-#     superset_url: str,
-#     username: str,
-#     password: str,
-#     query_id: str,
-#     output_filename: Optional[str] = None,
-#     timeout: int = 300
-# ) -> str:
-#     """
-#     Retrieve service delivery point data from Apache Superset as CSV and save to data directory.
+def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None, 
+                                     file_prefix: str = "export", 
+                                     file_id: str = None,
+                                     file_suffix: str = None) -> Path:
+    """
+    Ensure the data directory exists and generate an output filename if not provided.
     
-#     Args:
-#         superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
-#         username: Superset username for authentication
-#         password: Superset password for authentication
-#         query_id: Query ID or Chart ID to export data from
-#         output_filename: Optional custom filename for the CSV (without extension)
-#         timeout: Request timeout in seconds (default: 300)
+    Args:
+        output_filename: Optional custom filename for the output file (without extension)
+        file_prefix: Prefix for auto-generated filename (default: "export")
+        file_id: Optional ID to include in auto-generated filename
+        file_suffix: Optional file extension (e.g., "csv", "xlsx"). If provided, will be added to the returned path.
         
-#     Returns:
-#         Path to the saved CSV file
+    Returns:
+        Path object for the output file (with or without extension based on file_suffix)
         
-#     Raises:
-#         ValueError: If required parameters are missing or invalid
-#         RuntimeError: If authentication or data retrieval fails
-#         FileNotFoundError: If the Superset instance is not accessible
-#     """
-#     # Validate input parameters
-#     if not superset_url or not username or not password or not query_id:
-#         raise ValueError("superset_url, username, password, and query_id are required")
+    Example:
+        # Auto-generate filename with extension
+        path = ensure_data_directory_and_get_filename(file_prefix="superset_export", file_id="123", file_suffix="csv")
+        # Returns: /path/to/project/data/superset_export_123_20231215_143022.csv
+        
+        # Use custom filename with extension
+        path = ensure_data_directory_and_get_filename("my_custom_file", file_suffix="xlsx")
+        # Returns: /path/to/project/data/my_custom_file.xlsx
+        
+        # Without extension (original behavior)
+        path = ensure_data_directory_and_get_filename("my_custom_file")
+        # Returns: /path/to/project/data/my_custom_file
+    """
+    # Create data directory if it doesn't exist
+    project_root = Path(__file__).parent.parent.parent  # Go up from src/utils/data_loader.py to project root
+    data_dir = project_root / "data"
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Created data directory: {data_dir}")
     
-#     # Clean up the base URL
-#     superset_url = superset_url.rstrip('/')
+    # Generate output filename if not provided
+    if output_filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if file_id:
+            output_filename = f"{file_prefix}_{file_id}_{timestamp}"
+        else:
+            output_filename = f"{file_prefix}_{timestamp}"
     
-#     # Create data directory if it doesn't exist
-#     project_root = Path(__file__).parent.parent.parent  # Go up from src/utils/data_loader.py to project root
-#     data_dir = project_root / "data"
-#     if not data_dir.exists():
-#         data_dir.mkdir(parents=True, exist_ok=True)
-#         print(f"Created data directory: {data_dir}")
+    output_path = data_dir / output_filename
     
-#     # Generate output filename if not provided
-#     if output_filename is None:
-#         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#         output_filename = f"superset_service_delivery_{query_id}_{timestamp}"
+    # Add file suffix if provided
+    if file_suffix:
+        if not file_suffix.startswith('.'):
+            file_suffix = f'.{file_suffix}'
+        output_path = output_path.with_suffix(file_suffix)
     
-#     output_path = data_dir / f"{output_filename}.csv"
-    
-#     try:
-#         print(f"Authenticating with Superset at {superset_url}...")
-        
-#         # 1. Authenticate and get access token
-#         auth_url = f'{superset_url}/api/v1/security/login'
-#         auth_payload = {
-#             'username': username,
-#             'password': password,
-#             'provider': 'db',
-#             'refresh': True
-#         }
-
-#         session = requests.Session()
-#         auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
-#         auth_response.raise_for_status()
-        
-#         # Check if authentication was successful
-#         auth_data = auth_response.json()
-#         if 'access_token' not in auth_data:
-#             raise RuntimeError("Authentication failed - no access token received")
-        
-#         access_token = auth_data['access_token']
-#         headers = {'Authorization': f'Bearer {access_token}'}
-        
-#         print("Successfully authenticated with Superset")
-
-#         # 2. Get CSRF token which is required for SQL Lab operations
-#         print("Getting CSRF token...")
-#         csrf_url = f'{superset_url}/api/v1/security/csrf_token/'
-#         csrf_response = session.get(csrf_url, headers=headers, timeout=timeout)
-        
-#         if csrf_response.status_code == 200:
-#             csrf_data = csrf_response.json()
-#             csrf_token = csrf_data.get('result')
-#             if csrf_token:
-#                 headers['X-CSRFToken'] = csrf_token
-#                 # Also add Referer header which is required by Superset
-#                 headers['Referer'] = superset_url
-#                 print("Successfully obtained CSRF token")
-#             else:
-#                 print("Warning: No CSRF token in response, continuing without it")
-#         else:
-#             print(f"Warning: Could not get CSRF token (status {csrf_response.status_code}), continuing without it")
-
-#         # 3. Try multiple approaches to get the data
-#         csv_response = None
-#         successful_endpoint = None
-        
-#         try:
-#             # Approach 1: Try to get saved query information first
-#             print(f"Retrieving saved query information for ID: {query_id}")
-#             saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
-            
-#             saved_query_response = session.get(saved_query_url, headers=headers, timeout=timeout)
-            
-#             if saved_query_response.status_code == 200:
-#                 saved_query_data = saved_query_response.json()
-#                 print(f"Successfully retrieved saved query: {saved_query_data.get('result', {}).get('label', 'Unknown')}")
-                
-#                 # Extract SQL from saved query
-#                 sql_query = saved_query_data.get('result', {}).get('sql', '')
-#                 database_id = saved_query_data.get('result', {}).get('database', {}).get('id', '')
-                
-#                 if sql_query and database_id:
-#                     # Approach 1a: Execute the SQL directly via SQL Lab API
-#                     print("Executing SQL query directly...")
-#                     execute_url = f'{superset_url}/api/v1/sqllab/execute/'
-                    
-#                     execute_payload = {
-#                         'database_id': database_id,
-#                         'sql': sql_query,
-#                         'runAsync': False,
-#                         # 'schema': saved_query_data.get('result', {}).get('schema', ''),
-#                         'sql_editor_id': f'saved_query_{query_id}',
-#                         # 'tab_name': f'Query {query_id}',
-#                         # 'tmp_table_name': '',
-#                         #'select_as_cta': False,
-#                         #'ctas_method': 'TABLE',
-#                         'queryLimit': 1000000,  # Large limit to get all data
-#                         #'expand_data': True
-#                     }
-                    
-#                     execute_response = session.post(
-#                         execute_url, 
-#                         json=execute_payload,
-#                         headers=headers,
-#                         timeout=timeout
-#                     )
-                    
-#                     if execute_response.status_code == 200:
-#                         execution_result = execute_response.json()
-#                         print(f"Query execution status: {execution_result.get('status', 'unknown')}")
-                        
-#                         # Check if we have data in the response
-#                         if 'data' in execution_result:
-#                             data_rows = execution_result['data']
-#                             print(f"Retrieved {len(data_rows)} rows via synchronous execution")
-                            
-#                             if len(data_rows) < 50000:  # If we got fewer rows, try async for more
-#                                 print("Trying async execution for larger dataset...")
-                                
-#                                 # Try async execution for larger datasets
-#                                 async_payload = {
-#                                     'database_id': database_id,
-#                                     'sql': sql_query,
-#                                     'runAsync': True,
-#                                     'queryLimit': 1000000,
-#                                 }
-                                
-#                                 async_response = session.post(
-#                                     execute_url, 
-#                                     json=async_payload,
-#                                     headers=headers,
-#                                     timeout=timeout
-#                                 )
-                                
-#                                 if async_response.status_code == 202:  # Async queries return 202
-#                                     async_result = async_response.json()
-#                                     query_id_result = async_result.get('query', {}).get('id')
-#                                     print(f"Async query started with ID: {query_id_result}")
-                                    
-#                                     if query_id_result:
-#                                         # Poll for results
-#                                         print("Polling for async results...")
-#                                         import time
-                                        
-#                                         for attempt in range(30):  # Try for up to 60 seconds
-#                                             time.sleep(2)
-#                                             status_url = f'{superset_url}/api/v1/query/{query_id_result}'
-#                                             status_response = session.get(status_url, headers=headers, timeout=timeout)
-                                            
-#                                             if status_response.status_code == 200:
-#                                                 status_data = status_response.json()
-#                                                 result_data = status_data.get('result', {})
-#                                                 query_status = result_data.get('status', 'unknown')
-                                                
-#                                                 print(f"Attempt {attempt + 1}: Status = {query_status}")
-                                                
-#                                                 if query_status == 'success':
-#                                                     # Get the results
-#                                                     if 'data' in result_data:
-#                                                         async_data = result_data['data']
-#                                                         print(f"Async query completed! Retrieved {len(async_data)} rows")
-#                                                         # Use async data if it has more rows
-#                                                         if len(async_data) > len(data_rows):
-#                                                             data_rows = async_data
-#                                                             execution_result = result_data
-#                                                         break
-#                                                 elif query_status in ['failed', 'error']:
-#                                                     print(f"Async query failed: {result_data.get('errorMessage', 'Unknown error')}")
-#                                                     break
-#                                             else:
-#                                                 print(f"Could not check async status: {status_response.status_code}")
-#                                         else:
-#                                             print("Async query timeout - using synchronous results")
-                                
-#                                 # Convert the result data to DataFrame
-#                                 columns = [col['name'] for col in execution_result.get('columns', [])]
-                                
-#                                 if columns and data_rows:
-#                                     print(f"Converting {len(data_rows)} rows to CSV...")
-#                                     import pandas as pd
-#                                     df = pd.DataFrame(data_rows, columns=columns)
-#                                     csv_data = df.to_csv(index=False)
-                                    
-#                                     # Create a mock response object
-#                                     class MockResponse:
-#                                         def __init__(self, content):
-#                                             self.content = content.encode('utf-8')
-#                                             self.status_code = 200
-#                                         def raise_for_status(self):
-#                                             pass
-                                    
-#                                     csv_response = MockResponse(csv_data)
-#                                     successful_endpoint = "direct_sql_execution"
-#                                 else:
-#                                     print("Warning: Query executed but returned no data")
-#                         else:
-#                             print("Warning: Query executed but no data field in response")
-#                     else:
-#                         print(f"SQL execution failed with status: {execute_response.status_code}")
-#                         print(f"Error response: {execute_response.text}")
-                
-#         except Exception as e:
-#             print(f"Approach 1 failed: {str(e)}")
-        
-#         # If all approaches failed, raise an error
-#         if not csv_response:
-#             raise RuntimeError(f"Failed to retrieve data using any available method for ID {query_id}")
-        
-#         print(f"Successfully retrieved data using method: {successful_endpoint}")
-#         csv_response.raise_for_status()
-
-#         # 3. Save CSV to file
-#         with open(output_path, 'wb') as f:
-#             f.write(csv_response.content)
-
-#         print(f"Successfully saved service delivery data to: {output_path}")
-        
-#         # Verify file was created and has content
-#         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-#             # Load and display basic info about the data
-#             try:
-#                 df_verify = pd.read_csv(output_path)
-#                 print(f"CSV file contains {len(df_verify)} rows and {len(df_verify.columns)} columns")
-#                 if len(df_verify.columns) > 0:
-#                     print(f"Columns: {', '.join(df_verify.columns.tolist())}")
-#             except Exception as e:
-#                 print(f"Warning: Could not verify CSV content: {e}")
-            
-#             return output_path
-#         else:
-#             raise RuntimeError(f"Failed to create or write to output file: {output_path}")
-    
-#     except requests.exceptions.RequestException as e:
-#         raise RuntimeError(f"Network error while connecting to Superset: {str(e)}")
-#     except Exception as e:
-#         raise RuntimeError(f"Error retrieving data from Superset: {str(e)}")
-#     finally:
-#         session.close()
+    return output_path
 
 def export_superset_query_with_pagination(
     superset_url: str,
@@ -964,19 +758,12 @@ def export_superset_query_with_pagination(
     if not superset_url.startswith(('http://', 'https://')):
         superset_url = f'https://{superset_url}'
     
-    # Create data directory if it doesn't exist
-    project_root = Path(__file__).parent.parent.parent  # Go up from src/utils/data_loader.py to project root
-    data_dir = project_root / "data"
-    if not data_dir.exists():
-        data_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created data directory: {data_dir}")
-    
-    # Generate output filename if not provided
-    if output_filename is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"superset_export_{query_id}_{timestamp}"
-    
-    output_path = data_dir / f"{output_filename}.csv"
+    # Ensure data directory exists and get output path
+    output_path = ensure_data_directory_and_get_filename(
+        output_filename=output_filename,
+        file_prefix="superset_export",
+        file_suffix="csv"
+    )
     
     try:
         session = requests.Session()
@@ -1117,7 +904,7 @@ LIMIT {chunk_size}
         print(f"Data exported to: {output_path}")
         print(f"Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
             
-        return output_path
+        return str(output_path)
         
     except Exception as e:
         raise RuntimeError(f"Error exporting data from Superset: {str(e)}")

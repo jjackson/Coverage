@@ -23,14 +23,6 @@ Usage examples:
 """
 
 # Import main classes and functions for easy access
-from .superset_export import (
-    get_superset_session,
-    get_saved_query_details,
-    execute_paginated_query,
-    export_to_csv,
-    main as export_superset_data
-)
-
 from .data_loader import (
     get_available_files,
     select_files_interactive,
@@ -51,13 +43,6 @@ from .data_loader import (
 
 # Define what gets imported with "from src.utils import *"
 __all__ = [
-    # Superset export functions
-    'get_superset_session',
-    'get_saved_query_details',
-    'execute_paginated_query',
-    'export_to_csv',
-    'export_superset_data',
-    
     # Data loader functions
     'get_available_files',
     'select_files_interactive',
@@ -81,4 +66,4 @@ __all__ = [
 ]
 
 # Also make modules available
-from . import superset_export, data_loader 
+from . import data_loader 

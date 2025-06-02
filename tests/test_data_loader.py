@@ -11,12 +11,12 @@ from dotenv import load_dotenv
 # Add the src directory to the path so we can import the modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.utils_data_loader import (
+from src.utils.data_loader import (
     load_excel_data, 
     load_csv_data, 
     load_coverage_data, 
     export_to_excel_using_commcare_export,
-    load_commcare_data
+    get_du_dataframe_from_commcare_api as load_commcare_data
 )
 
 # Load environment variables from .env file

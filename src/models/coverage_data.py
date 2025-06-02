@@ -84,7 +84,7 @@ class CoverageData:
             return 0.0
         return (self.total_completed_dus / self.total_delivery_units) * 100
     
-    def _compute_metadata(self):
+    def _compute_metadata_from_delivery_unit_data(self):
         """Precompute metadata to avoid redundant processing"""
         # Unique service area IDs (sorted for consistency)
         self.unique_service_area_ids = sorted(list(self.service_areas.keys()), key=lambda x: x.zfill(10))
@@ -128,7 +128,11 @@ class CoverageData:
 
         # Pre-compute travel distances
         self.calculate_travel_distances()
-    
+
+    def _compute_metadata_from_service_delivery_data(self):
+        """Precompute metadata to avoid redundant processing, must be called after service delivery data is loaded"""
+        self._compute_du_completion_dates()
+
     def _compute_service_area_progress(self):
         """Pre-compute service area progress statistics"""
         self.service_area_progress = {}
@@ -171,6 +175,28 @@ class CoverageData:
                         checked_in_date > flw.last_du_checkin):
                         flw.last_du_checkin = checked_in_date
 
+    def _compute_du_completion_dates(self):
+        """Pre-compute DU completion dates"""
+        
+        for du in self.delivery_units.values():
+            if du.status == 'completed':
+                if du.delivery_count == 0:
+                    # this will be None or NaN if the DU was closed manually
+                    if pd.isna(du.checked_in_date) == False:
+                        du.computed_du_completion_date = pd.to_datetime(du.checked_in_date).to_pydatetime()
+                        #print(f"DU {du.id}: Using checked_in_date -> {du.computed_du_completion_date}")
+                    # else:
+                        #print(f"DU {du.id}: DU is marked as completed but has no deliveries and no checked_in_date")
+                else:
+                    if(len(du.service_points) != du.delivery_count):
+                        print(f"DU {du.id}: Service points count {len(du.service_points)} does not match delivery count {du.delivery_count}")
+                    #loop through the service_points and find the earliest date of a service delivery point
+                    for sp in du.service_points:
+                        sp_date: datetime = pd.to_datetime(sp.visit_date).to_pydatetime()
+                        if du.computed_du_completion_date is None or sp_date < du.computed_du_completion_date:
+                            du.computed_du_completion_date = sp_date  
+                    # print(f"DU {du.id}: From {len(du.service_points)} service points -> {du.computed_du_completion_date}")
+   
     def _compute_flw_service_area_stats(self):
         """Pre-compute FLW statistics per service area"""
         self.flw_service_area_stats = {}
@@ -464,15 +490,14 @@ class CoverageData:
             row_dict = row.to_dict()
             
             # Skip entries without WKT
-            if pd.isna(row_dict.get('WKT')) or str(row_dict.get('WKT', '')).strip() == '':
-                continue
-            
-            # Make sure caseid is used as the id
-            row_dict['du_id'] = row_dict.get('caseid', f"row_{idx}")
+            # if pd.isna(row_dict.get('WKT')) or str(row_dict.get('WKT', '')).strip() == '':
+                # continue
             
             # Create delivery unit
             du = DeliveryUnit.from_dict(row_dict)
-            data.delivery_units[du.id] = du
+            data.delivery_units[du.du_name] = du
+            # print(f"DU id: {du.id}" + " name: " + du.du_name)
+            
             created_count += 1
                 
             # Create or update service area
@@ -498,7 +523,7 @@ class CoverageData:
         print(f"Successfully created {created_count} delivery units across {len(data.service_areas)} service areas")
         
         # Precompute metadata
-        data._compute_metadata()
+        data._compute_metadata_from_delivery_unit_data()
         
         return data
     
@@ -510,6 +535,7 @@ class CoverageData:
         Args:
             delivery_units_df: DataFrame containing delivery units data that were loaded from a CommCare export or API call.
             This will fix mismatched column headings and make sure data is typed correctly.
+            This will chnage the value of the service_area_id to be a combination of the oa_id and sa_id
             This will replace "---", the null value in a CommCare export, with None
             This will manipulate the dataframe in place and return it.
         
@@ -519,6 +545,7 @@ class CoverageData:
         # Map column names
         delivery_units_df.rename(columns={
             'caseid': 'case_id',
+            'oa': 'oa_id',
             'service_area_number': 'service_area_id',
             'owner_id': 'flw_commcare_id',  # Ensure owner_id is mapped to flw_commcare_id
             'number' : 'du_number',
@@ -528,6 +555,9 @@ class CoverageData:
             'Surface Area (sq. meters)' : 'surface_area', #API column name
             'last_modified': 'last_modified_date',
         }, inplace=True)
+
+        # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
+        delivery_units_df = delivery_units_df.replace("---", None)
 
         # Check for several known columns
         required_columns = ['case_id', 'du_name', 'service_area', 'flw_commcare_id', 'WKT']
@@ -541,13 +571,15 @@ class CoverageData:
         dropped_data_count = len(delivery_units_df)
         delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna())].index, inplace=True)
         dropped_data_count = dropped_data_count - len(delivery_units_df)
-              
+
+        # Create new service_area_id that combines OA and SA
+        delivery_units_df['service_area_id'] = delivery_units_df['oa_id'].astype(str) + '-' + delivery_units_df['service_area_id'].astype(str)
+
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
         print(f"Found {distinct_service_areas} distinct service areas in the data. Dropping {dropped_data_count} rows with missing service area ID (likely test data).")
     
-        # Replace all "---" values with None throughout the entire dataframe,"---" is the null value in a CommCare export
-        delivery_units_df = delivery_units_df.replace("---", None)
+
         
         return delivery_units_df
     
@@ -580,42 +612,47 @@ class CoverageData:
         # Create service delivery points
         for _, row in service_df.iterrows():
             row_dict = row.to_dict()
-            try:
-                point = ServiceDeliveryPoint.from_dict(row_dict)
-                self.service_points.append(point)
+            
+            point = ServiceDeliveryPoint.from_dict(row_dict)
+            self.service_points.append(point)
+            
+            # Associate service point with delivery unit based on du_name
+            du = self.delivery_units.get(point.du_name)
+            if du:
+                du.service_points.append(point)
+            else:
+                raise ValueError(f"Delivery unit not found for service point: {point.du_name}")
+            
+            # Add to the FLW CommCare ID to Name mapping if both values are present
+            if point.flw_commcare_id and point.flw_name:
+                self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                 
-                # Add to the FLW CommCare ID to Name mapping if both values are present
-                if point.flw_commcare_id and point.flw_name:
-                    self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
-                    
-                    # If this FLW exists in our FLW list, update its name too
-                    if point.flw_commcare_id in self.flws:
-                        self.flws[point.flw_commcare_id].name = point.flw_name
-                        # Add the service point to this FLW's service_points list
-                        self.flws[point.flw_commcare_id].service_points.append(point)
+                # If this FLW exists in our FLW list, update its name too
+                if point.flw_commcare_id in self.flws:
+                    self.flws[point.flw_commcare_id].name = point.flw_name
+                    # Add the service point to this FLW's service_points list
+                    self.flws[point.flw_commcare_id].service_points.append(point)
+            
+            # Update FLW's active dates if visit_date is present
+            if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
+                visit_date = pd.to_datetime(point.visit_date).date()
+                flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
                 
-                # Update FLW's active dates if visit_date is present
-                if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
-                    visit_date = pd.to_datetime(point.visit_date).date()
-                    flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
+                if flw_id in self.flws:
+                    if visit_date not in self.flws[flw_id].dates_active:
+                        self.flws[flw_id].dates_active.append(visit_date)
                     
-                    if flw_id in self.flws:
-                        if visit_date not in self.flws[flw_id].dates_active:
-                            self.flws[flw_id].dates_active.append(visit_date)
+                    # Update first and last service delivery dates
+                    if (self.flws[flw_id].first_service_delivery_date is None or 
+                        visit_date < self.flws[flw_id].first_service_delivery_date):
+                        self.flws[flw_id].first_service_delivery_date = visit_date
                         
-                        # Update first and last service delivery dates
-                        if (self.flws[flw_id].first_service_delivery_date is None or 
-                            visit_date < self.flws[flw_id].first_service_delivery_date):
-                            self.flws[flw_id].first_service_delivery_date = visit_date
-                            
-                        if (self.flws[flw_id].last_service_delivery_date is None or 
-                            visit_date > self.flws[flw_id].last_service_delivery_date):
-                            self.flws[flw_id].last_service_delivery_date = visit_date
+                    if (self.flws[flw_id].last_service_delivery_date is None or 
+                        visit_date > self.flws[flw_id].last_service_delivery_date):
+                        self.flws[flw_id].last_service_delivery_date = visit_date
                 
-            except Exception as e:
-                print(f"Error creating service delivery point: {e}")
-                continue
-        
+        self._compute_metadata_from_service_delivery_data()
+
         # Set the opportunity name
         self.opportunity_name = service_df.iloc[0]['opportunity_name']
 

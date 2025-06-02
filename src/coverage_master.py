@@ -6,7 +6,7 @@ import webbrowser
 import json
 from datetime import datetime
 from dotenv import load_dotenv
-from . import utils_data_loader
+from .utils import data_loader
 from .models import CoverageData
 try:
     from .opportunity_comparison_statistics import create_opportunity_comparison_report
@@ -368,8 +368,38 @@ def main():
             print("Error: No CSV files found in the data directory.")
             return
         
-        csv_file = select_file(csv_files, "csv", args)
-        service_delivery_by_opportunity_df = utils_data_loader.load_service_delivery_df_by_opportunity(csv_file)
+        # csv_file = select_file(csv_files, "csv", args)
+        # service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_file)
+
+        # Use Superset API to get the service delivery data   
+        # Get Superset configuration from environment variables
+        superset_url = os.getenv('SUPERSET_URL')
+        superset_username = os.getenv('SUPERSET_USERNAME')
+        superset_password = os.getenv('SUPERSET_PASSWORD')
+        superset_query_id = os.getenv('SUPERSET_QUERY_ID')
+
+        # Validate environment variables
+        missing_vars = []
+        if not superset_url:
+            missing_vars.append('SUPERSET_URL')
+        if not superset_username:
+            missing_vars.append('SUPERSET_USERNAME')
+        if not superset_password:
+            missing_vars.append('SUPERSET_PASSWORD')
+        if not superset_query_id:
+            missing_vars.append('SUPERSET_QUERY_ID')
+
+        if missing_vars:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+        print("Loading Service Delivery Points from Superset API")
+        
+        service_delivery_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
+            superset_url, superset_username, superset_password, superset_query_id
+        )
+        
+        # Group by opportunity_name 
+        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_csv_dataframe(service_delivery_df)
 
         print("Loading Delivery Units from API, opportunity names found in CSV:")
         for key, value in service_delivery_by_opportunity_df.items():
@@ -385,7 +415,7 @@ def main():
             # Use mapped domain name if available, otherwise use opportunity name
             domain_name = opportunity_to_domain_mapping.get(opportunity_name)
             
-            coverage_data = utils_data_loader.get_coverage_data_from_du_api_and_service_dataframe(
+            coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
                 domain=domain_name,
                 user=user,
                 api_key=api_key,
@@ -425,7 +455,7 @@ def main():
         
         # Load the data using the CoverageData model
         print("\nLoading data from input files...")
-        coverage_data = utils_data_loader.get_coverage_data_from_excel_and_csv(excel_file, csv_file)
+        coverage_data = data_loader.get_coverage_data_from_excel_and_csv(excel_file, csv_file)
         coverage_data.project_space = opportunity_to_domain_mapping.get(coverage_data.opportunity_name)
 
         # Use project_space if available, otherwise use opportunity_name as key

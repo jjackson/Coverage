@@ -1,17 +1,20 @@
-from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime
 from shapely import wkt
 from shapely.geometry import Polygon
 import pandas as pd
 
+if TYPE_CHECKING:
+    from .service_delivery_point import ServiceDeliveryPoint
+
 
 @dataclass
 class DeliveryUnit:
     """Delivery Unit Model"""
-    id: str
-    du_name: str
-    service_area_id: str
+    id: str #the case_id from CommCare
+    du_name: str #the human alphanumeric Dimagi generates to name the delivery unit
+    service_area_id: str #formatted as oa_id-sa_id, sa_id is unique within an oppurtunity area but can be repeated across oppurtunity areas
     flw_commcare_id: str  # FLW/owner CommCare ID
     status: str  # completed, visited, unvisited represented as None
     wkt: str
@@ -22,9 +25,11 @@ class DeliveryUnit:
     du_checkout_remark: str = None
     checked_out_date: str = None
     checked_in_date: str = None
-    centroid: Optional[tuple] = None
-    last_modified_date: Optional[datetime] = None
-    
+    centroid: tuple = None
+    last_modified_date: datetime = None
+    computed_du_completion_date: datetime = None
+    service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
+
     @property
     def geometry(self) -> Polygon:
         """Convert WKT to Shapely geometry"""
@@ -45,12 +50,10 @@ class DeliveryUnit:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeliveryUnit':
         """Create a DeliveryUnit from a dictionary"""
-        # Extract required fields with defaults
-        du_id = str(data.get('du_id', data.get('caseid', '')))
         
-        # Handle potentially missing or NaN values
-        du_name_val = data.get('du_name', '')
-        du_name = str(du_name_val) if not pd.isna(du_name_val) else ''
+        # Extract required fields with defaults
+        du_id = data.get('case_id')
+        du_name = data.get('du_name')
         
         service_area_id = str(data.get('service_area_id', ''))
         

@@ -12,6 +12,7 @@ class ServiceDeliveryPoint:
     flw_id: str
     flw_name: str
     flw_commcare_id: Optional[str] = None
+    flw_cc_username: Optional[str] = None
     status: Optional[str] = None
     du_name: Optional[str] = None
     flagged: Optional[bool] = None

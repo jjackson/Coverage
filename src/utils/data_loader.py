@@ -182,41 +182,41 @@ def create_points_geo_dataframe(df: pd.DataFrame,
     return gdf
 
 
-def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = None) -> CoverageData:
-    """
-    Load coverage data from Excel and optionally CSV files.
+# def load_coverage_data(excel_file: str, service_delivery_csv: Optional[str] = None) -> CoverageData:
+#     """
+#     Load coverage data from Excel and optionally CSV files.
     
-    This is a wrapper around CoverageData.from_excel_and_csv that provides additional error handling
-    and validation.
+#     This is a wrapper around CoverageData.from_excel_and_csv that provides additional error handling
+#     and validation.
     
-    Args:
-        excel_file: Path to Excel file with delivery units data
-        service_delivery_csv: Optional path to CSV file with service delivery points
+#     Args:
+#         excel_file: Path to Excel file with delivery units data
+#         service_delivery_csv: Optional path to CSV file with service delivery points
         
-    Returns:
-        Loaded CoverageData object
-    """
-    if not os.path.exists(excel_file):
-        raise FileNotFoundError(f"Excel file not found: {excel_file}")
+#     Returns:
+#         Loaded CoverageData object
+#     """
+#     if not os.path.exists(excel_file):
+#         raise FileNotFoundError(f"Excel file not found: {excel_file}")
     
-    if service_delivery_csv and not os.path.exists(service_delivery_csv):
-        raise FileNotFoundError(f"Service delivery CSV file not found: {service_delivery_csv}")
+#     if service_delivery_csv and not os.path.exists(service_delivery_csv):
+#         raise FileNotFoundError(f"Service delivery CSV file not found: {service_delivery_csv}")
     
-    try:
-        # Use the CoverageData.from_excel_and_csv method to load the data
-        coverage_data = CoverageData.from_excel_and_csv(excel_file, service_delivery_csv)
+#     try:
+#         # Use the CoverageData.from_excel_and_csv method to load the data
+#         coverage_data = CoverageData.from_excel_and_csv(excel_file, service_delivery_csv)
         
-        # Perform basic validation
-        if not coverage_data.delivery_units:
-            print("Warning: No delivery units were loaded from the Excel file.")
+#         # Perform basic validation
+#         if not coverage_data.delivery_units:
+#             print("Warning: No delivery units were loaded from the Excel file.")
         
-        if service_delivery_csv and not coverage_data.service_points:
-            print("Warning: No service delivery points were loaded from the CSV file.")
+#         if service_delivery_csv and not coverage_data.service_points:
+#             print("Warning: No service delivery points were loaded from the CSV file.")
         
-        return coverage_data
+#         return coverage_data
     
-    except Exception as e:
-        raise RuntimeError(f"Error loading coverage data: {str(e)}") 
+#     except Exception as e:
+#         raise RuntimeError(f"Error loading coverage data: {str(e)}") 
 
 
 def get_du_dataframe_from_commcare_api(domain: str, 
@@ -567,7 +567,7 @@ def export_to_excel_using_commcare_export(
     print(f"Successfully exported data to {output_file_path}")
     return output_file_path
 
-def load_service_delivery_df_by_opportunity(csv_file: str) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity_from_csv(csv_file: str) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from CSV and group by unique opportunity_name values.
     
@@ -594,27 +594,28 @@ def load_service_delivery_df_by_opportunity(csv_file: str) -> Dict[str, pd.DataF
     if 'opportunity_name' not in df.columns:
         raise ValueError("CSV file must contain an 'opportunity_name' column")
     
-    # Group by opportunity_name and create dictionary of DataFrames
-    opportunity_groups = {}
+    return group_service_delivery_df_by_opportunity(df)
+    # # Group by opportunity_name and create dictionary of DataFrames
+    # opportunity_groups = {}
     
-    # Get unique opportunity names (excluding NaN values)
-    unique_opportunities = df['opportunity_name'].dropna().unique()
+    # # Get unique opportunity names (excluding NaN values)
+    # unique_opportunities = df['opportunity_name'].dropna().unique()
     
-    for opportunity in unique_opportunities:
-        # Filter data for this opportunity
-        opportunity_df = df[df['opportunity_name'] == opportunity].copy()
+    # for opportunity in unique_opportunities:
+    #     # Filter data for this opportunity
+    #     opportunity_df = df[df['opportunity_name'] == opportunity].copy()
         
-        # Reset index for clean DataFrame
-        opportunity_df.reset_index(drop=True, inplace=True)
+    #     # Reset index for clean DataFrame
+    #     opportunity_df.reset_index(drop=True, inplace=True)
         
-        opportunity_groups[opportunity] = opportunity_df
+    #     opportunity_groups[opportunity] = opportunity_df
     
-    # Check for rows with missing opportunity_name and throw error if any exist
-    missing_opportunity_count = df['opportunity_name'].isna().sum()
-    if missing_opportunity_count > 0:
-        raise ValueError(f"Found {missing_opportunity_count} rows with missing 'opportunity_name' values. All rows must have a valid opportunity_name.")
+    # # Check for rows with missing opportunity_name and throw error if any exist
+    # missing_opportunity_count = df['opportunity_name'].isna().sum()
+    # if missing_opportunity_count > 0:
+    #     raise ValueError(f"Found {missing_opportunity_count} rows with missing 'opportunity_name' values. All rows must have a valid opportunity_name.")
     
-    return opportunity_groups
+    # return opportunity_groups
 
 def get_coverage_data_from_du_api_and_service_dataframe(domain: str, user: str, api_key: str, service_df: pd.DataFrame) -> 'CoverageData':
     """
@@ -638,13 +639,12 @@ def get_coverage_data_from_du_api_and_service_dataframe(domain: str, user: str, 
     
     return data
 
-def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
+def get_coverage_data_from_excel(excel_file: str) -> 'CoverageData':
     """
-    Load coverage data from Excel and CSV files
+    Load coverage data from Excel
     
     Args:
         excel_file: Path to the DU Export Excel file
-        service_delivery_csv: Optional path to service delivery GPS coordinates CSV
     """
     data = CoverageData()
     
@@ -654,12 +654,7 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
     
     # Use the new from_commcare method to process the dataframe
     data = CoverageData.load_delivery_units_from_df(delivery_units_df)
-    
-    # Load service delivery data if provided
-    if service_delivery_csv:
-        service_df = data.load_service_delivery_dataframe_from_csv(service_delivery_csv)
-        data.load_service_delivery_from_datafame(service_df)
-    
+
     return data
 
 def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None, 
@@ -943,12 +938,12 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         if 'opportunity_name' not in df.columns:
             raise ValueError("CSV data from Superset must contain an 'opportunity_name' column")
         
-        return df
+        return group_service_delivery_df_by_opportunity(df)
         
     except Exception as e:
         raise RuntimeError(f"Error loading service delivery data from Superset: {str(e)}")
 
-def load_service_delivery_df_by_opportunity_from_csv_dataframe(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+def group_service_delivery_df_by_opportunity(df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     """
     Group service delivery DataFrame by unique opportunity_name values.
     

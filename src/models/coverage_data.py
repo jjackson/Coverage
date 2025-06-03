@@ -506,7 +506,11 @@ class CoverageData:
         dropped_data_count = dropped_data_count - len(delivery_units_df)
 
         # Create new service_area_id that combines OA and SA
-        delivery_units_df['service_area_id'] = delivery_units_df['oa_id'].astype(str) + '-' + delivery_units_df['service_area_id'].astype(str)
+        # Convert to int first to remove decimal places from floats (e.g., 250.0 -> 250)
+        delivery_units_df['service_area_id'] = (
+            delivery_units_df['oa_id'].fillna(0).astype(int).astype(str) + '-' + 
+            delivery_units_df['service_area_id'].fillna(0).astype(int).astype(str)
+        )
 
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
@@ -582,20 +586,6 @@ class CoverageData:
         data._compute_metadata_from_delivery_unit_data()
         
         return data
-
-    def load_service_delivery_dataframe_from_csv(self, service_delivery_csv: str) -> None:
-        """
-        Load service delivery points from a CSV file
-            
-        Args:
-            service_delivery_csv: Path to service delivery GPS coordinates CSV
-        """
-        if not service_delivery_csv or not pd.io.common.file_exists(service_delivery_csv):
-            print(f"Service delivery CSV file not found: {service_delivery_csv}")
-            return
-            
-        service_df = pd.read_csv(service_delivery_csv)
-        return service_df
     
     def load_service_delivery_from_datafame(self, service_df: pd.DataFrame) -> None:
         """
@@ -623,13 +613,15 @@ class CoverageData:
             else:
                 raise ValueError(f"Delivery unit not found for service point: {point.du_name}")
             
-            # Add to the FLW CommCare ID to Name mapping if both values are present
+            # Some FLW data is not available when FLW object is created in delivery unit loading, populate here.
+            # Add to the FLW CommCare ID to Name mapping if both values are present.
             if point.flw_commcare_id and point.flw_name:
                 self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                 
                 # If this FLW exists in our FLW list, update its name too
                 if point.flw_commcare_id in self.flws:
                     self.flws[point.flw_commcare_id].name = point.flw_name
+                    self.flws[point.flw_commcare_id].cc_username = point.flw_cc_username
                     # Add the service point to this FLW's service_points list
                     self.flws[point.flw_commcare_id].service_points.append(point)
             

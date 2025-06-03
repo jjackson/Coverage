@@ -13,12 +13,14 @@ import json
 from .models.coverage_data import CoverageData
 from .models.delivery_unit import DeliveryUnit
 
-def create_opportunity_comparison_report(coverage_data_objects: Dict[str, CoverageData]) -> str:
+def create_opportunity_comparison_report(coverage_data_objects: Dict[str, CoverageData], clumping_ratio: float = 10.0, lookback_days: int = 10) -> str:
     """
     Generate a comparative statistics report for multiple CoverageData objects.
     
     Args:
         coverage_data_objects: Dictionary mapping project keys to CoverageData objects
+        clumping_ratio: Ratio threshold for identifying clumped DUs (services_count / building_count)
+        lookback_days: Number of days to look back for unique FLW calculation
         
     Returns:
         str: Filename of the generated HTML report
@@ -33,10 +35,10 @@ def create_opportunity_comparison_report(coverage_data_objects: Dict[str, Covera
     comparison_stats = _generate_comparison_statistics(coverage_data_objects)
     
     # Generate progress data for charts
-    progress_data = _generate_progress_data(coverage_data_objects)
+    progress_data = _generate_progress_data(coverage_data_objects, clumping_ratio, lookback_days)
     
     # Generate HTML report
-    html_content = _generate_html_report(comparison_stats, coverage_data_objects, progress_data)
+    html_content = _generate_html_report(comparison_stats, coverage_data_objects, progress_data, lookback_days)
     
     # Write to file
     filename = "opportunity_comparison_report.html"
@@ -98,12 +100,14 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
     return stats
 
 
-def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> Dict[str, Any]:
+def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clumping_ratio: float = 10.0, lookback_days: int = 10) -> Dict[str, Any]:
     """
     Generate progress data for charting service deliveries and completed DUs over time.
     
     Args:
         coverage_data_objects: Dictionary mapping project keys to CoverageData objects
+        clumping_ratio: Ratio threshold for identifying clumped DUs (services_count / building_count)
+        lookback_days: Number of days to look back for unique FLW calculation
         
     Returns:
         Dict containing progress data for charts
@@ -112,7 +116,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
         'service_delivery_progress': {},
         'du_completion_progress': {},
         'cumulative_service_delivery': {},
-        'cumulative_du_completion': {}
+        'cumulative_du_completion': {},
+        'clumped_dus_progress': {}
     }
     
     for project_key, coverage_data in coverage_data_objects.items():
@@ -127,9 +132,11 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
                     service_delivery_by_day[visit_date] = 0
                 service_delivery_by_day[visit_date] += 1
         
-        # Process DU completion data
+        # Process DU completion data and identify clumped DUs
         # JJ: When this was first written was having a lot of issues with the NaT and str issues, I think now resolved.-
         du_completion_by_day = {}
+        clumped_dus_by_day = {}
+        
         for du in coverage_data.delivery_units.values():
             if du.status == 'completed':
                 if isinstance(du.computed_du_completion_date, datetime):
@@ -138,23 +145,23 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
                     if pd.isna(completion_date):
                         #print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")
                         continue
+                    
+                    # Track regular DU completions
                     if completion_date not in du_completion_by_day:
                         du_completion_by_day[completion_date] = 0
                     du_completion_by_day[completion_date] += 1
-                # elif isinstance(du.computed_du_completion_date, str):
-                #     print(f"DU {du.du_name} has a computed completion date that is a string: {du.computed_du_completion_date}")
-                #     try:
-                #         parsed_datetime = pd.to_datetime(du.computed_du_completion_date)
-                #         # Check if the parsed datetime is not NaT (Not a Time)
-                #         if pd.notna(parsed_datetime):
-                #             completion_date = parsed_datetime.date()
-                #             if completion_date not in du_completion_by_day:
-                #                 du_completion_by_day[completion_date] = 0
-                #             du_completion_by_day[completion_date] += 1
-                #         else:
-                #             print(f"DU {du.du_name} has an invalid computed completion date (NaT), ignoring this DU in opportunity statistics")
-                #     except Exception as e:
-                #         print(f"Error converting computed completion date for DU {du.du_name}: {e}, ignoring this DU in opportunity statistics")
+                    
+                    # Check if this is a clumped DU
+                    is_clumped = False
+                    clumping_value = len(du.service_points) / du.buildings
+                    if clumping_value > clumping_ratio:
+                        is_clumped = True
+
+                    # Track clumped DU completions
+                    if is_clumped:
+                        if completion_date not in clumped_dus_by_day:
+                            clumped_dus_by_day[completion_date] = []
+                        clumped_dus_by_day[completion_date].append(du)
                 else:
                     #print(f"DU {du.du_name} is marked as completed but has no computed completion date, ignoring this DU in oppurtunity statistics")    
                     continue
@@ -186,8 +193,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
             progress_data['service_delivery_progress'][opportunity_name] = service_progress
             progress_data['cumulative_service_delivery'][opportunity_name] = service_progress
         
+        first_completion_date = min(du_completion_by_day.keys())
         if du_completion_by_day:
-            first_completion_date = min(du_completion_by_day.keys())
             du_progress = []
             cumulative_dus = 0
             
@@ -211,11 +218,54 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData]) -> D
             
             progress_data['du_completion_progress'][opportunity_name] = du_progress
             progress_data['cumulative_du_completion'][opportunity_name] = du_progress
+        
+        # Process clumped DUs progress data
+        if clumped_dus_by_day:
+            clumped_progress = []
+            cumulative_clumped = 0
+            
+            # Create a complete date range
+            if clumped_dus_by_day:
+                last_clumped_date = max(clumped_dus_by_day.keys())
+                current_date = first_completion_date
+                while current_date <= last_clumped_date:
+                    day_number = (current_date - first_completion_date).days
+                    daily_clumped_dus = clumped_dus_by_day.get(current_date, [])
+                    daily_count = len(daily_clumped_dus)
+                    cumulative_clumped += daily_count
+                    
+                    # Calculate unique FLWs who completed clumped DUs in the past N days
+                    lookback_start_date = current_date - pd.Timedelta(days=lookback_days-1)
+                    unique_flws_in_lookback = set()
+                    
+                    # Look through all dates in the lookback window
+                    check_date = lookback_start_date
+                    while check_date <= current_date:
+                        if check_date in clumped_dus_by_day:
+                            for clumped_du in clumped_dus_by_day[check_date]:
+                                # Get FLW associated with this DU
+                                flw = coverage_data.flws[clumped_du.flw_commcare_id]
+                                unique_flws_in_lookback.add(flw.id)
+                        check_date += pd.Timedelta(days=1)
+                    
+                    clumped_progress.append({
+                        'day': day_number,
+                        'daily_count': daily_count,
+                        'cumulative_count': cumulative_clumped,
+                        'clumped_dus': daily_clumped_dus,
+                        'unique_flws_in_lookback': list(unique_flws_in_lookback),
+                        'unique_flws_count_in_lookback': len(unique_flws_in_lookback)
+                    })
+                    
+                    current_date = pd.to_datetime(current_date) + pd.Timedelta(days=1)
+                    current_date = current_date.date()
+            
+            progress_data['clumped_dus_progress'][opportunity_name] = clumped_progress
     
     return progress_data
 
 
-def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_objects: Dict[str, CoverageData], progress_data: Dict[str, Any]) -> str:
+def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_objects: Dict[str, CoverageData], progress_data: Dict[str, Any], lookback_days: int = 10) -> str:
     """
     Generate HTML content for the comparison report.
     
@@ -223,6 +273,7 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
         comparison_stats: Dictionary containing comparison statistics
         coverage_data_objects: Dictionary mapping project keys to CoverageData objects
         progress_data: Dictionary containing progress data for charts
+        lookback_days: Number of days to look back for unique FLW calculation
         
     Returns:
         str: HTML content for the report
@@ -441,6 +492,10 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 <div class="chart-title">Cumulative DU Completions</div>
                 <div id="cumulative-du-chart" style="height: 400px;"></div>
             </div>
+            <div class="chart-item">
+                <div class="chart-title">FLWs clumping in trailing {lookback_days} days</div>
+                <div id="flws-clumping-chart" style="height: 400px;"></div>
+            </div>
         </div>
         
         <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
@@ -575,12 +630,44 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             Plotly.newPlot('cumulative-du-chart', traces, layout, {{responsive: true}});
         }}
         
+        // Create FLWs clumping chart
+        function createFLWsClumpingChart() {{
+            const traces = [];
+            let colorIndex = 0;
+            
+            for (const [opportunity, data] of Object.entries(progressData.clumped_dus_progress)) {{
+                if (data && data.length > 0) {{
+                    traces.push({{
+                        x: data.map(d => d.day),
+                        y: data.map(d => d.unique_flws_count_in_lookback),
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: opportunity,
+                        line: {{ color: colors[colorIndex % colors.length] }},
+                        marker: {{ size: 6 }}
+                    }});
+                    colorIndex++;
+                }}
+            }}
+            
+            const layout = {{
+                xaxis: {{ title: 'Days Since First Active Day' }},
+                yaxis: {{ title: 'Number of Unique FLWs' }},
+                hovermode: 'x unified',
+                showlegend: true,
+                margin: {{ l: 50, r: 50, t: 30, b: 50 }}
+            }};
+            
+            Plotly.newPlot('flws-clumping-chart', traces, layout, {{responsive: true}});
+        }}
+        
         // Initialize all charts when page loads
         document.addEventListener('DOMContentLoaded', function() {{
             createDailyServiceChart();
             createDailyDUChart();
             createCumulativeServiceChart();
             createCumulativeDUChart();
+            createFLWsClumpingChart();
         }});
     </script>
 </body>

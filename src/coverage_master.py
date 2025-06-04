@@ -5,6 +5,7 @@ import subprocess
 import webbrowser
 import json
 from datetime import datetime
+from typing import Dict
 from dotenv import load_dotenv
 from .utils import data_loader
 from .models import CoverageData
@@ -304,7 +305,7 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
     
     return "index.html"
 
-def load_opportunity_domain_mapping():
+def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
     mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
     

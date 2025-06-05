@@ -25,7 +25,7 @@ The system supports two main modes of operation:
 
 ```mermaid
 graph TD
-    A[Environment Variables] --> B[coverage_master.py main()]
+    A[Environment Variables] --> B[coverage_master.py main]
     B --> C{USE_API=True?}
     
     C -->|Yes| D[Load Service Delivery from Superset]
@@ -40,8 +40,8 @@ graph TD
     H --> I[Fetch Delivery Units from CommCare API]
     H --> J[Create CoverageData Object]
     
-    I --> K[CoverageData.load_delivery_units_from_df()]
-    J --> L[CoverageData.load_service_delivery_from_dataframe()]
+    I --> K[CoverageData.load_delivery_units_from_df]
+    J --> L[CoverageData.load_service_delivery_from_dataframe]
     
     K --> M[Process Delivery Units]
     L --> M

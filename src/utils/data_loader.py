@@ -15,6 +15,7 @@ import time
 import json
 from dotenv import load_dotenv
 from src.models import CoverageData
+from functools import lru_cache
 
 def get_available_files(directory: str = 'data', file_type: str = None) -> List[str]:
     """
@@ -638,6 +639,7 @@ def get_coverage_data_from_du_api_and_service_dataframe(domain: str, user: str, 
     
     return data
 
+@lru_cache(maxsize=None) #stop reloading data during the same session
 def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: Optional[str] = None) -> 'CoverageData':
     """
     Load coverage data from Excel and CSV files

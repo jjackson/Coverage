@@ -5,11 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="96705d45-a7e7-4aac-bc51-38205902e1c9" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/run_flw_dashboard.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/flw_summary_dashboard.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/org_summary.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/coverage_master.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/coverage_master.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/create_delivery_map.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/create_delivery_map.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/flw_summary_dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/flw_summary_dashboard.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/org_summary.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/org_summary.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/data_loader.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -55,6 +54,7 @@
   "keyToString": {
     "Python.delivery_unit.executor": "Run",
     "Python.opportunity_comparison_statistics_sr.executor": "Run",
+    "Python.org_summary.executor": "Run",
     "Python.run_coverage.executor": "Run",
     "Python.run_flw_dashboard.executor": "Run",
     "Python.run_report_generator.executor": "Run",

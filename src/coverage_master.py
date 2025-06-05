@@ -8,6 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from .utils import data_loader
 from .models import CoverageData
+
 try:
     from .opportunity_comparison_statistics import create_opportunity_comparison_report
 except ImportError:
@@ -520,7 +521,8 @@ def main():
     # Generate main index HTML
     print("\nCreating main dashboard index...")
     generate_index_html(output_dir, project_outputs, comparison_report_file)
-    
+
+
     # Construct the full path to the index.html file
     full_path = os.path.join(os.getcwd(), output_dir, "index.html")
     

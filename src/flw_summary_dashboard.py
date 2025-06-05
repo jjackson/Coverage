@@ -188,6 +188,55 @@ def create_flw_dashboard(coverage_data_objects):
 
     ]
 
+    import plotly.express as px
+
+    # Combine all service data
+    all_service_dfs = []
+    for org, cov in coverage_data_objects.items():
+        df = cov.create_service_points_dataframe()
+        if df is not None and not df.empty:
+            df = df[df['visit_date'].notna()]
+            df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
+            df['opportunity'] = org
+            all_service_dfs.append(df[['visit_day', 'flw_id', 'du_name', 'opportunity']])
+
+    service_timeline_df = pd.concat(all_service_dfs)
+
+    # Group by visit_day and opportunity
+    daily_stats = service_timeline_df.groupby(['visit_day', 'opportunity']).agg(
+        total_forms=('flw_id', 'count'),
+        total_dus=('du_name', pd.Series.nunique)
+    ).reset_index()
+
+    # Sort for rolling window
+    daily_stats = daily_stats.sort_values(by=['opportunity', 'visit_day'])
+
+    # Rolling 7-day average
+    daily_stats['forms_7d_avg'] = (
+        daily_stats.groupby('opportunity')['total_forms'].transform(lambda x: x.rolling(7, min_periods=1).mean())
+    )
+    daily_stats['dus_7d_avg'] = (
+        daily_stats.groupby('opportunity')['total_dus'].transform(lambda x: x.rolling(7, min_periods=1).mean())
+    )
+
+    # Plotly line chart (Forms)
+    forms_fig = px.line(
+        daily_stats,
+        x='visit_day',
+        y='forms_7d_avg',
+        color='opportunity',
+        title='7-Day Rolling Average of Forms Submitted'
+    )
+
+    # Plotly line chart (DUs)
+    dus_fig = px.line(
+        daily_stats,
+        x='visit_day',
+        y='dus_7d_avg',
+        color='opportunity',
+        title='7-Day Rolling Average of DUs Visited'
+    )
+
     app.layout = html.Div([
         html.H1("FLW Summary Dashboard"),
         dcc.Dropdown(
@@ -222,8 +271,15 @@ def create_flw_dashboard(coverage_data_objects):
             style_data={
                 'border': '1px solid #dee2e6'
             }
-        )
+        ),
+        html.Div([
+            html.H3("Rolling 7-Day Averages", style={'marginTop': '40px'}),
+            dcc.Graph(id='forms-rolling-chart'),
+            dcc.Graph(id='dus-rolling-chart')
+        ])
     ])
+
+
 
     app.index_string = '''
     <!DOCTYPE html>
@@ -261,8 +317,11 @@ def create_flw_dashboard(coverage_data_objects):
     '''
 
     @app.callback(
+
+Output('topline-metrics', 'children'),
         Output('flw-summary-table', 'data'),
-        Output('topline-metrics', 'children'),
+        Output('forms-rolling-chart', 'figure'),
+        Output('dus-rolling-chart', 'figure'),
         Input('org-selector', 'value')
     )
     def update_dashboard(selected_orgs):
@@ -310,7 +369,8 @@ def create_flw_dashboard(coverage_data_objects):
             })
         ], style={'fontFamily': 'Arial, sans-serif', 'padding': '40px'})
 
-        return df.to_dict('records'), topline
+        df_records = df.to_dict('records') if not df.empty else []
+        return topline, df_records, forms_fig, dus_fig
 
     app.run(debug=True, port=8080)
 

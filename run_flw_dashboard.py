@@ -2,63 +2,60 @@
 
 import os
 from src.utils import data_loader
-from src.flw_summary_dashboard import create_flw_dashboard
 from src.coverage_master import load_opportunity_domain_mapping
+from src.flw_summary_dashboard import create_flw_dashboard
 
-# Load environment mapping
-opportunity_to_domain_mapping = load_opportunity_domain_mapping()
+def load_coverage_data_objects():
+    opportunity_to_domain_mapping = load_opportunity_domain_mapping()
 
-# Define paths
+    # Get latest CSV
+    def get_latest_csv_file(folder="data"):
+        csv_files = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".csv")]
+        if not csv_files:
+            raise FileNotFoundError("No CSV files found in 'data/' folder.")
 
-#Get the most recent CSV file in the 'data' folder
-def get_latest_csv_file(folder="data"):
-    csv_files = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".csv")]
-    if not csv_files:
-        raise FileNotFoundError("No CSV files found in 'data/' folder.")
-    return max(csv_files, key=os.path.getmtime)
+        # Sort by modification time descending, return first
+        csv_files.sort(key=os.path.getmtime, reverse=True)
+        latest_file = csv_files[0]
+        print(f"📁 Latest CSV file found: {latest_file}")
+        return latest_file
 
-csv_path = get_latest_csv_file()
-print(f"📁 Using latest CSV file: {csv_path}")
+    csv_path = get_latest_csv_file()
+    excel_files = data_loader.get_available_files("data", "xlsx")
+    service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_path)
 
-#Get all the excel files
-excel_files = data_loader.get_available_files("data", "xlsx")
+    coverage_data_objects = {}
 
-# Load service delivery grouped by opportunity
-service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_path)
+    for opportunity_name, service_df in service_delivery_by_opportunity_df.items():
+        domain_name = opportunity_to_domain_mapping.get(opportunity_name)
+        if not domain_name:
+            continue
 
-coverage_data_objects = {}
+        matching_excels = [f for f in excel_files if domain_name in f]
+        if matching_excels:
+            # Sort matching files by modification time, latest first
+            matching_excels.sort(key=os.path.getmtime, reverse=True)
+            matching_excel = matching_excels[0]
+        else:
+            matching_excel = None
+        if not matching_excel:
+            continue
 
-for opportunity_name, service_df in service_delivery_by_opportunity_df.items():
-    print(f"\n🔍 Processing opportunity: {opportunity_name}")
-    domain_name = opportunity_to_domain_mapping.get(opportunity_name)
+        coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel, None)
+        coverage_data.load_service_delivery_from_datafame(service_df)
+        coverage_data.project_space = domain_name
+        coverage_data.opportunity_name = opportunity_name
 
-    if not domain_name:
-        print(f"  ⚠️ Skipping: No domain mapping found for '{opportunity_name}'")
-        continue
+        coverage_data_objects[domain_name] = coverage_data
 
-    # Try to find a matching Excel file
-    matching_excel = None
-    for excel_file in excel_files:
-        if domain_name in excel_file:
-            matching_excel = excel_file
-            break
+    return coverage_data_objects
 
-    if not matching_excel:
-        print(f"  ⚠️ Skipping: No Excel file found containing domain '{domain_name}'")
-        continue
 
-    print(f"  ✅ Found Excel file: {matching_excel}")
+if __name__ == "__main__":
+    coverage_data_objects = load_coverage_data_objects()
 
-    coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel, None)
-    coverage_data.load_service_delivery_from_datafame(service_df)
-    coverage_data.project_space = domain_name
-    coverage_data.opportunity_name = opportunity_name
-
-    coverage_data_objects[domain_name] = coverage_data
-
-# Launch the dashboard
-if coverage_data_objects:
-    print(f"\n🚀 Launching dashboard for {len(coverage_data_objects)} opportunities...")
-    create_flw_dashboard(coverage_data_objects)
-else:
-    print("❌ No valid opportunities found.")
+    if coverage_data_objects:
+        print(f"\n🚀 Launching dashboard for {len(coverage_data_objects)} opportunities...")
+        create_flw_dashboard(coverage_data_objects)
+    else:
+        print("❌ No valid opportunities found.")

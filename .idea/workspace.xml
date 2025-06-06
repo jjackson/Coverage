@@ -5,8 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="96705d45-a7e7-4aac-bc51-38205902e1c9" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/flw_summary_dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/flw_summary_dashboard.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/run_flw_dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/run_flw_dashboard.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,10 +51,13 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Python.create_statistics.executor": "Run",
     "Python.delivery_unit.executor": "Run",
+    "Python.extract_gps_pts.executor": "Run",
     "Python.flw_summary_dashboard.executor": "Run",
     "Python.opportunity_comparison_statistics_sr.executor": "Run",
     "Python.org_summary.executor": "Run",
+    "Python.report_generator_gui.executor": "Run",
     "Python.run_coverage.executor": "Run",
     "Python.run_flw_dashboard.executor": "Run",
     "Python.run_report_generator.executor": "Run",

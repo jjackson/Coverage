@@ -40,8 +40,8 @@ class CoverageData:
         self.flw_service_area_stats: Dict[str, Dict[str, Any]] = {}
         self.service_area_building_density: Dict[str, float] = {}
         self.service_area_progress: Dict[str, Dict[str, Any]] = {}
-        self.travel_distances: Dict[str, float] = {}  # Service Area ID -> distance in km
-    
+        self.travel_distances: Dict[str, float] = {}
+        
     @property
     def total_delivery_units(self) -> int:
         """Get the total number of delivery units"""
@@ -127,7 +127,7 @@ class CoverageData:
         self._compute_additional_flw_active_dates_from_delivery_units()
 
         # Pre-compute travel distances
-        self.calculate_travel_distances()
+        self._compute_service_area_travel_distances()
 
     def _compute_metadata_from_service_delivery_data(self):
         """Precompute metadata to avoid redundant processing, must be called after service delivery data is loaded"""
@@ -251,6 +251,25 @@ class CoverageData:
                     'surface_area': stats['surface_area'],
                     'density': density
                 }
+
+    def _compute_service_area_travel_distances(self):
+        """
+        Calculate travel distances between centroids in each service area
+        using the Traveling Salesman Problem (TSP) approach with nearest neighbor algorithm
+        """
+        # Skip if already calculated
+        if self.travel_distances:
+            return
+            
+        self.travel_distances = {}
+        
+        # Process each service area
+        for sa_id, service_area in self.service_areas.items():
+            # Calculate travel distance for this service area
+            service_area.calculate_travel_distance()
+            
+            # Store result in the travel_distances dictionary
+            self.travel_distances[sa_id] = service_area.travel_distance
     
     def get_status_counts_by_flw(self) -> pd.DataFrame:
         """
@@ -365,101 +384,6 @@ class CoverageData:
         
         return pd.DataFrame(rows)
 
-    def calculate_travel_distances(self):
-        """
-        Calculate travel distances between centroids in each service area
-        using the Traveling Salesman Problem (TSP) approach with nearest neighbor algorithm
-        """
-        # Skip if already calculated
-        if self.travel_distances:
-            return
-            
-        self.travel_distances = {}
-        
-        # Process each service area
-        for sa_id, service_area in self.service_areas.items():
-            # Get valid centroids
-            centroids = []
-            for du in service_area.delivery_units:
-                if du.centroid is None:
-                    continue
-                    
-                # Parse centroid data
-                try:
-                    if isinstance(du.centroid, str):
-                        lat, lon = map(float, du.centroid.split())
-                        centroids.append((lat, lon))
-                    elif isinstance(du.centroid, (list, tuple)) and len(du.centroid) == 2:
-                        centroids.append(tuple(du.centroid))
-                except Exception:
-                    continue
-            
-            # Skip if insufficient points
-            if len(centroids) <= 1:
-                self.travel_distances[sa_id] = 0
-                continue
-            
-            try:
-                # Calculate distance matrix
-                n = len(centroids)
-                dist_matrix = np.zeros((n, n))
-                
-                # Build distance matrix (upper triangle)
-                for i in range(n):
-                    for j in range(i+1, n):
-                        try:
-                            dist = geodesic(centroids[i], centroids[j]).kilometers
-                            dist_matrix[i, j] = dist
-                            dist_matrix[j, i] = dist
-                        except Exception:
-                            dist_matrix[i, j] = 0
-                            dist_matrix[j, i] = 0
-                
-                # Apply nearest neighbor TSP algorithm
-                current = 0  # Start at first point
-                unvisited = set(range(1, n))
-                total_distance = 0
-                
-                # Visit each point, always choosing the nearest
-                while unvisited:
-                    nearest = min(unvisited, key=lambda x: dist_matrix[current, x])
-                    total_distance += dist_matrix[current, nearest]
-                    current = nearest
-                    unvisited.remove(nearest)
-                
-                # Return to start to complete the circuit
-                total_distance += dist_matrix[current, 0]
-                
-                # Store result
-                self.travel_distances[sa_id] = total_distance
-                
-            except Exception:
-                self.travel_distances[sa_id] = 0
-    
-    def get_travel_distances_by_flw(self) -> pd.DataFrame:
-        """
-        Get a DataFrame with travel distances by FLW
-        
-        Returns:
-            DataFrame with columns flw_name, total_distance
-        """
-        # Calculate travel distances if not already done
-        if not self.travel_distances:
-            self.calculate_travel_distances()
-        
-        # Map FLWs to their service areas and calculate total distance
-        flw_distances = {}
-        for flw_name, flw in self.flws.items():
-            total_distance = 0
-            for sa_id in flw.service_areas:
-                if sa_id in self.travel_distances:
-                    total_distance += self.travel_distances[sa_id]
-            flw_distances[flw_name] = total_distance
-        
-        # Convert to DataFrame
-        rows = [{'flw_name': flw, 'total_distance': distance} for flw, distance in flw_distances.items()]
-        return pd.DataFrame(rows)
-
     @classmethod
     def clean_du_dataframe(cls, delivery_units_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -506,7 +430,11 @@ class CoverageData:
         dropped_data_count = dropped_data_count - len(delivery_units_df)
 
         # Create new service_area_id that combines OA and SA
-        delivery_units_df['service_area_id'] = delivery_units_df['oa_id'].astype(str) + '-' + delivery_units_df['service_area_id'].astype(str)
+        # Convert to int first to remove decimal places from floats (e.g., 250.0 -> 250)
+        delivery_units_df['service_area_id'] = (
+            delivery_units_df['oa_id'].fillna(0).astype(int).astype(str) + '-' + 
+            delivery_units_df['service_area_id'].fillna(0).astype(int).astype(str)
+        )
 
         # Print distinct service area counts for debugging
         distinct_service_areas = delivery_units_df['service_area_id'].nunique()
@@ -582,20 +510,6 @@ class CoverageData:
         data._compute_metadata_from_delivery_unit_data()
         
         return data
-
-    def load_service_delivery_dataframe_from_csv(self, service_delivery_csv: str) -> None:
-        """
-        Load service delivery points from a CSV file
-            
-        Args:
-            service_delivery_csv: Path to service delivery GPS coordinates CSV
-        """
-        if not service_delivery_csv or not pd.io.common.file_exists(service_delivery_csv):
-            print(f"Service delivery CSV file not found: {service_delivery_csv}")
-            return
-            
-        service_df = pd.read_csv(service_delivery_csv)
-        return service_df
     
     def load_service_delivery_from_datafame(self, service_df: pd.DataFrame) -> None:
         """
@@ -623,13 +537,15 @@ class CoverageData:
             else:
                 raise ValueError(f"Delivery unit not found for service point: {point.du_name}")
             
-            # Add to the FLW CommCare ID to Name mapping if both values are present
+            # Some FLW data is not available when FLW object is created in delivery unit loading, populate here.
+            # Add to the FLW CommCare ID to Name mapping if both values are present.
             if point.flw_commcare_id and point.flw_name:
                 self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                 
                 # If this FLW exists in our FLW list, update its name too
                 if point.flw_commcare_id in self.flws:
                     self.flws[point.flw_commcare_id].name = point.flw_name
+                    self.flws[point.flw_commcare_id].cc_username = point.flw_cc_username
                     # Add the service point to this FLW's service_points list
                     self.flws[point.flw_commcare_id].service_points.append(point)
             

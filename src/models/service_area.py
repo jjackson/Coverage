@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, TYPE_CHECKING
+import numpy as np
+from geopy.distance import geodesic
 
 if TYPE_CHECKING:
     from .delivery_unit import DeliveryUnit
@@ -10,6 +12,63 @@ class ServiceArea:
     """Service Area Model"""
     id: str
     delivery_units: List['DeliveryUnit'] = field(default_factory=list)
+    travel_distance: float = field(default=0.0, init=False)
+    
+    def calculate_travel_distance(self) -> None:
+        """
+        Calculate travel distance between centroids in this service area
+        using the Traveling Salesman Problem (TSP) approach with nearest neighbor algorithm
+        """
+        # Get valid centroids
+        centroids = []
+        for du in self.delivery_units:
+            if du.centroid is None:
+                continue
+                
+            # Parse centroid data
+            try:
+                if isinstance(du.centroid, str):
+                    lat, lon = map(float, du.centroid.split())
+                    centroids.append((lat, lon))
+                elif isinstance(du.centroid, (list, tuple)) and len(du.centroid) == 2:
+                    centroids.append(tuple(du.centroid))
+            except Exception:
+                continue
+        
+        # Skip if insufficient points
+        if len(centroids) <= 1:
+            self.travel_distance = 0.0
+            return
+        
+        # Calculate distance matrix
+        n = len(centroids)
+        dist_matrix = np.zeros((n, n))
+        
+        # Build distance matrix (upper triangle)
+        for i in range(n):
+            for j in range(i+1, n):
+                try:
+                    dist = geodesic(centroids[i], centroids[j]).kilometers
+                    dist_matrix[i, j] = dist
+                    dist_matrix[j, i] = dist
+                except Exception:
+                    dist_matrix[i, j] = 0
+                    dist_matrix[j, i] = 0
+        
+        # Apply nearest neighbor TSP algorithm
+        current = 0  # Start at first point
+        unvisited = set(range(1, n))
+        total_distance = 0
+        
+        # Visit each point, always choosing the nearest
+        while unvisited:
+            nearest = min(unvisited, key=lambda x: dist_matrix[current, x])
+            total_distance += dist_matrix[current, nearest]
+            current = nearest
+            unvisited.remove(nearest)
+        
+        # Store result
+        self.travel_distance = total_distance
     
     @property
     def total_buildings(self) -> int:

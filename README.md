@@ -37,6 +37,10 @@ The project is organized into the following directories:
     - `microplan_review.py` - Microplan review report generator
     - `flw_visit_count.py` - FLW visit count analysis report
 
+### Documentation
+
+- **[Coverage Data Guide](COVERAGE_DATA_GUIDE.md)** - Comprehensive guide explaining the data flow into the CoverageData object and data dictionary for all models
+
 ### Supporting Directories
 
 - **tests/** - Contains unit tests for the application

@@ -35,7 +35,7 @@ from .data_loader import (
     test_commcare_api_coverage_loader,
     load_service_delivery_df_by_opportunity_from_csv,
     get_coverage_data_from_du_api_and_service_dataframe,
-    get_coverage_data_from_excel,
+    get_coverage_data_from_excel_and_csv,
     export_superset_query_with_pagination,
     load_service_delivery_df_by_opportunity_from_superset
 )
@@ -54,7 +54,7 @@ __all__ = [
     'test_commcare_api_coverage_loader',
     'load_service_delivery_df_by_opportunity_from_csv',
     'get_coverage_data_from_du_api_and_service_dataframe',
-    'get_coverage_data_from_excel',
+    'get_coverage_data_from_excel_and_csv',
     'export_superset_query_with_pagination',
     'load_service_delivery_df_by_opportunity_from_superset',
     

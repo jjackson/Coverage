@@ -523,50 +523,60 @@ class CoverageData:
         
         print(f"Loading service delivery data: {len(service_df)} points in DataFrame")
         
+        # Track skipped points
+        skipped_points = 0
+        
         # Create service delivery points
         for _, row in service_df.iterrows():
             row_dict = row.to_dict()
             
             point = ServiceDeliveryPoint.from_dict(row_dict)
-            self.service_points.append(point)
             
             # Associate service point with delivery unit based on du_name
             du = self.delivery_units.get(point.du_name)
             if du:
+                self.service_points.append(point)
                 du.service_points.append(point)
-            else:
-                raise ValueError(f"Delivery unit not found for service point: {point.du_name}")
-            
-            # Some FLW data is not available when FLW object is created in delivery unit loading, populate here.
-            # Add to the FLW CommCare ID to Name mapping if both values are present.
-            if point.flw_commcare_id and point.flw_name:
-                self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                 
-                # If this FLW exists in our FLW list, update its name too
-                if point.flw_commcare_id in self.flws:
-                    self.flws[point.flw_commcare_id].name = point.flw_name
-                    self.flws[point.flw_commcare_id].cc_username = point.flw_cc_username
-                    # Add the service point to this FLW's service_points list
-                    self.flws[point.flw_commcare_id].service_points.append(point)
-            
-            # Update FLW's active dates if visit_date is present
-            if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
-                visit_date = pd.to_datetime(point.visit_date).date()
-                flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
-                
-                if flw_id in self.flws:
-                    if visit_date not in self.flws[flw_id].dates_active:
-                        self.flws[flw_id].dates_active.append(visit_date)
+                # Some FLW data is not available when FLW object is created in delivery unit loading, populate here.
+                # Add to the FLW CommCare ID to Name mapping if both values are present.
+                if point.flw_commcare_id and point.flw_name:
+                    self.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
                     
-                    # Update first and last service delivery dates
-                    if (self.flws[flw_id].first_service_delivery_date is None or 
-                        visit_date < self.flws[flw_id].first_service_delivery_date):
-                        self.flws[flw_id].first_service_delivery_date = visit_date
-                        
-                    if (self.flws[flw_id].last_service_delivery_date is None or 
-                        visit_date > self.flws[flw_id].last_service_delivery_date):
-                        self.flws[flw_id].last_service_delivery_date = visit_date
+                    # If this FLW exists in our FLW list, update its name too
+                    if point.flw_commcare_id in self.flws:
+                        self.flws[point.flw_commcare_id].name = point.flw_name
+                        self.flws[point.flw_commcare_id].cc_username = point.flw_cc_username
+                        # Add the service point to this FLW's service_points list
+                        self.flws[point.flw_commcare_id].service_points.append(point)
                 
+                # Update FLW's active dates if visit_date is present
+                if point.visit_date and (point.flw_id in self.flws or point.flw_commcare_id in self.flws):
+                    visit_date = pd.to_datetime(point.visit_date).date()
+                    flw_id = point.flw_commcare_id if point.flw_commcare_id in self.flws else point.flw_id
+                    
+                    if flw_id in self.flws:
+                        if visit_date not in self.flws[flw_id].dates_active:
+                            self.flws[flw_id].dates_active.append(visit_date)
+                        
+                        # Update first and last service delivery dates
+                        if (self.flws[flw_id].first_service_delivery_date is None or 
+                            visit_date < self.flws[flw_id].first_service_delivery_date):
+                            self.flws[flw_id].first_service_delivery_date = visit_date
+                            
+                        if (self.flws[flw_id].last_service_delivery_date is None or 
+                            visit_date > self.flws[flw_id].last_service_delivery_date):
+                            self.flws[flw_id].last_service_delivery_date = visit_date
+            else:
+                skipped_points += 1
+                if skipped_points <= 5:  # Only print first 5 skipped points
+                    print(f"Warning: Delivery unit not found for service point: {point.du_name}")
+                elif skipped_points == 6:
+                    print("... and more skipped points")
+        
+        if skipped_points > 0:
+            print(f"Total skipped service points: {skipped_points} (no matching delivery unit found)")
+        
         self._compute_metadata_from_service_delivery_data()
 
         # Set the opportunity name

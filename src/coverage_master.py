@@ -475,7 +475,7 @@ def main():
             
             # Load the data using the CoverageData model
             print(f"  Loading data from Excel file and CSV data...")
-            coverage_data = data_loader.get_coverage_data_from_excel(matching_excel_file)
+            coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel_file, None)
             
             # Load service delivery data from the dataframe for this opportunity
             coverage_data.load_service_delivery_from_datafame(service_df)

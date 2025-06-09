@@ -46,13 +46,17 @@ The project is organized into the following directories:
 - **tests/** - Contains unit tests for the application
 - **data/** - Directory for input data files
 
-## Requirements
-
-This requires numerous Python packages, You can install them with:
-
+### Installing Python requirements for the project
+Python projects require certain libraries to be installed in order to successfully run the project.
+In this step, we will first  install the required libraries to run the project. 
+In order to install those requirements, run the following command from project's root directory: 
+``` 
+python install_requirements.py
 ```
-pip install -r requirements.txt
-```
+This command will automatically check the project's library requirements.
+It will then download and install the required libraries for the project. 
+This will also check if Python version you have installed is >= "3.12.0"
+This command will automatically update the requirements.txt to store the versions of those libraries for referencing back in case of any issues faced. 
 
 ## Usage
 

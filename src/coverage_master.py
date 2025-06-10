@@ -5,6 +5,7 @@ import subprocess
 import webbrowser
 import json
 from datetime import datetime
+from typing import Dict
 from dotenv import load_dotenv
 from .utils import data_loader
 from .models import CoverageData
@@ -305,7 +306,7 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
     
     return "index.html"
 
-def load_opportunity_domain_mapping():
+def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
     mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
     
@@ -379,12 +380,9 @@ def main():
 
         print("Loading Service Delivery Points from Superset API")
         
-        service_delivery_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
+        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
             superset_url, superset_username, superset_password, superset_query_id
         )
-        
-        # Group by opportunity_name 
-        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_csv_dataframe(service_delivery_df)
 
         print("Loading Delivery Units from API, opportunity names found in CSV:")
         for key, value in service_delivery_by_opportunity_df.items():
@@ -433,7 +431,7 @@ def main():
         
         # Load service delivery data and group by opportunity
         print("Loading Service Delivery Points from CSV...")
-        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_file)
+        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_csv(csv_file)
         
         print("Opportunity names found in CSV:")
         for key, value in service_delivery_by_opportunity_df.items():

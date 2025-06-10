@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime
 from shapely import wkt
 from shapely.geometry import Polygon
+from shapely.geometry.base import BaseGeometry
 import pandas as pd
 
 if TYPE_CHECKING:
@@ -22,16 +23,16 @@ class DeliveryUnit:
     surface_area: float = 0.0
     delivery_count: int = 0
     delivery_target: int = 0
-    du_checkout_remark: str = None
-    checked_out_date: str = None
-    checked_in_date: str = None
-    centroid: tuple = None
-    last_modified_date: datetime = None
-    computed_du_completion_date: datetime = None
+    du_checkout_remark: Optional[str] = None
+    checked_out_date: Optional[str] = None
+    checked_in_date: Optional[str] = None
+    centroid: Optional[tuple] = None
+    last_modified_date: Optional[datetime] = None
+    computed_du_completion_date: Optional[datetime] = None
     service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
 
     @property
-    def geometry(self) -> Polygon:
+    def geometry(self) -> BaseGeometry:
         """Convert WKT to Shapely geometry"""
         try:
             if not self.wkt or self.wkt == '':

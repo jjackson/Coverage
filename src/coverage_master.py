@@ -10,7 +10,6 @@ from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
 from .models import CoverageData
 import pickle  # Add this import at the top
-from src.flw_summary_dashboard import create_static_flw_report  # Add this import
 
 try:
     from .opportunity_comparison_statistics import create_opportunity_comparison_report
@@ -107,13 +106,6 @@ def generate_coverage_outputs(output_dir, coverage_data, project_key):
         print(f"  Warning: Expected FLW views file '{flw_views_file}' was not created.")
         flw_views_file = None
     
-    # Generate FLW summary
-    print(f"  Generating FLW summary for {project_key}...")
-    flw_summary_file = create_static_flw_report({project_key: coverage_data}, project_dir)
-    if not os.path.exists(flw_summary_file):
-        print(f"  Warning: Expected FLW summary file '{flw_summary_file}' was not created.")
-        flw_summary_file = None
-    
     # Change back to original directory
     os.chdir(current_dir)
     
@@ -123,7 +115,6 @@ def generate_coverage_outputs(output_dir, coverage_data, project_key):
         'map_file': map_file,
         'stats_file': stats_file,
         'flw_views_file': flw_views_file,
-        'flw_summary_file': flw_summary_file,
         'opportunity_name': getattr(coverage_data, 'opportunity_name', project_key)
     }
 
@@ -146,7 +137,7 @@ def generate_index_html(output_dir, output_info_list):
                         <h3>{card_title}</h3>
                         <p>{card_description}</p>
                     </div>
-                    <a href="comparison_report.html" class="btn btn-comparison">View Analysis</a>
+                    <a href="opportunity_comparison_report.html" class="btn btn-comparison">View Analysis</a>
                 </div>
             </div>
         </div>

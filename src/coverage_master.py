@@ -6,7 +6,7 @@ import webbrowser
 import json
 from datetime import datetime
 from typing import Dict
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
 from .models import CoverageData
 import pickle  # Add this import at the top
@@ -357,13 +357,15 @@ def main():
     args = parser.parse_args()
     
     # Load environment variables from .env file
-    load_dotenv()
+    find_dotenv()
+    load_dotenv(override=True,verbose=True)
     
     # Load opportunity to domain mapping from environment
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
     
     coverage_data_objects = {}
     use_api = os.environ.get('USE_API', '').upper() == 'TRUE'
+
     if use_api:
         print("Using API Method")
 
@@ -373,10 +375,9 @@ def main():
 
         # Use Superset API to get the service delivery data   
         # Get Superset configuration from environment variables
-        superset_url = os.getenv('SUPERSET_URL')
-        superset_username = os.getenv('SUPERSET_USERNAME')
-        superset_password = os.getenv('SUPERSET_PASSWORD')
-        superset_query_id = os.getenv('SUPERSET_QUERY_ID')
+        superset_url = os.environ.get('SUPERSET_URL')
+        superset_username = os.environ.get('SUPERSET_USERNAME')
+        superset_password = os.environ.get('SUPERSET_PASSWORD')
 
         # Validate environment variables
         missing_vars = []
@@ -386,8 +387,7 @@ def main():
             missing_vars.append('SUPERSET_USERNAME')
         if not superset_password:
             missing_vars.append('SUPERSET_PASSWORD')
-        if not superset_query_id:
-            missing_vars.append('SUPERSET_QUERY_ID')
+
 
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
@@ -395,7 +395,7 @@ def main():
         print("Loading Service Delivery Points from Superset API")
         
         service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
-            superset_url, superset_username, superset_password, superset_query_id
+            superset_url, superset_username, superset_password
         )
 
         print("Loading Delivery Units from API, opportunity names found in CSV:")

@@ -58,14 +58,14 @@ The system reads configuration from `.env` file:
 - `COMMCARE_USERNAME`: CommCare username
 - `USE_API`: Boolean flag to enable API mode
 - `OPPORTUNITY_DOMAIN_MAPPING`: JSON mapping of opportunity names to CommCare domains
-- `SUPERSET_URL`, `SUPERSET_USERNAME`, `SUPERSET_PASSWORD`, `SUPERSET_QUERY_ID`: Superset database connection details
+- `SUPERSET_URL`, `SUPERSET_USERNAME`, `SUPERSET_PASSWORD`: Superset database connection details
 
 #### Step 2: Service Delivery Data Loading
 **API Mode:**
 ```python
 # From src/utils/data_loader.py
 service_df_by_opportunity = load_service_delivery_df_by_opportunity_from_superset(
-    superset_url, superset_username, superset_password, superset_query_id
+    superset_url, superset_username, superset_password
 )
 ```
 

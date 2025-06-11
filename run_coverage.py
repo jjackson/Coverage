@@ -15,7 +15,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import the main function
 from src.coverage_master import main
-
 if __name__ == "__main__":
     # Run the main function
-    main() 
+    main()
+
+

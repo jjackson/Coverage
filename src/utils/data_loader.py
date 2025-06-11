@@ -885,7 +885,7 @@ def export_superset_query_with_pagination(
             chunk_num += 1
             
             # Small delay to be nice to the server
-            time.sleep(5)
+            time.sleep(0.5)
          
         if verbose:
             print(f"\n🎯 Pagination complete!")

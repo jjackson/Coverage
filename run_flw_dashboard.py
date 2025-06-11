@@ -4,6 +4,7 @@ import os
 from src.utils import data_loader
 from src.coverage_master import load_opportunity_domain_mapping
 from src.flw_summary_dashboard import create_flw_dashboard
+import pandas as pd
 
 def load_coverage_data_objects():
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
@@ -22,7 +23,9 @@ def load_coverage_data_objects():
 
     csv_path = get_latest_csv_file()
     excel_files = data_loader.get_available_files("data", "xlsx")
-    service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity(csv_path)
+    # Load the CSV file into a DataFrame first
+    service_delivery_df = pd.read_csv(csv_path)
+    service_delivery_by_opportunity_df = data_loader.group_service_delivery_df_by_opportunity(service_delivery_df)
 
     coverage_data_objects = {}
 

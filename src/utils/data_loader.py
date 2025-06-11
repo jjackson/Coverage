@@ -2,6 +2,7 @@ import os
 import glob
 import pandas as pd
 import geopandas as gpd
+import constants as constants
 from shapely import wkt
 from typing import List, Dict, Any, Optional
 import numpy as np
@@ -16,6 +17,7 @@ import json
 from dotenv import load_dotenv
 from src.models import CoverageData
 from functools import lru_cache
+from src.sqlqueries import sql_queries
 
 def get_available_files(directory: str = 'data', file_type: str = None) -> List[str]:
     """
@@ -718,10 +720,9 @@ def export_superset_query_with_pagination(
     superset_url: str,
     username: str,
     password: str,
-    query_id: str,
     output_filename: Optional[str] = None,
-    chunk_size: int = 10000,
-    timeout: int = 120,
+    chunk_size: int = constants.SQL_CHUNK_SIZE,
+    timeout: int = constants.API_TIMEOUT_LIMIT,
     verbose: bool = False
 ) -> str:
     """
@@ -734,7 +735,6 @@ def export_superset_query_with_pagination(
         superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
         username: Superset username for authentication
         password: Superset password for authentication
-        query_id: Saved query ID to export data from
         output_filename: Optional custom filename for the CSV (without extension)
         chunk_size: Number of rows to fetch per chunk (default: 10000)
         timeout: Request timeout in seconds (default: 120)
@@ -748,8 +748,8 @@ def export_superset_query_with_pagination(
         RuntimeError: If authentication or data retrieval fails
     """
     # Validate input parameters
-    if not superset_url or not username or not password or not query_id:
-        raise ValueError("superset_url, username, password, and query_id are required")
+    if not superset_url or not username or not password :
+        raise ValueError("superset_url, username, password are required")
     
     # Clean up the base URL
     superset_url = superset_url.rstrip('/')
@@ -793,32 +793,33 @@ def export_superset_query_with_pagination(
             csrf_data = csrf_response.json()
             csrf_token = csrf_data.get('result')
             if csrf_token:
-                headers['X-CSRFToken'] = csrf_token
-                headers['Referer'] = superset_url
+                headers['x-csrftoken'] = csrf_token
+                headers['Referer'] = superset_url+"/sqllab"
+                headers['Content-Type'] = 'application/json'
         
-        # Get saved query details
-        saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
-        response = session.get(saved_query_url, headers=headers, timeout=timeout)
-        
-        if response.status_code != 200:
-            raise RuntimeError(f"Failed to get saved query: {response.text}")
-        
-        query_data = response.json()
-        result = query_data.get('result', {})
-        
-        query_details = {
-            'sql': result.get('sql', ''),
-            'database_id': result.get('database', {}).get('id', ''),
-            'label': result.get('label', 'Unknown'),
-            'schema': result.get('schema', '')
-        }
-        
-        if verbose:
-            print(f"   Query: {query_details['label']}")
-            print(f"   Database ID: {query_details['database_id']}")
-            print(f"   Schema: {query_details['schema']}")
-            print()
-        
+        # # Get saved query details
+        # saved_query_url = f'{superset_url}/api/v1/saved_query/{query_id}'
+        # response = session.get(saved_query_url, headers=headers, timeout=timeout)
+        #
+        # if response.status_code != 200:
+        #     raise RuntimeError(f"Failed to get saved query: {response.text}")
+        #
+        # query_data = response.json()
+        # result = query_data.get('result', {})
+        #
+        # query_details = {
+        #     'sql': result.get('sql', ''),
+        #     'database_id': result.get('database', {}).get('id', ''),
+        #     'label': result.get('label', 'Unknown'),
+        #     'schema': result.get('schema', '')
+        # }
+        #
+        # if verbose:
+        #     print(f"   Query: {query_details['label']}")
+        #     print(f"   Database ID: {query_details['database_id']}")
+        #     print(f"   Schema: {query_details['schema']}")
+        #     print()
+        #
         # Execute paginated query
         execute_url = f'{superset_url}/api/v1/sqllab/execute/'
         all_data = []
@@ -826,41 +827,46 @@ def export_superset_query_with_pagination(
         offset = 0
         total_rows = 0
         chunk_num = 1
-        base_sql = query_details['sql']
+        base_sql = sql_queries.SQL_QUERIES["opportunity_uservisit"]
         
         while True:
             # Add OFFSET and LIMIT to the SQL
             paginated_sql = f"""
-{base_sql.rstrip(';')}
-OFFSET {offset}
-LIMIT {chunk_size}
-"""
+            {base_sql.rstrip(';')}
+            OFFSET {offset}
+            LIMIT {chunk_size}
+            """
             
             payload = {
-                'database_id': int(query_details['database_id']),
-                'sql': paginated_sql,
-                'runAsync': False,
-                'queryLimit': chunk_size
+                "ctas_method": "TABLE",
+                "database_id": constants.DATABASE_ID,
+                "expand_data": constants.FALSE,
+                "json": constants.TRUE,
+                "queryLimit": chunk_size,
+                "runAsync": constants.FALSE,
+                "schema": constants.SCHEMA_PUBLIC,
+                "select_as_cta": constants.FALSE,
+                "sql": paginated_sql,
+                "templateParams": "",
+                "tmp_table_name": ""
             }
             
-        
+            # print(execute_url)
+            # print(headers)
+            # print(payload)
             response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
-            
+            result = response.json()
+
             if response.status_code != 200:
                 break
-            
-            result = response.json()
-            
             if result.get('status') != 'success':
                 break
             
             # Get data and columns
             chunk_data = result.get('data', [])
             columns = result.get('columns', [])
-            
             if not chunk_data:
                 break
-            
             # Store columns from first chunk
             if all_columns is None:
                 all_columns = columns
@@ -879,14 +885,14 @@ LIMIT {chunk_size}
             chunk_num += 1
             
             # Small delay to be nice to the server
-            time.sleep(0.5)
+            time.sleep(5)
          
         if verbose:
             print(f"\n🎯 Pagination complete!")
             print(f"   Total rows fetched: {total_rows:,}")
             print(f"   Total chunks: {chunk_num - 1}")
         else:
-            print(f"Exported {total_rows:,} rows from Superset query {query_id}")
+            print(f"Exported {total_rows:,} rows from Superset query")
         
         # Export data to CSV
         if not all_data or not all_columns:
@@ -910,7 +916,7 @@ LIMIT {chunk_size}
         if 'session' in locals():
             session.close()
 
-def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password, superset_query_id) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from Superset and group by unique opportunity_name values.
     
@@ -930,8 +936,7 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         csv_path = export_superset_query_with_pagination(
             superset_url=superset_url,
             username=superset_username,
-            password=superset_password,
-            query_id=superset_query_id
+            password=superset_password
         )
         
         # Load the exported CSV data
@@ -996,7 +1001,6 @@ if __name__ == "__main__":
     superset_url = os.getenv('SUPERSET_URL')  # e.g., 'https://superset.example.com'
     superset_username = os.getenv('SUPERSET_USERNAME')  # Your Superset username
     superset_password = os.getenv('SUPERSET_PASSWORD')  # Your Superset password
-    superset_query_id = os.getenv('SUPERSET_QUERY_ID')  # The query/chart ID to download
     
     # Add https:// scheme if missing
     if superset_url and not superset_url.startswith(('http://', 'https://')):
@@ -1011,8 +1015,6 @@ if __name__ == "__main__":
         missing_vars.append('SUPERSET_USERNAME')
     if not superset_password:
         missing_vars.append('SUPERSET_PASSWORD')
-    if not superset_query_id:
-        missing_vars.append('SUPERSET_QUERY_ID')
     
     if missing_vars:
         print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
@@ -1026,8 +1028,7 @@ if __name__ == "__main__":
         csv_path = export_superset_query_with_pagination(   
             superset_url=superset_url,
             username=superset_username,
-            password=superset_password,
-            query_id=superset_query_id
+            password=superset_password
         )
         print(f"Success! CSV saved to: {csv_path}")
         

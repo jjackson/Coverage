@@ -3,6 +3,7 @@ from dash import html, dcc, Input, Output
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_flw_summary
+import os
 
 
 def create_flw_dashboard(coverage_data_objects):
@@ -373,6 +374,83 @@ Output('topline-metrics', 'children'),
         return topline, df_records, forms_fig, dus_fig
 
     app.run(debug=True, port=8080)
+
+
+def create_static_flw_report(coverage_data_objects, output_dir):
+    """Create a static HTML report for FLW summary data."""
+    
+    # Generate the same data as the dashboard
+    summaries = {}
+    toplines = {}
+    for key, cov in coverage_data_objects.items():
+        summary_df, topline = generate_flw_summary(cov)
+        summary_df['opportunity'] = key
+        summaries[key] = summary_df
+        toplines[key] = topline
+
+    combined_df = pd.concat(summaries.values(), ignore_index=True)
+    
+    # Create HTML content
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>FLW Summary Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .card {{ 
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+            }}
+            table {{ 
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }}
+            th, td {{ 
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }}
+            th {{ background-color: #f8f9fa; }}
+            .good {{ background-color: #d4edda; color: #155724; }}
+            .warning {{ background-color: #fff3cd; color: #856404; }}
+            .bad {{ background-color: #f8d7da; color: #721c24; }}
+        </style>
+    </head>
+    <body>
+        <h1>Field Level Worker Summary Report</h1>
+    """
+    
+    # Add topline metrics
+    html_content += "<div class='card'><h2>Topline Metrics</h2>"
+    for org, topline in toplines.items():
+        html_content += f"<h3>{org}</h3>"
+        html_content += "<table>"
+        for key, value in topline.items():
+            html_content += f"<tr><td>{key}</td><td>{value}</td></tr>"
+        html_content += "</table>"
+    html_content += "</div>"
+    
+    # Add FLW summary table
+    html_content += "<div class='card'><h2>FLW Summary</h2>"
+    html_content += combined_df.to_html(classes='table', index=False)
+    html_content += "</div>"
+    
+    # Close HTML
+    html_content += """
+    </body>
+    </html>
+    """
+    
+    # Write to file
+    output_path = os.path.join(output_dir, "flw_summary.html")
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+    return output_path
 
 
 if __name__ == "__main__":

@@ -34,17 +34,20 @@ def generate_flw_summary(coverage_data):
     # Total summary per FLW
     grouped = service_df.groupby(['flw_id'])
     flw_summary = grouped.agg(
-        total_visits=('visit_id', 'count'),
-        total_unique_dus_worked=('du_name', pd.Series.nunique),
-        date_first_active=('visit_day', 'min'),
-        date_last_active=('visit_day', 'max'),
-        unique_days_worked=('visit_day', pd.Series.nunique)
+        opportunity=('opportunity_name', 'first'), #
+        flw_name=('flw_name', 'first'), #
+        date_first_active=('visit_day', 'min'),#
+        date_last_active=('visit_day', 'max'),#
+        total_visits=('visit_id', 'count'), #
+        total_unique_dus_worked=('du_name', pd.Series.nunique), #   
+        unique_days_worked=('visit_day', pd.Series.nunique), #
+        total_dus_completed=('du_status', lambda x: (x == 'completed').sum()), #
+        total_dus_visited=('du_status', lambda x: (x == 'visited').sum()), #
     ).reset_index()
 
-    flw_summary['active_period_days'] = (flw_summary['date_last_active'] - flw_summary['date_first_active']).dt.days + 1
-    flw_summary['days_since_active'] = (today - flw_summary['date_last_active']).dt.days
-    flw_summary['pct_days_working'] = round((flw_summary['unique_days_worked'] / flw_summary['active_period_days']) * 100, 2)
-    flw_summary['avrg_forms_per_day'] = round(flw_summary['total_visits'] / flw_summary['unique_days_worked'], 2)
+    flw_summary['active_period_days'] = (flw_summary['date_last_active'] - flw_summary['date_first_active']).dt.days + 1 #
+    flw_summary['days_since_active'] = (today - flw_summary['date_last_active']).dt.days #
+    flw_summary['avrg_forms_per_day'] = round(flw_summary['total_visits'] / flw_summary['unique_days_worked'], 2) #
     flw_summary['dus_per_day'] = round(flw_summary['total_unique_dus_worked'] / flw_summary['unique_days_worked'], 1)
 
     # 7-day rolling stats
@@ -53,12 +56,15 @@ def generate_flw_summary(coverage_data):
         visits_last7=('visit_id', 'count'),
         dus_last7=('du_name', pd.Series.nunique)
     ).reset_index()
-    recent_grouped['forms_per_day_last_7d'] = round(recent_grouped['visits_last7'] / 7.0, 2)
-    recent_grouped['dus_per_day_last_7d'] = round(recent_grouped['dus_last7'] / 7.0, 2)
+    recent_grouped['avrg_forms_per_day_mavrg'] = round(recent_grouped['visits_last7'] / 7.0, 2)
+    recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)
 
     # Merge recent activity with full summary
     summary = pd.merge(flw_summary, recent_grouped, on='flw_id', how='left')
     summary.fillna({'forms_per_day_last_7d': 0, 'dus_per_day_last_7d': 0}, inplace=True)
+
+    #order summary in a this column order
+    summary = summary[['opportunity', 'flw_id', 'flw_name', 'total_visits', 'date_first_active', 'date_last_active', 'days_since_active', 'active_period_days', 'unique_days_worked', 'avrg_forms_per_day', 'avrg_forms_per_day_mavrg', 'total_unique_dus_worked', 'dus_per_day', 'dus_per_day_mavrg', 'total_dus_completed', 'total_dus_visited']]
 
 #DU stats
     # DU stats

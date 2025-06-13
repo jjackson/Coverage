@@ -3,19 +3,18 @@ from dash import html, dcc, Input, Output
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
-import os
+from datetime import date, timedelta
+import plotly.express as px
 
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
 
-    # Change this:
-    summary_df, topline = generate_summary(coverage_data_objects, group_by='flw')
-    combined_df = summary_df  # The opportunity column is already included in the new function
+    # Initial summary for table columns
+    summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
 
     # Define color coding conditions for the table
     style_data_conditional = [
-
         {
             'if': {
                 'filter_query': '{days_since_active} < 7',
@@ -24,7 +23,6 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#d4edda',
             'color': '#155724',
         },
-
         {
             'if': {
                 'filter_query': '{days_since_active} >= 7',
@@ -33,7 +31,6 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
         },
-
         # Color code average forms per day
         {
             'if': {
@@ -43,7 +40,6 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#d4edda',
             'color': '#155724',
         },
-
         {
             'if': {
                 'filter_query': '{avrg_forms_per_day_mavrg} < 10',
@@ -52,7 +48,6 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
         },
-
         # Color code dus per day
         {
             'if': {
@@ -62,7 +57,6 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#d4edda',
             'color': '#155724',
         },
-
         {
             'if': {
                 'filter_query': '{dus_per_day_mavrg} < 1',
@@ -71,57 +65,7 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
         },
-
     ]
-
-    import plotly.express as px
-
-    # Combine all service data
-    all_service_dfs = []
-    for org, cov in coverage_data_objects.items():
-        df = cov.create_service_points_dataframe()
-        if df is not None and not df.empty:
-            df = df[df['visit_date'].notna()]
-            df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
-            df['opportunity'] = org
-            all_service_dfs.append(df[['visit_day', 'flw_id', 'du_name', 'opportunity']])
-
-    service_timeline_df = pd.concat(all_service_dfs)
-
-    # Group by visit_day and opportunity
-    daily_stats = service_timeline_df.groupby(['visit_day', 'opportunity']).agg(
-        total_forms=('flw_id', 'count'),
-        total_dus=('du_name', pd.Series.nunique)
-    ).reset_index()
-
-    # Sort for rolling window
-    daily_stats = daily_stats.sort_values(by=['opportunity', 'visit_day'])
-
-    # Rolling 7-day average
-    daily_stats['forms_7d_avg'] = (
-        daily_stats.groupby('opportunity')['total_forms'].transform(lambda x: x.rolling(7, min_periods=1).mean())
-    )
-    daily_stats['dus_7d_avg'] = (
-        daily_stats.groupby('opportunity')['total_dus'].transform(lambda x: x.rolling(7, min_periods=1).mean())
-    )
-
-    # Plotly line chart (Forms)
-    forms_fig = px.line(
-        daily_stats,
-        x='visit_day',
-        y='forms_7d_avg',
-        color='opportunity',
-        title='7-Day Rolling Average of Forms Submitted'
-    )
-
-    # Plotly line chart (DUs)
-    dus_fig = px.line(
-        daily_stats,
-        x='visit_day',
-        y='dus_7d_avg',
-        color='opportunity',
-        title='7-Day Rolling Average of DUs Visited'
-    )
 
     app.layout = html.Div([
         html.H1("FLW Summary Dashboard"),
@@ -133,7 +77,7 @@ def create_flw_dashboard(coverage_data_objects):
         ),
         dash_table.DataTable(
             id='flw-summary-table',
-            columns=[{"name": i, "id": i} for i in combined_df.columns],
+            columns=[{"name": i, "id": i} for i in summary_df.columns],
             page_size=20,
             style_table={'overflowX': 'auto'},
             filter_action='native',
@@ -162,43 +106,6 @@ def create_flw_dashboard(coverage_data_objects):
         ])
     ])
 
-
-
-    app.index_string = '''
-    <!DOCTYPE html>
-    <html>
-        <head>
-            {%metas%}
-            <title>FLW Dashboard</title>
-            {%favicon%}
-            {%css%}
-            <style>
-                .card {
-                    padding: 20px;
-                    border-radius: 12px;
-                    background-color: #ffffff;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-                    flex: 1;
-                    text-align: center;
-                    font-family: 'Arial', sans-serif;
-                }
-                body {
-                    background-color: #f4f6f9;
-                    margin: 0;
-                }
-            </style>
-        </head>
-        <body>
-            {%app_entry%}
-            <footer>
-                {%config%}
-                {%scripts%}
-                {%renderer%}
-            </footer>
-        </body>
-    </html>
-    '''
-
     @app.callback(
         Output('flw-summary-table', 'data'),
         Output('forms-rolling-chart', 'figure'),
@@ -209,28 +116,140 @@ def create_flw_dashboard(coverage_data_objects):
         if not selected_orgs:
             # No selection - show opportunity level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='opportunity')
+            
+            # Create opportunity-level time series
+            all_service_dfs = []
+            for org, cov in coverage_data_objects.items():
+                df = cov.create_service_points_dataframe()
+                if df is not None and not df.empty:
+                    df = df[df['visit_date'].notna()]
+                    df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
+                    df['opportunity'] = org
+                    all_service_dfs.append(df[['visit_day', 'opportunity', 'visit_id', 'du_name']])
+
+            service_timeline_df = pd.concat(all_service_dfs)
+            
+            # Create historical metrics DataFrame
+            historical_metrics = []
+            
+            # Get unique dates
+            unique_dates = sorted(service_timeline_df['visit_day'].unique())
+            
+            for current_date in unique_dates:
+                # Calculate the 7-day window
+                window_start = current_date - timedelta(days=6)
+                
+                # Filter data for this window
+                window_data = service_timeline_df[
+                    (service_timeline_df['visit_day'] >= window_start) & 
+                    (service_timeline_df['visit_day'] <= current_date)
+                ]
+                
+                # Calculate metrics for this window
+                window_metrics = window_data.groupby('opportunity').agg(
+                    visits_last7=('visit_id', 'count'),
+                    dus_last7=('du_name', pd.Series.nunique)
+                ).reset_index()
+                
+                # Calculate 7-day averages
+                window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
+                window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
+                
+                # Add date
+                window_metrics['visit_day'] = current_date
+                
+                historical_metrics.append(window_metrics)
+            
+            # Combine all historical metrics
+            chart_data = pd.concat(historical_metrics, ignore_index=True)
+            
         else:
             # Selection made - show FLW level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
-            # Filter for selected opportunities
             summary_df = summary_df[summary_df['opportunity'].isin(selected_orgs)]
-        
-        # Update the charts
-        forms_fig = px.line(
-            daily_stats[daily_stats['opportunity'].isin(selected_orgs if selected_orgs else daily_stats['opportunity'].unique())],
-            x='visit_day',
-            y='forms_7d_avg',
-            color='opportunity',
-            title='7-Day Rolling Average of Forms Submitted'
-        )
+            
+            # Create FLW-level time series
+            all_service_dfs = []
+            for org, cov in coverage_data_objects.items():
+                if org in selected_orgs:  # Only process selected opportunities
+                    df = cov.create_service_points_dataframe()
+                    if df is not None and not df.empty:
+                        df = df[df['visit_date'].notna()]
+                        df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
+                        df['opportunity'] = org
+                        all_service_dfs.append(df[['visit_day', 'flw_id', 'opportunity', 'visit_id', 'du_name']])
 
-        dus_fig = px.line(
-            daily_stats[daily_stats['opportunity'].isin(selected_orgs if selected_orgs else daily_stats['opportunity'].unique())],
-            x='visit_day',
-            y='dus_7d_avg',
-            color='opportunity',
-            title='7-Day Rolling Average of DUs Visited'
-        )
+            service_timeline_df = pd.concat(all_service_dfs)
+            
+            # Create historical metrics DataFrame
+            historical_metrics = []
+            
+            # Get unique dates
+            unique_dates = sorted(service_timeline_df['visit_day'].unique())
+            
+            for current_date in unique_dates:
+                # Calculate the 7-day window
+                window_start = current_date - timedelta(days=6)
+                
+                # Filter data for this window
+                window_data = service_timeline_df[
+                    (service_timeline_df['visit_day'] >= window_start) & 
+                    (service_timeline_df['visit_day'] <= current_date)
+                ]
+                
+                # Calculate metrics for this window
+                window_metrics = window_data.groupby(['flw_id', 'opportunity']).agg(
+                    visits_last7=('visit_id', 'count'),
+                    dus_last7=('du_name', pd.Series.nunique)
+                ).reset_index()
+                
+                # Calculate 7-day averages
+                window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
+                window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
+                
+                # Add date
+                window_metrics['visit_day'] = current_date
+                
+                historical_metrics.append(window_metrics)
+            
+            # Combine all historical metrics
+            chart_data = pd.concat(historical_metrics, ignore_index=True)
+
+        # Create the charts
+        if not selected_orgs:
+            # Opportunity level charts
+            forms_fig = px.line(
+                chart_data,
+                x='visit_day',
+                y='avrg_forms_per_day_mavrg',
+                color='opportunity',
+                title='7-Day Rolling Average of Forms Submitted'
+            )
+            
+            dus_fig = px.line(
+                chart_data,
+                x='visit_day',
+                y='dus_per_day_mavrg',
+                color='opportunity',
+                title='7-Day Rolling Average of DUs Visited'
+            )
+        else:
+            # FLW level charts
+            forms_fig = px.line(
+                chart_data,
+                x='visit_day',
+                y='avrg_forms_per_day_mavrg',
+                color='flw_id',
+                title='7-Day Rolling Average of Forms Submitted'
+            )
+            
+            dus_fig = px.line(
+                chart_data,
+                x='visit_day',
+                y='dus_per_day_mavrg',
+                color='flw_id',
+                title='7-Day Rolling Average of DUs Visited'
+            )
 
         return summary_df.to_dict('records'), forms_fig, dus_fig
 
@@ -316,6 +335,5 @@ def create_static_flw_report(coverage_data_objects, output_dir):
 
 if __name__ == "__main__":
     from run_flw_dashboard import load_coverage_data_objects
-
     coverage_data_objects = load_coverage_data_objects()
     create_flw_dashboard(coverage_data_objects)

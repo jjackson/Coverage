@@ -54,6 +54,12 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
             ).reset_index()
             summary['flw_id'] = None
             summary['flw_name'] = None
+
+            # Add completed and visited DUs for opportunity level
+            for org, cov in coverage_data_objects.items():
+                if org in summary['opportunity'].values:
+                    summary.loc[summary['opportunity'] == org, 'total_dus_completed'] = cov.total_completed_dus
+                    summary.loc[summary['opportunity'] == org, 'total_dus_visited'] = cov.total_visited_dus
         else:
             summary = service_df.groupby(['flw_id', 'opportunity']).agg(
                 total_visits=('visit_id', 'count'),
@@ -62,6 +68,23 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 date_first_active=('visit_day', 'min'),
                 date_last_active=('visit_day', 'max'),
             ).reset_index()
+
+            # Add completed and visited DUs for FLW level
+            for org, cov in coverage_data_objects.items():
+                # Get the mapping between flw_id and cchq_user_owner_id from service points
+                flw_id_to_commcare = {}
+                for point in cov.service_points:
+                    if point.flw_id and point.flw_commcare_id:
+                        flw_id_to_commcare[point.flw_id] = point.flw_commcare_id
+                
+                for flw_id in summary[summary['opportunity'] == org]['flw_id'].unique():
+                    # Get the corresponding commcare_id
+                    commcare_id = flw_id_to_commcare.get(flw_id)
+                    if commcare_id and commcare_id in cov.flws:
+                        flw = cov.flws[commcare_id]
+                        mask = (summary['opportunity'] == org) & (summary['flw_id'] == flw_id)
+                        summary.loc[mask, 'total_dus_completed'] = flw.status_counts.get('completed', 0)
+                        summary.loc[mask, 'total_dus_visited'] = flw.status_counts.get('visited', 0)
         
         # Calculate derived metrics
         summary['active_period_days'] = (summary['date_last_active'] - summary['date_first_active']).dt.days + 1
@@ -104,7 +127,7 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
     
     # Define the desired column order
     column_order = [
-        'opportunity',  # Keep as 'opportunity' since that's what's used in the data processing
+        'opportunity',
         'flw_id',
         'flw_name',
         'total_visits',
@@ -117,13 +140,15 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         'avrg_forms_per_day_mavrg',
         'total_unique_dus_worked',
         'dus_per_day',
-        'dus_per_day_mavrg'
+        'dus_per_day_mavrg',
+        'total_dus_completed',
+        'total_dus_visited'
     ]
 
     # Ensure all columns exist
     for col in column_order:
         if col not in combined_summary.columns:
-            combined_summary[col] = None
+            combined_summary[col] = 0  # Initialize with 0 instead of None for numeric columns
 
     # Reorder columns
     combined_summary = combined_summary[column_order]

@@ -93,15 +93,18 @@ def create_flw_dashboard(coverage_data_objects):
             dash_table.DataTable(
                 id='flw-summary-table',
                 columns=[{"name": i, "id": i} for i in summary_df.columns],
-                page_size=20,
                 style_table={
                     'overflowX': 'auto',
                     'boxShadow': '0 0 10px rgba(0,0,0,0.1)',
                     'borderRadius': '5px',
-                    'marginBottom': '30px'
+                    'marginBottom': '30px',
+                    'maxHeight': '800px',
+                    'overflowY': 'auto'
                 },
                 filter_action='native',
                 sort_action='native',
+                export_format='csv',
+                export_headers='display',
                 style_data_conditional=style_data_conditional,
                 style_cell={
                     'textAlign': 'left',

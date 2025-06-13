@@ -223,6 +223,10 @@ def create_flw_dashboard(coverage_data_objects):
         else:
             # Selection made - show FLW level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
+            if 'opportunity' not in summary_df.columns and 'opportunity_name' in summary_df.columns:
+                summary_df['opportunity'] = summary_df['opportunity_name']
+            if 'opportunity_name' not in summary_df.columns and 'opportunity' in summary_df.columns:
+                summary_df['opportunity_name'] = summary_df['opportunity']
             summary_df = summary_df[summary_df['opportunity'].isin(selected_orgs)]
             
             # Create FLW-level time series

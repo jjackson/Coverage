@@ -52,6 +52,8 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 date_first_active=('visit_day', 'min'),
                 date_last_active=('visit_day', 'max'),
             ).reset_index()
+            summary['flw_id'] = None
+            summary['flw_name'] = None
         else:
             summary = service_df.groupby(['flw_id', 'opportunity']).agg(
                 total_visits=('visit_id', 'count'),
@@ -99,5 +101,31 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         'average_dus_per_day': round(combined_summary['dus_per_day'].mean(), 2),
         'average_forms_per_day': round(combined_summary['avrg_forms_per_day'].mean(), 2),
     }
+    
+    # Define the desired column order
+    column_order = [
+        'opportunity',  # Keep as 'opportunity' since that's what's used in the data processing
+        'flw_id',
+        'flw_name',
+        'total_visits',
+        'date_first_active',
+        'date_last_active',
+        'days_since_active',
+        'active_period_days',
+        'unique_days_worked',
+        'avrg_forms_per_day',
+        'avrg_forms_per_day_mavrg',
+        'total_unique_dus_worked',
+        'dus_per_day',
+        'dus_per_day_mavrg'
+    ]
+
+    # Ensure all columns exist
+    for col in column_order:
+        if col not in combined_summary.columns:
+            combined_summary[col] = None
+
+    # Reorder columns
+    combined_summary = combined_summary[column_order]
     
     return combined_summary, topline_stats

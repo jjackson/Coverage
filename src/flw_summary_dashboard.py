@@ -65,46 +65,103 @@ def create_flw_dashboard(coverage_data_objects):
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
         },
+        # Add alternating row colors
+        {
+            'if': {'row_index': 'odd'},
+            'backgroundColor': '#f9f9f9'
+        }
     ]
 
     app.layout = html.Div([
-        html.H1("FLW Summary Dashboard"),
-        dcc.Dropdown(
-            id='org-selector',
-            options=[{'label': k, 'value': k} for k in coverage_data_objects],
-            multi=True,
-            placeholder="Filter by opportunity"
-        ),
-        dash_table.DataTable(
-            id='flw-summary-table',
-            columns=[{"name": i, "id": i} for i in summary_df.columns],
-            page_size=20,
-            style_table={'overflowX': 'auto'},
-            filter_action='native',
-            sort_action='native',
-            style_data_conditional=style_data_conditional,
-            style_cell={
-                'textAlign': 'left',
-                'padding': '10px',
-                'fontFamily': 'Arial, sans-serif',
-                'fontSize': '14px'
-            },
-            style_header={
-                'backgroundColor': '#f8f9fa',
-                'fontWeight': 'bold',
-                'textAlign': 'center',
-                'border': '1px solid #dee2e6'
-            },
-            style_data={
-                'border': '1px solid #dee2e6'
-            }
-        ),
         html.Div([
-            html.H3("Rolling 7-Day Averages", style={'marginTop': '40px'}),
-            dcc.Graph(id='forms-rolling-chart'),
-            dcc.Graph(id='dus-rolling-chart')
-        ])
-    ])
+            html.H1("FLW Summary Dashboard", style={
+                'color': '#333',
+                'borderBottom': '1px solid #ddd',
+                'paddingBottom': '10px',
+                'marginBottom': '20px'
+            }),
+            dcc.Dropdown(
+                id='org-selector',
+                options=[{'label': k, 'value': k} for k in coverage_data_objects],
+                multi=True,
+                placeholder="Filter by opportunity",
+                style={
+                    'marginBottom': '20px',
+                    'fontFamily': 'Arial, sans-serif'
+                }
+            ),
+            dash_table.DataTable(
+                id='flw-summary-table',
+                columns=[{"name": i, "id": i} for i in summary_df.columns],
+                page_size=20,
+                style_table={
+                    'overflowX': 'auto',
+                    'boxShadow': '0 0 10px rgba(0,0,0,0.1)',
+                    'borderRadius': '5px',
+                    'marginBottom': '30px'
+                },
+                filter_action='native',
+                sort_action='native',
+                style_data_conditional=style_data_conditional,
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '12px',
+                    'fontFamily': 'Arial, sans-serif',
+                    'fontSize': '14px',
+                    'border': '1px solid #ddd'
+                },
+                style_header={
+                    'backgroundColor': '#f2f2f2',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center',
+                    'border': '1px solid #ddd',
+                    'padding': '12px'
+                },
+                style_data={
+                    'border': '1px solid #ddd'
+                }
+            ),
+            html.Div([
+                html.H2("Rolling 7-Day Averages", style={
+                    'color': '#333',
+                    'borderBottom': '1px solid #ddd',
+                    'paddingBottom': '10px',
+                    'marginTop': '40px',
+                    'marginBottom': '20px'
+                }),
+                html.Div([
+                    html.Div([
+                        dcc.Graph(id='forms-rolling-chart'),
+                    ], className='chart-item'),
+                    html.Div([
+                        dcc.Graph(id='dus-rolling-chart'),
+                    ], className='chart-item')
+                ], style={
+                    'display': 'grid',
+                    'gridTemplateColumns': '1fr 1fr',
+                    'gap': '30px',
+                    'margin': '20px 0'
+                })
+            ], style={
+                'backgroundColor': '#fafafa',
+                'padding': '20px',
+                'borderRadius': '5px',
+                'marginTop': '30px'
+            })
+        ], style={
+            'maxWidth': '1400px',
+            'margin': '0 auto',
+            'backgroundColor': 'white',
+            'padding': '20px',
+            'borderRadius': '5px',
+            'boxShadow': '0 0 10px rgba(0,0,0,0.1)'
+        })
+    ], style={
+        'fontFamily': 'Arial, sans-serif',
+        'margin': '0',
+        'padding': '20px',
+        'backgroundColor': '#f5f5f5'
+    })
 
     @app.callback(
         Output('flw-summary-table', 'data'),

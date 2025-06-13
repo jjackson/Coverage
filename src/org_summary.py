@@ -67,6 +67,7 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 unique_days_worked=('visit_day', pd.Series.nunique),
                 date_first_active=('visit_day', 'min'),
                 date_last_active=('visit_day', 'max'),
+                flw_name=('flw_name', 'first')
             ).reset_index()
 
             # Add completed and visited DUs for FLW level

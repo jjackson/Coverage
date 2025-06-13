@@ -2,97 +2,20 @@ import dash
 from dash import html, dcc, Input, Output
 import pandas as pd
 from dash import dash_table
-from src.org_summary import generate_flw_summary
+from src.org_summary import generate_summary
 import os
 
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
 
-    summaries = {}
-    toplines = {}
-    for key, cov in coverage_data_objects.items():
-        summary_df, topline = generate_flw_summary(cov)
-        summary_df['opportunity'] = key
-        summaries[key] = summary_df
-        toplines[key] = topline
-
-    combined_df = pd.concat(summaries.values(), ignore_index=True)
+    # Change this:
+    summary_df, topline = generate_summary(coverage_data_objects, group_by='flw')
+    combined_df = summary_df  # The opportunity column is already included in the new function
 
     # Define color coding conditions for the table
     style_data_conditional = [
-        # Color code completion rates (total_dus_completed)
-        {
-            'if': {
-                'filter_query': '{total_dus_completed} >= 80',
-                'column_id': 'total_dus_completed'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
-        {
-            'if': {
-                'filter_query': '{total_dus_completed} >= 50 && {total_dus_completed} < 80',
-                'column_id': 'total_dus_completed'
-            },
-            'backgroundColor': '#fff3cd',
-            'color': '#856404',
-        },
-        {
-            'if': {
-                'filter_query': '{total_dus_completed} < 50',
-                'column_id': 'total_dus_completed'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
 
-        # Color code visited rates (total_dus_visited)
-        {
-            'if': {
-                'filter_query': '{total_dus_visited} >= 20',
-                'column_id': 'total_dus_visited'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
-        {
-            'if': {
-                'filter_query': '{total_dus_visited} >= 10 && {total_dus_visited} < 20',
-                'column_id': 'total_dus_visited'
-            },
-            'backgroundColor': '#fff3cd',
-            'color': '#856404',
-        },
-        {
-            'if': {
-                'filter_query': '{total_dus_visited} < 10',
-                'column_id': 'total_dus_visited'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-
-        # Color code percentage days working
-        {
-            'if': {
-                'filter_query': '{pct_days_working} >= 50',
-                'column_id': 'pct_days_working'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
-
-        {
-            'if': {
-                'filter_query': '{pct_days_working} < 50',
-                'column_id': 'pct_days_working'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-
-        # Color code days since active (reverse logic - fewer days is better)
         {
             'if': {
                 'filter_query': '{days_since_active} < 7',
@@ -114,8 +37,8 @@ def create_flw_dashboard(coverage_data_objects):
         # Color code average forms per day
         {
             'if': {
-                'filter_query': '{avrg_forms_per_day} >= 10',
-                'column_id': 'avrg_forms_per_day'
+                'filter_query': '{avrg_forms_per_day_mavrg} >= 10',
+                'column_id': 'avrg_forms_per_day_mavrg'
             },
             'backgroundColor': '#d4edda',
             'color': '#155724',
@@ -123,8 +46,8 @@ def create_flw_dashboard(coverage_data_objects):
 
         {
             'if': {
-                'filter_query': '{avrg_forms_per_day} < 10',
-                'column_id': 'avrg_forms_per_day'
+                'filter_query': '{avrg_forms_per_day_mavrg} < 10',
+                'column_id': 'avrg_forms_per_day_mavrg'
             },
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
@@ -133,8 +56,8 @@ def create_flw_dashboard(coverage_data_objects):
         # Color code dus per day
         {
             'if': {
-                'filter_query': '{dus_per_day} >= 1',
-                'column_id': 'dus_per_day'
+                'filter_query': '{dus_per_day_mavrg} >= 1',
+                'column_id': 'dus_per_day_mavrg'
             },
             'backgroundColor': '#d4edda',
             'color': '#155724',
@@ -142,46 +65,8 @@ def create_flw_dashboard(coverage_data_objects):
 
         {
             'if': {
-                'filter_query': '{dus_per_day} < 1',
-                'column_id': 'dus_per_day'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-
-        # Color code forms per day last 7 days
-        {
-            'if': {
-                'filter_query': '{forms_per_day_last_7d} >= 10',
-                'column_id': 'forms_per_day_last_7d'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
-
-        {
-            'if': {
-                'filter_query': '{forms_per_day_last_7d} < 10',
-                'column_id': 'forms_per_day_last_7d'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-
-        # Color code dus per day last 7 days
-        {
-            'if': {
-                'filter_query': '{dus_per_day_last_7d} >= 1',
-                'column_id': 'dus_per_day_last_7d'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
-
-        {
-            'if': {
-                'filter_query': '{dus_per_day_last_7d} < 1',
-                'column_id': 'dus_per_day_last_7d'
+                'filter_query': '{dus_per_day_mavrg} < 1',
+                'column_id': 'dus_per_day_mavrg'
             },
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
@@ -246,9 +131,6 @@ def create_flw_dashboard(coverage_data_objects):
             multi=True,
             placeholder="Filter by opportunity"
         ),
-        html.Div(id='topline-metrics', style={'marginTop': 20}),
-
-
         dash_table.DataTable(
             id='flw-summary-table',
             columns=[{"name": i, "id": i} for i in combined_df.columns],
@@ -318,60 +200,39 @@ def create_flw_dashboard(coverage_data_objects):
     '''
 
     @app.callback(
-
-Output('topline-metrics', 'children'),
         Output('flw-summary-table', 'data'),
         Output('forms-rolling-chart', 'figure'),
         Output('dus-rolling-chart', 'figure'),
         Input('org-selector', 'value')
     )
     def update_dashboard(selected_orgs):
-        if selected_orgs:
-            df = combined_df[combined_df['opportunity'].isin(selected_orgs)]
-            filtered_toplines = [toplines[k] for k in selected_orgs if k in toplines]
+        if not selected_orgs:
+            # No selection - show opportunity level summary
+            summary_df, _ = generate_summary(coverage_data_objects, group_by='opportunity')
         else:
-            df = combined_df.copy()
-            filtered_toplines = toplines.values()
+            # Selection made - show FLW level summary
+            summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
+            # Filter for selected opportunities
+            summary_df = summary_df[summary_df['opportunity'].isin(selected_orgs)]
+        
+        # Update the charts
+        forms_fig = px.line(
+            daily_stats[daily_stats['opportunity'].isin(selected_orgs if selected_orgs else daily_stats['opportunity'].unique())],
+            x='visit_day',
+            y='forms_7d_avg',
+            color='opportunity',
+            title='7-Day Rolling Average of Forms Submitted'
+        )
 
-        def safe_sum(key):
-            return sum(t.get(key, 0) for t in filtered_toplines)
+        dus_fig = px.line(
+            daily_stats[daily_stats['opportunity'].isin(selected_orgs if selected_orgs else daily_stats['opportunity'].unique())],
+            x='visit_day',
+            y='dus_7d_avg',
+            color='opportunity',
+            title='7-Day Rolling Average of DUs Visited'
+        )
 
-        total_dus = safe_sum('total_delivery_units')
-        total_completed_dus = safe_sum('total_dus_completed')
-        completion_pct = round((total_completed_dus / total_dus * 100) if total_dus else 0, 1)
-
-        topline = html.Div([
-            html.Div([
-                html.Div([
-                    html.H4("Total DUs", style={'marginBottom': '5px'}),
-                    html.H2(f"{total_dus:,}")
-                ], className="card"),
-                html.Div([
-                    html.H4("Completed DUs", style={'marginBottom': '5px'}),
-                    html.H2(f"{total_completed_dus:,}")
-                ], className="card"),
-                html.Div([
-                    html.H4("Service Points", style={'marginBottom': '5px'}),
-                    html.H2(f"{safe_sum('total_visits'):,}")
-                ], className="card"),
-                html.Div([
-                    html.H4("Total FLWs", style={'marginBottom': '5px'}),
-                    html.H2(f"{safe_sum('total_flws'):,}")
-                ], className="card"),
-                html.Div([
-                    html.H4("Avg. Coverage", style={'marginBottom': '5px'}),
-                    html.H2(f"{completion_pct}%")
-                ], className="card")
-            ], style={
-                'display': 'flex',
-                'gap': '25px',
-                'marginBottom': '30px',
-                'justifyContent': 'space-between'
-            })
-        ], style={'fontFamily': 'Arial, sans-serif', 'padding': '40px'})
-
-        df_records = df.to_dict('records') if not df.empty else []
-        return topline, df_records, forms_fig, dus_fig
+        return summary_df.to_dict('records'), forms_fig, dus_fig
 
     app.run(debug=True, port=8080)
 
@@ -383,7 +244,7 @@ def create_static_flw_report(coverage_data_objects, output_dir):
     summaries = {}
     toplines = {}
     for key, cov in coverage_data_objects.items():
-        summary_df, topline = generate_flw_summary(cov)
+        summary_df, topline = generate_summary(cov)
         summary_df['opportunity'] = key
         summaries[key] = summary_df
         toplines[key] = topline
@@ -436,7 +297,7 @@ def create_static_flw_report(coverage_data_objects, output_dir):
     
     # Add FLW summary table
     html_content += "<div class='card'><h2>FLW Summary</h2>"
-    html_content += combined_df.to_html(classes='table', index=False)
+    html_content += summary_df.to_html(classes='table', index=False)
     html_content += "</div>"
     
     # Close HTML

@@ -30,6 +30,7 @@ __pycache__/
 *.js
 *.js.map
 *.bak
+*.pkl
 
 # IDE files
 .idea/
@@ -49,4 +50,3 @@ src/.env
 # OS specific files
 .DS_Store
 Thumbs.db
-

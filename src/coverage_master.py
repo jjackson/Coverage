@@ -9,11 +9,15 @@ from typing import Dict
 from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
 from .models import CoverageData
+import pickle  # Add this import at the top
 
 try:
     from .opportunity_comparison_statistics import create_opportunity_comparison_report
 except ImportError:
     from src.opportunity_comparison_statistics import create_opportunity_comparison_report
+
+# At the top of the file, after imports
+coverage_data_objects = None  # Module-level variable to store coverage data
 
 def select_file(file_list, file_type, args=None):
     """Allow user to select a file interactively or use command line argument."""
@@ -107,22 +111,22 @@ def generate_coverage_outputs(output_dir, coverage_data, project_key):
     
     return {
         'project_key': project_key,
-        'project_dir': project_key,  # relative path from output_dir
+        'project_dir': project_key,
         'map_file': map_file,
         'stats_file': stats_file,
         'flw_views_file': flw_views_file,
         'opportunity_name': getattr(coverage_data, 'opportunity_name', project_key)
     }
 
-def generate_index_html(output_dir, project_outputs, comparison_report_file=None):
+def generate_index_html(output_dir, output_info_list):
     """Generate an index HTML file that links to all project outputs."""
     
     # Generate comparison report section if available
     comparison_section = ""
-    if comparison_report_file:
-        section_title = "Project Analysis" if len(project_outputs) == 1 else "Multi-Project Analysis"
-        card_title = "Opportunity Analysis Report" if len(project_outputs) == 1 else "Opportunity Comparison Report"
-        card_description = f"Detailed analysis including progress charts, statistics, and performance metrics for this project." if len(project_outputs) == 1 else f"Comparative analysis across all {len(project_outputs)} projects including statistics, performance metrics, and cross-project insights."
+    if len(output_info_list) > 1:
+        section_title = "Multi-Project Analysis"
+        card_title = "Opportunity Comparison Report"
+        card_description = f"Comparative analysis across all {len(output_info_list)} projects including statistics, performance metrics, and cross-project insights."
         
         comparison_section = f"""
         <div class="comparison-section">
@@ -133,7 +137,7 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
                         <h3>{card_title}</h3>
                         <p>{card_description}</p>
                     </div>
-                    <a href="{comparison_report_file}" class="btn btn-comparison">View Analysis</a>
+                    <a href="opportunity_comparison_report.html" class="btn btn-comparison">View Analysis</a>
                 </div>
             </div>
         </div>
@@ -141,7 +145,7 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
     
     # Generate cards for each project
     project_cards = ""
-    for output_info in project_outputs:
+    for output_info in output_info_list:
         project_key = output_info['project_key']
         project_dir = output_info['project_dir']
         opportunity_name = output_info['opportunity_name']
@@ -288,7 +292,7 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
 <body>
     <div class="container">
         <h1>Coverage Analysis Dashboard</h1>
-        <p>Analysis results for {len(project_outputs)} project(s)</p>
+        <p>Analysis results for {len(output_info_list)} project(s)</p>
         
         {comparison_section}
         
@@ -301,10 +305,10 @@ def generate_index_html(output_dir, project_outputs, comparison_report_file=None
     
     # Write the index HTML file to the output directory
     index_path = os.path.join(output_dir, "index.html")
-    with open(index_path, "w") as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         f.write(index_html)
     
-    return "index.html"
+    return index_path
 
 def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
@@ -335,6 +339,7 @@ def load_opportunity_domain_mapping() -> Dict[str, str]:
             raise ValueError(f"Could not parse OPPORTUNITY_DOMAIN_MAPPING from environment variable. Please check the format. Error: {e}")
 
 def main():
+    global coverage_data_objects
     # Set up command line arguments
     parser = argparse.ArgumentParser(description="Master command for generating coverage analysis")
     parser.add_argument("--excel-file", help="Excel file containing delivery unit data")
@@ -518,21 +523,18 @@ def main():
     
     # Generate main index HTML
     print("\nCreating main dashboard index...")
-    generate_index_html(output_dir, project_outputs, comparison_report_file)
+    generate_index_html(output_dir, project_outputs)
 
 
-    # Construct the full path to the index.html file
-    full_path = os.path.join(os.getcwd(), output_dir, "index.html")
+    # Open the index file in browser
+    index_path = os.path.join(output_dir, "index.html")
+    webbrowser.open(f"file://{os.path.abspath(index_path)}")
     
-    print(f"\nAll done! Open the dashboard at: {full_path}")
+    # Save coverage data to a file
+    with open('coverage_data.pkl', 'wb') as f:
+        pickle.dump(coverage_data_objects, f)
     
-    # Open the dashboard in the default web browser
-    print("Launching dashboard in your default browser...")
-    try:
-        webbrowser.open(f"file://{full_path}")
-    except Exception as e:
-        print(f"Could not open browser automatically: {e}")
-        print("Please open the file manually.")
+    return coverage_data_objects
 
 if __name__ == "__main__":
     main()

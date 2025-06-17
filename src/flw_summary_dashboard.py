@@ -1,3 +1,5 @@
+import os
+
 import dash
 from dash import html, dcc, Input, Output
 import pandas as pd
@@ -9,20 +11,26 @@ import plotly.express as px
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
+    print("--- coverage_data_objects-----")
+    print(coverage_data_objects)
+
+    ## loading options from .env file for filtering
+    #options_mapping = load_opportunity_domain_mapping
+
 
     # Initial summary for table columns
     summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
 
     # Define color coding conditions for the table
     style_data_conditional = [
-        {
-            'if': {
-                'filter_query': '{days_since_active} < 7',
-                'column_id': 'days_since_active'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
+        # {
+        #     'if': {
+        #         'filter_query': '{days_since_active} < 7',
+        #         'column_id': 'days_since_active'
+        #     },
+        #     'backgroundColor': '#d4edda',
+        #     'color': '#155724',
+        # },
         {
             'if': {
                 'filter_query': '{days_since_active} >= 7',
@@ -32,14 +40,14 @@ def create_flw_dashboard(coverage_data_objects):
             'color': '#721c24',
         },
         # Color code average forms per day
-        {
-            'if': {
-                'filter_query': '{avrg_forms_per_day_mavrg} >= 10',
-                'column_id': 'avrg_forms_per_day_mavrg'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
+        # {
+        #     'if': {
+        #         'filter_query': '{avrg_forms_per_day_mavrg} >= 10',
+        #         'column_id': 'avrg_forms_per_day_mavrg'
+        #     },
+        #     'backgroundColor': '#d4edda',
+        #     'color': '#155724',
+        # },
         {
             'if': {
                 'filter_query': '{avrg_forms_per_day_mavrg} < 10',
@@ -49,14 +57,14 @@ def create_flw_dashboard(coverage_data_objects):
             'color': '#721c24',
         },
         # Color code dus per day
-        {
-            'if': {
-                'filter_query': '{dus_per_day_mavrg} >= 1',
-                'column_id': 'dus_per_day_mavrg'
-            },
-            'backgroundColor': '#d4edda',
-            'color': '#155724',
-        },
+        # {
+        #     'if': {
+        #         'filter_query': '{dus_per_day_mavrg} >= 1',
+        #         'column_id': 'dus_per_day_mavrg'
+        #     },
+        #     'backgroundColor': '#d4edda',
+        #     'color': '#155724',
+        # },
         {
             'if': {
                 'filter_query': '{dus_per_day_mavrg} < 1',
@@ -64,12 +72,13 @@ def create_flw_dashboard(coverage_data_objects):
             },
             'backgroundColor': '#f8d7da',
             'color': '#721c24',
-        },
-        # Add alternating row colors
-        {
-            'if': {'row_index': 'odd'},
-            'backgroundColor': '#f9f9f9'
         }
+        # ,
+        # # Add alternating row colors
+        # {
+        #     'if': {'row_index': 'odd'},
+        #     'backgroundColor': '#f9f9f9'
+        # }
     ]
 
     app.layout = html.Div([
@@ -99,8 +108,12 @@ def create_flw_dashboard(coverage_data_objects):
                     'borderRadius': '5px',
                     'marginBottom': '30px',
                     'maxHeight': '800px',
-                    'overflowY': 'auto'
+                    'overflowY': 'auto',
+                    'margin': '0px',
+                    'width': '100%',
+                    'max-width': 'none'
                 },
+                fixed_columns={'headers': True, 'data': 2},
                 filter_action='native',
                 sort_action='native',
                 export_format='csv',
@@ -122,7 +135,8 @@ def create_flw_dashboard(coverage_data_objects):
                 },
                 style_data={
                     'border': '1px solid #ddd'
-                }
+                },
+                page_size=10
             ),
             html.Div([
                 html.H2("Rolling 7-Day Averages", style={

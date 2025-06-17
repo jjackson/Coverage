@@ -112,11 +112,21 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         # Merge recent activity with full summary
         summary = summary.merge(recent_grouped, on=['opportunity'] if group_by == 'opportunity' else ['flw_id', 'opportunity'], how='left')
         summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0}, inplace=True)
-        
+
         all_summaries.append(summary)
     
     # Combine all summaries
     combined_summary = pd.concat(all_summaries, ignore_index=True)
+
+    # change the date format of 'date_first_active' in 'DD-MM-YYYY'
+    combined_summary['date_first_active'] = combined_summary['date_first_active'].dt.strftime('%m-%d-%Y')
+
+    # change the date format of 'date_last_active' in 'DD-MM-YYYY'
+    combined_summary['date_last_active'] = combined_summary['date_last_active'].dt.strftime('%m-%d-%Y')
+
+    # sort the 'combined_summary' data frame with 'days_since_active' , highest number on top
+    combined_summary = combined_summary.sort_values(by='days_since_active', ascending=False)
+
     
     # Calculate topline stats
     topline_stats = {
@@ -128,9 +138,9 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
     
     # Define the desired column order
     column_order = [
-        'opportunity',
-        'flw_id',
         'flw_name',
+        'flw_id',
+        'opportunity',
         'total_visits',
         'date_first_active',
         'date_last_active',

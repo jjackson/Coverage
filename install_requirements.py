@@ -27,3 +27,5 @@ project_path = "."
 
 # Run pipreqs to check and install project dependencies and generate requirements.txt for reference
 subprocess.run(["pipreqs", project_path, "--force"])
+# Run pip install command
+subprocess.run(["pip", "install", "-r", "requirements.txt"])

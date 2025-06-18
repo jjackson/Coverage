@@ -11,8 +11,6 @@ import plotly.express as px
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
-    print("--- coverage_data_objects-----")
-    print(coverage_data_objects)
 
     ## loading options from .env file for filtering
     #options_mapping = load_opportunity_domain_mapping
@@ -108,11 +106,12 @@ def create_flw_dashboard(coverage_data_objects):
                     'borderRadius': '5px',
                     'marginBottom': '30px',
                     'maxHeight': '800px',
-                    'overflowY': 'auto',
+                    'overflowY': 'scroll',
                     'margin': '0px',
                     'width': '100%',
                     'max-width': 'none'
                 },
+                fill_width=False,
                 fixed_columns={'headers': True, 'data': 2},
                 filter_action='native',
                 sort_action='native',
@@ -120,21 +119,32 @@ def create_flw_dashboard(coverage_data_objects):
                 export_headers='display',
                 style_data_conditional=style_data_conditional,
                 style_cell={
-                    'textAlign': 'left',
-                    'padding': '12px',
+                    'textAlign': 'center',
+                    'padding': '2px',
                     'fontFamily': 'Arial, sans-serif',
                     'fontSize': '14px',
-                    'border': '1px solid #ddd'
+                    'border': '1px solid #ddd',
+                    'whiteSpace': 'normal',
+                    'width': '140px',
+                    'minWidth': '120px',
+                    'maxWidth': '150px',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis'
                 },
                 style_header={
                     'backgroundColor': '#f2f2f2',
                     'fontWeight': 'bold',
                     'textAlign': 'center',
                     'border': '1px solid #ddd',
-                    'padding': '12px'
+                    'padding': '6px',
+                    'whiteSpace': 'normal',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis',
                 },
                 style_data={
-                    'border': '1px solid #ddd'
+                    'border': '1px solid #ddd',
+                    'whiteSpace': 'normal',
+                    'height': 'auto'
                 },
                 page_size=10
             ),
@@ -255,7 +265,7 @@ def create_flw_dashboard(coverage_data_objects):
                         df = df[df['visit_date'].notna()]
                         df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
                         df['opportunity'] = org
-                        all_service_dfs.append(df[['visit_day', 'flw_id', 'opportunity', 'visit_id', 'du_name']])
+                        all_service_dfs.append(df[['flw_name', 'visit_day', 'flw_id', 'opportunity', 'visit_id', 'du_name']])
 
             service_timeline_df = pd.concat(all_service_dfs)
             
@@ -274,13 +284,20 @@ def create_flw_dashboard(coverage_data_objects):
                     (service_timeline_df['visit_day'] >= window_start) & 
                     (service_timeline_df['visit_day'] <= current_date)
                 ]
-                
+
                 # Calculate metrics for this window
                 window_metrics = window_data.groupby(['flw_id', 'opportunity']).agg(
                     visits_last7=('visit_id', 'count'),
                     dus_last7=('du_name', pd.Series.nunique)
                 ).reset_index()
-                
+
+                #adding back flw_name
+                window_metrics = window_metrics.merge(
+                    window_data[['flw_id', 'flw_name']].drop_duplicates(),
+                    on='flw_id',
+                    how='left'
+                )
+
                 # Calculate 7-day averages
                 window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
                 window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
@@ -289,9 +306,11 @@ def create_flw_dashboard(coverage_data_objects):
                 window_metrics['visit_day'] = current_date
                 
                 historical_metrics.append(window_metrics)
-            
+
             # Combine all historical metrics
             chart_data = pd.concat(historical_metrics, ignore_index=True)
+            #saving flw_id joined with flw_name as a new column to show on graph
+            chart_data["flw"] = chart_data["flw_name"] + "(" +chart_data["flw_id"] + ")"
 
         # Create the charts
         if not selected_orgs:
@@ -317,7 +336,7 @@ def create_flw_dashboard(coverage_data_objects):
                 chart_data,
                 x='visit_day',
                 y='avrg_forms_per_day_mavrg',
-                color='flw_id',
+                color='flw',
                 title='7-Day Rolling Average of Forms Submitted'
             )
             
@@ -325,7 +344,7 @@ def create_flw_dashboard(coverage_data_objects):
                 chart_data,
                 x='visit_day',
                 y='dus_per_day_mavrg',
-                color='flw_id',
+                color='flw',
                 title='7-Day Rolling Average of DUs Visited'
             )
 

@@ -718,6 +718,7 @@ def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None
 
 def export_superset_query_with_pagination(
     superset_url: str,
+    sql_query: str,
     username: str,
     password: str,
     output_filename: Optional[str] = None,
@@ -728,11 +729,9 @@ def export_superset_query_with_pagination(
     """
     Export all data from a Superset saved query using pagination to bypass the 10,000 row limit.
     
-    This method uses the same approach as the superset_export.py script to fetch data in chunks
-    and combine them into a single CSV file.
-    
     Args:
         superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
+        sql_query: SQL query to execute
         username: Superset username for authentication
         password: Superset password for authentication
         output_filename: Optional custom filename for the CSV (without extension)
@@ -820,6 +819,10 @@ def export_superset_query_with_pagination(
         #     print(f"   Schema: {query_details['schema']}")
         #     print()
         #
+        #6/28/25 JJ:  We've added python to store the SQL commands, but I'm making this method flexible
+        #to accept it as an input command rather than hard coded here.
+        #base_sql = sql_queries.SQL_QUERIES["opportunity_uservisit"]
+
         # Execute paginated query
         execute_url = f'{superset_url}/api/v1/sqllab/execute/'
         all_data = []
@@ -827,7 +830,8 @@ def export_superset_query_with_pagination(
         offset = 0
         total_rows = 0
         chunk_num = 1
-        base_sql = sql_queries.SQL_QUERIES["opportunity_uservisit"]
+
+        base_sql = sql_query
         
         while True:
             # Add OFFSET and LIMIT to the SQL
@@ -935,6 +939,7 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         # Use the new export function to get the data
         csv_path = export_superset_query_with_pagination(
             superset_url=superset_url,
+            sql_query=sql_queries.SQL_QUERIES["opportunity_uservisit"],
             username=superset_username,
             password=superset_password
         )

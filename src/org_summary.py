@@ -124,8 +124,8 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
     # change the date format of 'date_last_active' in 'DD-MM-YYYY'
     combined_summary['date_last_active'] = combined_summary['date_last_active'].dt.strftime('%m-%d-%Y')
 
-    # sort the 'combined_summary' data frame with 'days_since_active' , highest number on top
-    combined_summary = combined_summary.sort_values(by='days_since_active', ascending=False)
+    # sort the 'combined_summary' data frame with '‘dus_per_day_mavrg’ ', 'days_since_active' , highest number on top
+    combined_summary = combined_summary.sort_values(by='dus_per_day_mavrg', ascending=True)
 
     
     # Calculate topline stats
@@ -142,16 +142,16 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         'flw_id',
         'opportunity',
         'total_visits',
+        'dus_per_day_mavrg',
         'date_first_active',
         'date_last_active',
         'days_since_active',
+        'avrg_forms_per_day_mavrg',
         'active_period_days',
         'unique_days_worked',
         'avrg_forms_per_day',
-        'avrg_forms_per_day_mavrg',
         'total_unique_dus_worked',
         'dus_per_day',
-        'dus_per_day_mavrg',
         'total_dus_completed',
         'total_dus_visited'
     ]

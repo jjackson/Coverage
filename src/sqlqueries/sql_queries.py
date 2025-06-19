@@ -19,11 +19,10 @@ SQL_QUERIES = {
     flag_reason,
     form_json -> 'form' -> 'cluster_update_block' -> 'update_cluster_case' -> 'case' ->> '@user_id' AS cchq_user_owner_id,
     
-    -- Case ID:
-    form_json -> 'form' -> 'case' ->> '@case_id' AS "case_id"
-
+    -- Case ID (updated to use the working field):
+    form_json -> 'form' ->> 'kmc_beneficiary_case_id' AS "case_id"
 FROM public.opportunity_uservisit 
 LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id
 LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id
-WHERE opportunity_opportunity.id IN (523)"""
+WHERE opportunity_opportunity.id IN (524)"""
 }

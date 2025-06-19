@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 import webbrowser
+import json
 
 # Add the src directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,7 +76,6 @@ def create_html_table(df: pd.DataFrame, title: str = "Data Table") -> str:
         <h2>{title}</h2>
         <div class="table-container">
             {df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                       index=False, 
                        float_format='%.2f')}
         </div>
     </div>
@@ -173,11 +173,41 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
             'flw_name': flw_name
         }
         
-        # Add daily visit indicators
+        # Add daily visit indicators with visit details
         for date in date_range:
             date_str = date.strftime('%Y-%m-%d')
-            has_visit = case_data['visit_date'].dt.date.eq(date.date()).any()
-            row[date_str] = 'X' if has_visit else ''
+            date_visits = case_data[case_data['visit_date'].dt.date.eq(date.date())]
+            
+            if len(date_visits) > 0:
+                # Create visit details for tooltip
+                visit_details = []
+                for _, visit in date_visits.iterrows():
+                    # Handle NaN values by converting them to 'N/A'
+                    def clean_value(value):
+                        if pd.isna(value) or value == 'nan' or str(value).lower() == 'nan':
+                            return 'N/A'
+                        return value
+                    
+                    detail = {
+                        'visit_id': clean_value(visit.get('visit_id')),
+                        'visit_date': str(clean_value(visit.get('visit_date'))),  # Convert Timestamp to string
+                        'flw_name': clean_value(visit.get('flw_name')),
+                        'du_name': clean_value(visit.get('du_name')),
+                        'status': clean_value(visit.get('status')),
+                        'latitude': clean_value(visit.get('latitude')),
+                        'longitude': clean_value(visit.get('longitude')),
+                        'elevation': clean_value(visit.get('elevation_in_m')),
+                        'accuracy': clean_value(visit.get('accuracy_in_m')),
+                        'flagged': clean_value(visit.get('flagged')),
+                        'flag_reason': clean_value(visit.get('flag_reason'))
+                    }
+                    visit_details.append(detail)
+                
+                # Store visit details as JSON string for data attribute
+                visit_data = json.dumps(visit_details)
+                row[date_str] = f'<span class="visit-marker" data-visits=\'{visit_data}\'>X</span>'
+            else:
+                row[date_str] = ''
         
         # Calculate distances between consecutive visits
         if len(case_data) > 1:
@@ -214,10 +244,12 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
         <h2>Case Visit Timeline</h2>
         <p>Showing visits per case_id from {min_date} to {max_date}. 'X' indicates a visit on that date.</p>
         <p>Distance columns show the distance in kilometers between consecutive visits.</p>
+        <p><strong>Tip:</strong> Click on any "X" to see detailed visit information.</p>
         <div class="table-container">
             {case_df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                           index=False, 
-                           float_format='%.2f')}
+                           float_format='%.2f',
+                           table_id='case-visit-table',
+                           escape=False)}
         </div>
     </div>
     """
@@ -257,6 +289,11 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>KMC Visit Data - Exploratory Statistics</title>
+        
+        <!-- DataTables CSS -->
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css">
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+        
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -264,7 +301,7 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 background-color: #f5f5f5;
             }}
             .container {{
-                max-width: 1200px;
+                max-width: 1400px;
                 margin: 0 auto;
                 background-color: white;
                 padding: 20px;
@@ -312,7 +349,6 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 margin: 30px 0;
             }}
             .table-container {{
-                overflow-x: auto;
                 margin: 15px 0;
             }}
             .data-table {{
@@ -343,11 +379,92 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 text-align: center;
                 margin-top: 20px;
             }}
+            .dt-buttons {{
+                margin-bottom: 10px;
+            }}
+            .dt-button {{
+                background-color: #007bff !important;
+                color: white !important;
+                border: none !important;
+                padding: 8px 16px !important;
+                margin-right: 5px !important;
+                border-radius: 4px !important;
+                cursor: pointer !important;
+            }}
+            .dt-button:hover {{
+                background-color: #0056b3 !important;
+            }}
+            .dataTables_filter {{
+                margin-bottom: 10px;
+            }}
+            .dataTables_filter input {{
+                border: 1px solid #ddd;
+                padding: 6px 10px;
+                border-radius: 4px;
+                margin-left: 5px;
+            }}
+            .dataTables_length {{
+                margin-bottom: 10px;
+            }}
+            .dataTables_length select {{
+                border: 1px solid #ddd;
+                padding: 4px 8px;
+                border-radius: 4px;
+                margin: 0 5px;
+            }}
+            .visit-marker {{
+                cursor: pointer;
+                color: #007bff;
+                font-weight: bold;
+                text-decoration: underline;
+            }}
+            .visit-marker:hover {{
+                color: #0056b3;
+                background-color: #e9ecef;
+                padding: 2px 4px;
+                border-radius: 3px;
+            }}
+            .tooltip {{
+                position: absolute;
+                background: #333;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 12px;
+                max-width: 400px;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                display: none;
+            }}
+            .tooltip::after {{
+                content: '';
+                position: absolute;
+                top: 100%;
+                left: 20px;
+                border-width: 5px;
+                border-style: solid;
+                border-color: #333 transparent transparent transparent;
+            }}
+            .visit-detail {{
+                margin-bottom: 8px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #555;
+            }}
+            .visit-detail:last-child {{
+                border-bottom: none;
+                margin-bottom: 0;
+            }}
+            .visit-detail strong {{
+                color: #007bff;
+            }}
         </style>
     </head>
     <body>
         <div class="container">
             <h1>KMC Visit Data - Exploratory Statistics</h1>
+            
+            <!-- Tooltip div -->
+            <div id="visit-tooltip" class="tooltip"></div>
             
             <div class="stats-summary">
                 <h2>Summary Statistics</h2>
@@ -376,8 +493,8 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 <p>Showing all {len(df)} records from the KMC visit data:</p>
                 <div class="table-container">
                     {df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                               index=False, 
-                               float_format='%.2f')}
+                               float_format='%.2f',
+                               table_id='raw-data-table')}
                 </div>
             </div>
             
@@ -387,6 +504,130 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 Report generated on: {timestamp}
             </div>
         </div>
+        
+        <!-- jQuery -->
+        <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+        
+        <!-- DataTables JS -->
+        <script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+        
+        <script>
+            $(document).ready(function() {{
+                // Initialize DataTable for raw data
+                $('#raw-data-table').DataTable({{
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy',
+                        'csv',
+                        'excel',
+                        'pdf',
+                        'print'
+                    ],
+                    scrollX: true,
+                    scrollY: '800px',
+                    scrollCollapse: true
+                }});
+                
+                // Initialize DataTable for case visit table
+                $('#case-visit-table').DataTable({{
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy',
+                        'csv',
+                        'excel',
+                        'pdf',
+                        'print'
+                    ],
+                    scrollX: true,
+                    scrollY: '800px',
+                    scrollCollapse: true
+                }});
+                
+                // Wait a bit for DataTables to fully initialize, then set up tooltip events
+                setTimeout(function() {{
+                    console.log('Setting up tooltip events...');
+                    
+                    // Handle click events on visit markers using event delegation
+                    $(document).on('click', '.visit-marker', function(e) {{
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        console.log('Visit marker clicked!');
+                        
+                        try {{
+                            const visits = JSON.parse($(this).attr('data-visits'));
+                            const tooltip = $('#visit-tooltip');
+                            
+                            console.log('Visits data:', visits);
+                            
+                            // Build tooltip content
+                            let content = '<div style="font-weight: bold; margin-bottom: 10px; color: #007bff;">Visit Details</div>';
+                            
+                            visits.forEach((visit, index) => {{
+                                content += `
+                                    <div class="visit-detail">
+                                        <strong>Visit ${{index + 1}}:</strong><br>
+                                        <strong>Visit ID:</strong> ${{visit.visit_id}}<br>
+                                        <strong>Date:</strong> ${{visit.visit_date}}<br>
+                                        <strong>FLW:</strong> ${{visit.flw_name}}<br>
+                                        <strong>DU Name:</strong> ${{visit.du_name}}<br>
+                                        <strong>Status:</strong> ${{visit.status}}<br>
+                                        <strong>Location:</strong> ${{visit.latitude}}, ${{visit.longitude}}<br>
+                                        <strong>Elevation:</strong> ${{visit.elevation}} m<br>
+                                        <strong>Accuracy:</strong> ${{visit.accuracy}} m<br>
+                                        <strong>Flagged:</strong> ${{visit.flagged}}<br>
+                                        ${{visit.flag_reason !== 'N/A' ? '<strong>Flag Reason:</strong> ' + visit.flag_reason + '<br>' : ''}}
+                                    </div>
+                                `;
+                            }});
+                            
+                            tooltip.html(content);
+                            
+                            // Position tooltip near the clicked element
+                            const rect = this.getBoundingClientRect();
+                            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                            
+                            tooltip.css({{
+                                top: rect.bottom + scrollTop + 5,
+                                left: rect.left + scrollLeft - 200,
+                                display: 'block'
+                            }});
+                            
+                            console.log('Tooltip positioned and shown');
+                        }} catch (error) {{
+                            console.error('Error showing tooltip:', error);
+                        }}
+                    }});
+                    
+                    // Hide tooltip when clicking elsewhere
+                    $(document).on('click', function(e) {{
+                        if (!$(e.target).hasClass('visit-marker')) {{
+                            $('#visit-tooltip').hide();
+                        }}
+                    }});
+                    
+                    // Hide tooltip on escape key
+                    $(document).on('keydown', function(e) {{
+                        if (e.key === 'Escape') {{
+                            $('#visit-tooltip').hide();
+                        }}
+                    }});
+                    
+                    console.log('Tooltip events set up complete');
+                }}, 1000);
+            }});
+        </script>
     </body>
     </html>
     """

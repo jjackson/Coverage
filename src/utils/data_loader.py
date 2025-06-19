@@ -115,6 +115,106 @@ def load_excel_data(filepath: str, sheet_name: str = "Cases") -> pd.DataFrame:
     return df
 
 
+def flatten_json_column(df: pd.DataFrame, json_column: str, json_path: str, prefix: str = None) -> pd.DataFrame:
+    """
+    Flatten JSON data from a specific column in a DataFrame.  This is useful when form data is included from supserset
+    
+    Args:
+        df: Input DataFrame containing the JSON column
+        json_column: Name of the column containing JSON data
+        json_path: Dot-separated path to the section to extract (e.g., 'form.case.update')
+        prefix: Prefix to add to flattened column names 
+        
+    Returns:
+        DataFrame with flattened JSON columns added
+    """
+    if json_column not in df.columns:
+        ValueError(f"Error: Column '{json_column}' not found in DataFrame. Skipping JSON flattening.")
+        
+    print(f"Flattening JSON data from column '{json_column}'...")
+    
+    # Create a copy of the DataFrame to avoid modifying the original
+    df_flattened = df.copy()
+    
+    # Initialize lists to store flattened data
+    flattened_data = []
+    successful_parses = 0
+    failed_parses = 0
+    
+    for idx, row in df.iterrows():
+        try:
+            # Parse JSON if it's a string, otherwise use as is
+            if isinstance(row[json_column], str):
+                json_str = row[json_column]
+                import ast
+                # Try ast.literal_eval for any string that starts with { or [
+                if json_str.strip().startswith('{') or json_str.strip().startswith('['):
+                    try:
+                        json_data = ast.literal_eval(json_str)
+                    except Exception as e1:
+                        # If it contains double quotes, try json.loads
+                        if '"' in json_str:
+                            try:
+                                json_data = json.loads(json_str)
+                            except Exception as e2:
+                                print(f"Row {idx}: Failed to parse with ast.literal_eval and json.loads. Error1: {e1}, Error2: {e2}")
+                                flattened_data.append({})
+                                failed_parses += 1
+                                continue
+                        else:
+                            print(f"Row {idx}: Failed to parse with ast.literal_eval. Error: {e1}")
+                            flattened_data.append({})
+                            failed_parses += 1
+                            continue
+                else:
+                    # Not a dict/list string, skip
+                    flattened_data.append({})
+                    failed_parses += 1
+                    continue
+            else:
+                json_data = row[json_column]
+            
+            # Navigate to the specified path in the JSON
+            path_parts = json_path.split('.')
+            current_data = json_data
+            
+            for part in path_parts:
+                if isinstance(current_data, dict) and part in current_data:
+                    current_data = current_data[part]
+                else:
+                    ValueError(f"Error: Row {idx} - Path '{part}' not found in JSON data")
+            
+            flattened_data.append(current_data if isinstance(current_data, dict) else {})
+            successful_parses += 1
+                
+        except (json.JSONDecodeError, TypeError, KeyError, ValueError, SyntaxError) as e:
+            print(f"Warning: Could not parse JSON for row {idx}: {e}")
+            flattened_data.append({})
+            failed_parses += 1
+    
+    # Convert the flattened data to a DataFrame
+    if flattened_data:
+        flattened_df = pd.DataFrame(flattened_data)
+
+        if prefix:
+            # Add prefix to column names to avoid conflicts
+            flattened_df = flattened_df.add_prefix(f'{prefix}_')
+
+        
+        # Concatenate with original DataFrame
+        df_flattened = pd.concat([df_flattened, flattened_df], axis=1)
+        
+        print(f"Successfully flattened JSON data:")
+        print(f"  - Successful parses: {successful_parses}")
+        print(f"  - Failed parses: {failed_parses}")
+        print(f"  - Added {len(flattened_df.columns)} new columns:")
+        print(f"  - New columns: {list(flattened_df.columns)}")
+    else:
+        print("No valid JSON data found to flatten.")
+    
+    return df_flattened
+
+
 def load_csv_data(filepath: str) -> pd.DataFrame:
     """
     Load data from a CSV file.

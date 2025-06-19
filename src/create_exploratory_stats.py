@@ -19,7 +19,7 @@ import json
 # Add the src directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.utils.data_loader import export_superset_query_with_pagination
+from src.utils.data_loader import export_superset_query_with_pagination, load_csv_data, flatten_json_column
 from src.sqlqueries.sql_queries import SQL_QUERIES
 import constants
 
@@ -52,7 +52,11 @@ def load_kmc_visit_data(superset_url: str, username: str, password: str, verbose
     )
     
     # Load the exported CSV into a DataFrame
-    df = pd.read_csv(csv_file_path)
+    df = load_csv_data(csv_file_path)
+    
+    # Flatten the form_json column if it exists
+    if 'form_json' in df.columns:
+        df = flatten_json_column(df, json_column='form_json', json_path='form.case.update', prefix='case_update')
     
     print(f"Successfully loaded {len(df):,} rows of KMC visit data")
     print(f"Columns: {list(df.columns)}")
@@ -154,24 +158,55 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
         lambda x: x.sort_values('visit_date').reset_index(drop=True)
     ).reset_index(drop=True)
     
+    # Define columns that come from the original SQL query (not from flattened form_json)
+    # These are the columns we want to include in the case summary
+    original_columns = [
+        'visit_id', 'opportunity_name', 'flw_id', 'flw_name', 'visit_date', 
+        'opportunity_id', 'status', 'du_name', 'latitude', 'longitude', 
+        'elevation_in_m', 'accuracy_in_m', 'flagged', 'flag_reason', 
+        'cchq_user_owner_id', 'case_id'
+    ]
+    
+    # Filter to only include columns that actually exist in the DataFrame
+    available_original_columns = [col for col in original_columns if col in df.columns]
+    print(f"Available original columns: {available_original_columns}")
+    
     # Create the case visit table
     case_table_data = []
     
     for case_id in case_visits['case_id'].unique():
         case_data = case_visits[case_visits['case_id'] == case_id].copy()
         
-        # Get the most common values for additional columns
-        opportunity_name = case_data['opportunity_name'].mode().iloc[0] if 'opportunity_name' in case_data.columns and len(case_data['opportunity_name'].mode()) > 0 else ''
-        flw_id = case_data['flw_id'].mode().iloc[0] if 'flw_id' in case_data.columns and len(case_data['flw_id'].mode()) > 0 else ''
-        flw_name = case_data['flw_name'].mode().iloc[0] if 'flw_name' in case_data.columns and len(case_data['flw_name'].mode()) > 0 else ''
+        # Create row for this case with all available original columns
+        row = {'case_id': case_id}
         
-        # Create row for this case
-        row = {
-            'case_id': case_id,
-            'opportunity_name': opportunity_name,
-            'flw_id': flw_id,
-            'flw_name': flw_name
-        }
+        # Add visit count
+        row['total_visits'] = len(case_data)
+        
+        # Add summary values for each original column (using mode for categorical, first for others)
+        for col in available_original_columns:
+            if col == 'case_id':
+                continue  # Already added
+            
+            if col in ['visit_date', 'latitude', 'longitude', 'elevation_in_m', 'accuracy_in_m']:
+                # For numeric/date columns, use the first value as representative
+                if len(case_data) > 0 and col in case_data.columns:
+                    value = case_data[col].iloc[0]
+                    if pd.isna(value):
+                        row[col] = 'N/A'
+                    elif col == 'visit_date':
+                        row[col] = str(value)
+                    else:
+                        row[col] = value
+                else:
+                    row[col] = 'N/A'
+            else:
+                # For categorical columns, use the most common value
+                if col in case_data.columns and len(case_data[col].mode()) > 0:
+                    mode_value = case_data[col].mode().iloc[0]
+                    row[col] = mode_value if not pd.isna(mode_value) else 'N/A'
+                else:
+                    row[col] = 'N/A'
         
         # Add daily visit indicators with visit details
         for date in date_range:
@@ -188,19 +223,17 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
                             return 'N/A'
                         return value
                     
-                    detail = {
-                        'visit_id': clean_value(visit.get('visit_id')),
-                        'visit_date': str(clean_value(visit.get('visit_date'))),  # Convert Timestamp to string
-                        'flw_name': clean_value(visit.get('flw_name')),
-                        'du_name': clean_value(visit.get('du_name')),
-                        'status': clean_value(visit.get('status')),
-                        'latitude': clean_value(visit.get('latitude')),
-                        'longitude': clean_value(visit.get('longitude')),
-                        'elevation': clean_value(visit.get('elevation_in_m')),
-                        'accuracy': clean_value(visit.get('accuracy_in_m')),
-                        'flagged': clean_value(visit.get('flagged')),
-                        'flag_reason': clean_value(visit.get('flag_reason'))
-                    }
+                    # Include ALL available columns in the visit details (both original and flattened)
+                    detail = {}
+                    for col in visit.index:  # Use all columns in the visit row
+                        # Skip the form_json column as it contains raw JSON data
+                        if col == 'form_json':
+                            continue
+                        if col == 'visit_date':
+                            detail[col] = str(clean_value(visit.get(col)))
+                        else:
+                            detail[col] = clean_value(visit.get(col))
+                    
                     visit_details.append(detail)
                 
                 # Store visit details as JSON string for data attribute
@@ -237,14 +270,62 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
     case_df = pd.DataFrame(case_table_data)
     if len(case_df) > 0:
         case_df = case_df.sort_values('case_id')
+        
+        # Reorder columns for better readability
+        # Start with key identifiers and summary info
+        priority_columns = ['case_id', 'total_visits']
+        
+        # Add opportunity and FLW info
+        if 'opportunity_name' in case_df.columns:
+            priority_columns.append('opportunity_name')
+        if 'flw_name' in case_df.columns:
+            priority_columns.append('flw_name')
+        if 'flw_id' in case_df.columns:
+            priority_columns.append('flw_id')
+            
+        # Add other important columns
+        other_important = ['status', 'du_name', 'visit_date', 'cchq_user_owner_id']
+        for col in other_important:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add location columns
+        location_columns = ['latitude', 'longitude', 'elevation_in_m', 'accuracy_in_m']
+        for col in location_columns:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add flag columns
+        flag_columns = ['flagged', 'flag_reason']
+        for col in flag_columns:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add opportunity_id
+        if 'opportunity_id' in case_df.columns:
+            priority_columns.append('opportunity_id')
+        
+        # Add visit_id (usually not needed in summary but include if available)
+        if 'visit_id' in case_df.columns:
+            priority_columns.append('visit_id')
+        
+        # Add all remaining columns (date columns and distance columns)
+        remaining_columns = [col for col in case_df.columns if col not in priority_columns]
+        
+        # Combine all columns in the desired order
+        final_column_order = priority_columns + remaining_columns
+        
+        # Reorder the DataFrame
+        case_df = case_df[final_column_order]
     
     # Create HTML table
     html = f"""
     <div class="table-section">
         <h2>Case Visit Timeline</h2>
         <p>Showing visits per case_id from {min_date} to {max_date}. 'X' indicates a visit on that date.</p>
-        <p>Distance columns show the distance in kilometers between consecutive visits.</p>
-        <p><strong>Tip:</strong> Click on any "X" to see detailed visit information.</p>
+        <p>Total visits column shows the number of visits for each case. Distance columns show the distance in kilometers between consecutive visits.</p>
+        <p>All columns from the database are included (both original SQL columns and flattened JSON data).</p>
+        <p><strong>Tip:</strong> Click on any "X" to see detailed visit information for all available fields including flattened form data.</p>
         <div class="table-container">
             {case_df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
                            float_format='%.2f',
@@ -492,7 +573,7 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 <h2>Raw Data Table</h2>
                 <p>Showing all {len(df)} records from the KMC visit data:</p>
                 <div class="table-container">
-                    {df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
+                    {df.drop(columns=['form_json']).to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
                                float_format='%.2f',
                                table_id='raw-data-table')}
                 </div>
@@ -574,21 +655,19 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                             let content = '<div style="font-weight: bold; margin-bottom: 10px; color: #007bff;">Visit Details</div>';
                             
                             visits.forEach((visit, index) => {{
-                                content += `
-                                    <div class="visit-detail">
-                                        <strong>Visit ${{index + 1}}:</strong><br>
-                                        <strong>Visit ID:</strong> ${{visit.visit_id}}<br>
-                                        <strong>Date:</strong> ${{visit.visit_date}}<br>
-                                        <strong>FLW:</strong> ${{visit.flw_name}}<br>
-                                        <strong>DU Name:</strong> ${{visit.du_name}}<br>
-                                        <strong>Status:</strong> ${{visit.status}}<br>
-                                        <strong>Location:</strong> ${{visit.latitude}}, ${{visit.longitude}}<br>
-                                        <strong>Elevation:</strong> ${{visit.elevation}} m<br>
-                                        <strong>Accuracy:</strong> ${{visit.accuracy}} m<br>
-                                        <strong>Flagged:</strong> ${{visit.flagged}}<br>
-                                        ${{visit.flag_reason !== 'N/A' ? '<strong>Flag Reason:</strong> ' + visit.flag_reason + '<br>' : ''}}
-                                    </div>
-                                `;
+                                content += `<div class="visit-detail"><strong>Visit ${{index + 1}}:</strong><br>`;
+                                
+                                // Dynamically display all available fields
+                                Object.keys(visit).forEach(key => {{
+                                    const value = visit[key];
+                                    if (value !== 'N/A' && value !== null && value !== undefined) {{
+                                        // Format the key name for display
+                                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                        content += `<strong>${{displayKey}}:</strong> ${{value}}<br>`;
+                                    }}
+                                }});
+                                
+                                content += `</div>`;
                             }});
                             
                             tooltip.html(content);

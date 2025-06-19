@@ -101,12 +101,6 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
 
-            # Calculate median of number of visits per opportunity
-            recent_median_df = recent.groupby(['opportunity','visit_day']).agg(
-                visit_count=('visit_id', 'count')
-            ).reset_index()
-            visit_median = recent_median_df['visit_count'].median()
-            recent_grouped['visit_count_median'] = visit_median
         else:
             recent_grouped = recent.groupby(['flw_id', 'opportunity']).agg(
                 visits_last7=('visit_id', 'count'),

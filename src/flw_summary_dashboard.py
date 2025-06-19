@@ -5,19 +5,13 @@ from dash import html, dcc, Input, Output
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
-from datetime import date, timedelta
+from datetime import timedelta
 import plotly.express as px
 
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
-    #print("I came here in Create !!")
-    # Initial summary for table columns
     summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
-
-    # with pd.option_context('display.max_columns', None):
-    #     print("-----summary_df in Create-----")
-    #     print(summary_df)
 
     # Define color coding conditions for the table
     style_data_conditional = [
@@ -168,6 +162,15 @@ def create_flw_dashboard(coverage_data_objects):
                     'gridTemplateColumns': '1fr 1fr',
                     'gap': '30px',
                     'margin': '20px 0'
+                }),
+                html.Div([
+                    html.Div([
+                        dcc.Graph(id='median-avg-chart'),
+                    ], className='chart-item')
+                ], style={
+                    'gridTemplateColumns': '1fr 1fr',
+                    'gap': '30px',
+                    'margin': '20px 0'
                 })
             ], style={
                 'backgroundColor': '#fafafa',
@@ -194,6 +197,7 @@ def create_flw_dashboard(coverage_data_objects):
         Output('flw-summary-table', 'data'),
         Output('forms-rolling-chart', 'figure'),
         Output('dus-rolling-chart', 'figure'),
+        Output('median-avg-chart', 'figure'),
         Input('org-selector', 'value')
     )
     def update_dashboard(selected_orgs):
@@ -201,9 +205,6 @@ def create_flw_dashboard(coverage_data_objects):
         if not selected_orgs:
             # No selection - show opportunity level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='opportunity')
-            with pd.option_context('display.max_columns', None):
-                print("-----summary_df in Update's if not selected_orgs-----")
-                print(summary_df)
 
             # Create opportunity-level time series
             all_service_dfs = []
@@ -222,8 +223,10 @@ def create_flw_dashboard(coverage_data_objects):
 
             # Get unique dates
             unique_dates = sorted(service_timeline_df['visit_day'].unique())
-
+            #median_metrics = pd.DataFrame(columns=['opportunity', 'visit_day', 'visit_count_median'])
+            median_metrics = []
             for current_date in unique_dates:
+                median_metrics_temp = pd.DataFrame(columns=['opportunity', 'visit_day', 'visit_count_median'])
                 # Calculate the 7-day window
                 window_start = current_date - timedelta(days=6)
 
@@ -234,10 +237,23 @@ def create_flw_dashboard(coverage_data_objects):
                 ]
 
                 # Calculate metrics for this window
-                window_metrics = window_data.groupby('opportunity').agg(
+                window_metrics = window_data.groupby(['opportunity','visit_day']).agg(
                     visits_last7=('visit_id', 'count'),
                     dus_last7=('du_name', pd.Series.nunique)
                 ).reset_index()
+
+
+                recent_median_df = window_data.groupby(['opportunity','visit_day']).agg(
+                    visit_count=('visit_id', 'count')
+                ).reset_index()
+
+
+                unique_opportunities = sorted(recent_median_df['opportunity'].unique())
+                count = 0
+                for opp in unique_opportunities:
+                    visit_median = recent_median_df[recent_median_df['opportunity'] == opp]['visit_count'].median()
+                    median_metrics_temp.loc[count] = {'opportunity': opp, 'visit_day': current_date, 'visit_count_median' : visit_median}
+                    count = count + 1
 
                 # Calculate 7-day averages
                 window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
@@ -245,18 +261,16 @@ def create_flw_dashboard(coverage_data_objects):
 
                 # Add date
                 window_metrics['visit_day'] = current_date
-
+                median_metrics.append(median_metrics_temp)
                 historical_metrics.append(window_metrics)
 
             # Combine all historical metrics
+            median_data = pd.concat(median_metrics, ignore_index=True )
             chart_data = pd.concat(historical_metrics, ignore_index=True)
 
         else:
             # Selection made - show FLW level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
-            # with pd.option_context('display.max_columns', None):
-            #     print("-----summary_df in Update's if  selected_orgs-----")
-            #     print(summary_df)
             if 'opportunity' not in summary_df.columns and 'opportunity_name' in summary_df.columns:
                 summary_df['opportunity'] = summary_df['opportunity_name']
             if 'opportunity_name' not in summary_df.columns and 'opportunity' in summary_df.columns:
@@ -337,6 +351,14 @@ def create_flw_dashboard(coverage_data_objects):
                 color='opportunity',
                 title='7-Day Rolling Average of DUs Visited'
             )
+
+            median_fig = px.line(
+                median_data,
+                x='visit_day',
+                y='visit_count_median',
+                color='opportunity',
+                title='7-Day Median Average of DUs Visited'
+            )
         else:
             # FLW level charts
             forms_fig = px.line(
@@ -354,8 +376,15 @@ def create_flw_dashboard(coverage_data_objects):
                 color='flw',
                 title='7-Day Rolling Average of DUs Visited'
             )
+            median_fig = px.line(
+                median_data,
+                x='visit_day',
+                y='visit_count_median',
+                color='opportunity',
+                title='7-Day Median Average of DUs Visited'
+            )
 
-        return summary_df.to_dict('records'), forms_fig, dus_fig
+        return summary_df.to_dict('records'), forms_fig, dus_fig, median_fig
 
     app.run(debug=True, port=8080)
 

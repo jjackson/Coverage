@@ -216,6 +216,8 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
             if len(date_visits) > 0:
                 # Create visit details for tooltip
                 visit_details = []
+                display_values = []  # Store values to display in the cell
+                
                 for _, visit in date_visits.iterrows():
                     # Handle NaN values by converting them to 'N/A'
                     def clean_value(value):
@@ -235,10 +237,27 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
                             detail[col] = clean_value(visit.get(col))
                     
                     visit_details.append(detail)
+                    
+                    # Check for child weight columns and use their values for display
+                    child_weight_found = False
+                    for col in visit.index:
+                        if 'child_weight' in col.lower() and col != 'form_json':
+                            weight_value = visit.get(col)
+                            if not pd.isna(weight_value) and weight_value != 'nan' and str(weight_value).lower() != 'nan':
+                                display_values.append(str(weight_value))
+                                child_weight_found = True
+                                break
+                    
+                    # If no child weight found, use 'X' as fallback
+                    if not child_weight_found:
+                        display_values.append('X')
                 
                 # Store visit details as JSON string for data attribute
                 visit_data = json.dumps(visit_details)
-                row[date_str] = f'<span class="visit-marker" data-visits=\'{visit_data}\'>X</span>'
+                
+                # Join multiple values with commas if there are multiple visits on the same date
+                display_text = ', '.join(display_values)
+                row[date_str] = f'<span class="visit-marker" data-visits=\'{visit_data}\'>{display_text}</span>'
             else:
                 row[date_str] = ''
         
@@ -322,10 +341,10 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
     html = f"""
     <div class="table-section">
         <h2>Case Visit Timeline</h2>
-        <p>Showing visits per case_id from {min_date} to {max_date}. 'X' indicates a visit on that date.</p>
+        <p>Showing visits per case_id from {min_date} to {max_date}. Child weight values are displayed when available, otherwise 'X' indicates a visit on that date.</p>
         <p>Total visits column shows the number of visits for each case. Distance columns show the distance in kilometers between consecutive visits.</p>
         <p>All columns from the database are included (both original SQL columns and flattened JSON data).</p>
-        <p><strong>Tip:</strong> Click on any "X" to see detailed visit information for all available fields including flattened form data.</p>
+        <p><strong>Tip:</strong> Click on any value to see detailed visit information for all available fields including flattened form data.</p>
         <div class="table-container">
             {case_df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
                            float_format='%.2f',

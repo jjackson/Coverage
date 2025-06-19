@@ -20,6 +20,7 @@ SQL_QUERIES = {
     
     -- Case ID (updated to use the working field):
     form_json -> 'form' ->> 'kmc_beneficiary_case_id' AS "case_id",
+    form_json -> 'form'->'anthropometric'->>'child_weight_visit' as "child_weight_visit",
     form_json
 FROM public.opportunity_uservisit 
 LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id

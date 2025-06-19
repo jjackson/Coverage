@@ -100,6 +100,13 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 visits_last7=('visit_id', 'count'),
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
+
+            # Calculate median of number of visits per opportunity
+            recent_median_df = recent.groupby(['opportunity','visit_day']).agg(
+                visit_count=('visit_id', 'count')
+            ).reset_index()
+            visit_median = recent_median_df['visit_count'].median()
+            recent_grouped['visit_count_median'] = visit_median
         else:
             recent_grouped = recent.groupby(['flw_id', 'opportunity']).agg(
                 visits_last7=('visit_id', 'count'),
@@ -108,10 +115,10 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         
         recent_grouped['avrg_forms_per_day_mavrg'] = round(recent_grouped['visits_last7'] / 7.0, 2)
         recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)
-        
+
         # Merge recent activity with full summary
         summary = summary.merge(recent_grouped, on=['opportunity'] if group_by == 'opportunity' else ['flw_id', 'opportunity'], how='left')
-        summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0}, inplace=True)
+        summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0, 'visit_count_median' : 0}, inplace=True)
 
         all_summaries.append(summary)
     
@@ -153,7 +160,8 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         'total_unique_dus_worked',
         'dus_per_day',
         'total_dus_completed',
-        'total_dus_visited'
+        'total_dus_visited',
+        'visit_count_median'
     ]
 
     # Ensure all columns exist

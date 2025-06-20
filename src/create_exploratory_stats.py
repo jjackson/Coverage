@@ -14,11 +14,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 import webbrowser
+import json
 
 # Add the src directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.utils.data_loader import export_superset_query_with_pagination
+from src.utils.data_loader import export_superset_query_with_pagination, load_csv_data, flatten_json_column
 from src.sqlqueries.sql_queries import SQL_QUERIES
 import constants
 
@@ -51,7 +52,11 @@ def load_kmc_visit_data(superset_url: str, username: str, password: str, verbose
     )
     
     # Load the exported CSV into a DataFrame
-    df = pd.read_csv(csv_file_path)
+    df = load_csv_data(csv_file_path)
+    
+    # Flatten the form_json column if it exists
+    if 'form_json' in df.columns:
+        df = flatten_json_column(df, json_column='form_json', json_path='form.case.update', prefix='case_update')
     
     print(f"Successfully loaded {len(df):,} rows of KMC visit data")
     print(f"Columns: {list(df.columns)}")
@@ -75,7 +80,6 @@ def create_html_table(df: pd.DataFrame, title: str = "Data Table") -> str:
         <h2>{title}</h2>
         <div class="table-container">
             {df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                       index=False, 
                        float_format='%.2f')}
         </div>
     </div>
@@ -154,30 +158,108 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
         lambda x: x.sort_values('visit_date').reset_index(drop=True)
     ).reset_index(drop=True)
     
+    # Define columns that come from the original SQL query (not from flattened form_json)
+    # These are the columns we want to include in the case summary
+    original_columns = [
+        'visit_id', 'opportunity_name', 'flw_id', 'flw_name', 'visit_date', 
+        'opportunity_id', 'status', 'du_name', 'latitude', 'longitude', 
+        'elevation_in_m', 'accuracy_in_m', 'flagged', 'flag_reason', 
+        'cchq_user_owner_id', 'case_id'
+    ]
+    
+    # Filter to only include columns that actually exist in the DataFrame
+    available_original_columns = [col for col in original_columns if col in df.columns]
+    print(f"Available original columns: {available_original_columns}")
+    
     # Create the case visit table
     case_table_data = []
     
     for case_id in case_visits['case_id'].unique():
         case_data = case_visits[case_visits['case_id'] == case_id].copy()
         
-        # Get the most common values for additional columns
-        opportunity_name = case_data['opportunity_name'].mode().iloc[0] if 'opportunity_name' in case_data.columns and len(case_data['opportunity_name'].mode()) > 0 else ''
-        flw_id = case_data['flw_id'].mode().iloc[0] if 'flw_id' in case_data.columns and len(case_data['flw_id'].mode()) > 0 else ''
-        flw_name = case_data['flw_name'].mode().iloc[0] if 'flw_name' in case_data.columns and len(case_data['flw_name'].mode()) > 0 else ''
+        # Create row for this case with all available original columns
+        row = {'case_id': case_id}
         
-        # Create row for this case
-        row = {
-            'case_id': case_id,
-            'opportunity_name': opportunity_name,
-            'flw_id': flw_id,
-            'flw_name': flw_name
-        }
+        # Add visit count
+        row['total_visits'] = len(case_data)
         
-        # Add daily visit indicators
+        # Add summary values for each original column (using mode for categorical, first for others)
+        for col in available_original_columns:
+            if col == 'case_id':
+                continue  # Already added
+            
+            if col in ['visit_date', 'latitude', 'longitude', 'elevation_in_m', 'accuracy_in_m']:
+                # For numeric/date columns, use the first value as representative
+                if len(case_data) > 0 and col in case_data.columns:
+                    value = case_data[col].iloc[0]
+                    if pd.isna(value):
+                        row[col] = 'N/A'
+                    elif col == 'visit_date':
+                        row[col] = str(value)
+                    else:
+                        row[col] = value
+                else:
+                    row[col] = 'N/A'
+            else:
+                # For categorical columns, use the most common value
+                if col in case_data.columns and len(case_data[col].mode()) > 0:
+                    mode_value = case_data[col].mode().iloc[0]
+                    row[col] = mode_value if not pd.isna(mode_value) else 'N/A'
+                else:
+                    row[col] = 'N/A'
+        
+        # Add daily visit indicators with visit details
         for date in date_range:
             date_str = date.strftime('%Y-%m-%d')
-            has_visit = case_data['visit_date'].dt.date.eq(date.date()).any()
-            row[date_str] = 'X' if has_visit else ''
+            date_visits = case_data[case_data['visit_date'].dt.date.eq(date.date())]
+            
+            if len(date_visits) > 0:
+                # Create visit details for tooltip
+                visit_details = []
+                display_values = []  # Store values to display in the cell
+                
+                for _, visit in date_visits.iterrows():
+                    # Handle NaN values by converting them to 'N/A'
+                    def clean_value(value):
+                        if pd.isna(value) or value == 'nan' or str(value).lower() == 'nan':
+                            return 'N/A'
+                        return value
+                    
+                    # Include ALL available columns in the visit details (both original and flattened)
+                    detail = {}
+                    for col in visit.index:  # Use all columns in the visit row
+                        # Skip the form_json column as it contains raw JSON data
+                        if col == 'form_json':
+                            continue
+                        if col == 'visit_date':
+                            detail[col] = str(clean_value(visit.get(col)))
+                        else:
+                            detail[col] = clean_value(visit.get(col))
+                    
+                    visit_details.append(detail)
+                    
+                    # Check for child weight columns and use their values for display
+                    child_weight_found = False
+                    for col in visit.index:
+                        if 'child_weight' in col.lower() and col != 'form_json':
+                            weight_value = visit.get(col)
+                            if not pd.isna(weight_value) and weight_value != 'nan' and str(weight_value).lower() != 'nan':
+                                display_values.append(str(weight_value))
+                                child_weight_found = True
+                                break
+                    
+                    # If no child weight found, use 'X' as fallback
+                    if not child_weight_found:
+                        display_values.append('X')
+                
+                # Store visit details as JSON string for data attribute
+                visit_data = json.dumps(visit_details)
+                
+                # Join multiple values with commas if there are multiple visits on the same date
+                display_text = ', '.join(display_values)
+                row[date_str] = f'<span class="visit-marker" data-visits=\'{visit_data}\'>{display_text}</span>'
+            else:
+                row[date_str] = ''
         
         # Calculate distances between consecutive visits
         if len(case_data) > 1:
@@ -207,17 +289,67 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
     case_df = pd.DataFrame(case_table_data)
     if len(case_df) > 0:
         case_df = case_df.sort_values('case_id')
+        
+        # Reorder columns for better readability
+        # Start with key identifiers and summary info
+        priority_columns = ['case_id', 'total_visits']
+        
+        # Add opportunity and FLW info
+        if 'opportunity_name' in case_df.columns:
+            priority_columns.append('opportunity_name')
+        if 'flw_name' in case_df.columns:
+            priority_columns.append('flw_name')
+        if 'flw_id' in case_df.columns:
+            priority_columns.append('flw_id')
+            
+        # Add other important columns
+        other_important = ['status', 'du_name', 'visit_date', 'cchq_user_owner_id']
+        for col in other_important:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add location columns
+        location_columns = ['latitude', 'longitude', 'elevation_in_m', 'accuracy_in_m']
+        for col in location_columns:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add flag columns
+        flag_columns = ['flagged', 'flag_reason']
+        for col in flag_columns:
+            if col in case_df.columns:
+                priority_columns.append(col)
+        
+        # Add opportunity_id
+        if 'opportunity_id' in case_df.columns:
+            priority_columns.append('opportunity_id')
+        
+        # Add visit_id (usually not needed in summary but include if available)
+        if 'visit_id' in case_df.columns:
+            priority_columns.append('visit_id')
+        
+        # Add all remaining columns (date columns and distance columns)
+        remaining_columns = [col for col in case_df.columns if col not in priority_columns]
+        
+        # Combine all columns in the desired order
+        final_column_order = priority_columns + remaining_columns
+        
+        # Reorder the DataFrame
+        case_df = case_df[final_column_order]
     
     # Create HTML table
     html = f"""
     <div class="table-section">
         <h2>Case Visit Timeline</h2>
-        <p>Showing visits per case_id from {min_date} to {max_date}. 'X' indicates a visit on that date.</p>
-        <p>Distance columns show the distance in kilometers between consecutive visits.</p>
+        <p>Showing visits per case_id from {min_date} to {max_date}. Child weight values are displayed when available, otherwise 'X' indicates a visit on that date.</p>
+        <p>Total visits column shows the number of visits for each case. Distance columns show the distance in kilometers between consecutive visits.</p>
+        <p>All columns from the database are included (both original SQL columns and flattened JSON data).</p>
+        <p><strong>Tip:</strong> Click on any value to see detailed visit information for all available fields including flattened form data.</p>
         <div class="table-container">
             {case_df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                           index=False, 
-                           float_format='%.2f')}
+                           float_format='%.2f',
+                           table_id='case-visit-table',
+                           escape=False)}
         </div>
     </div>
     """
@@ -257,6 +389,11 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>KMC Visit Data - Exploratory Statistics</title>
+        
+        <!-- DataTables CSS -->
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css">
+        <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+        
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -264,7 +401,7 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 background-color: #f5f5f5;
             }}
             .container {{
-                max-width: 1200px;
+                max-width: 1400px;
                 margin: 0 auto;
                 background-color: white;
                 padding: 20px;
@@ -312,7 +449,6 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 margin: 30px 0;
             }}
             .table-container {{
-                overflow-x: auto;
                 margin: 15px 0;
             }}
             .data-table {{
@@ -343,11 +479,92 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 text-align: center;
                 margin-top: 20px;
             }}
+            .dt-buttons {{
+                margin-bottom: 10px;
+            }}
+            .dt-button {{
+                background-color: #007bff !important;
+                color: white !important;
+                border: none !important;
+                padding: 8px 16px !important;
+                margin-right: 5px !important;
+                border-radius: 4px !important;
+                cursor: pointer !important;
+            }}
+            .dt-button:hover {{
+                background-color: #0056b3 !important;
+            }}
+            .dataTables_filter {{
+                margin-bottom: 10px;
+            }}
+            .dataTables_filter input {{
+                border: 1px solid #ddd;
+                padding: 6px 10px;
+                border-radius: 4px;
+                margin-left: 5px;
+            }}
+            .dataTables_length {{
+                margin-bottom: 10px;
+            }}
+            .dataTables_length select {{
+                border: 1px solid #ddd;
+                padding: 4px 8px;
+                border-radius: 4px;
+                margin: 0 5px;
+            }}
+            .visit-marker {{
+                cursor: pointer;
+                color: #007bff;
+                font-weight: bold;
+                text-decoration: underline;
+            }}
+            .visit-marker:hover {{
+                color: #0056b3;
+                background-color: #e9ecef;
+                padding: 2px 4px;
+                border-radius: 3px;
+            }}
+            .tooltip {{
+                position: absolute;
+                background: #333;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 12px;
+                max-width: 400px;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                display: none;
+            }}
+            .tooltip::after {{
+                content: '';
+                position: absolute;
+                top: 100%;
+                left: 20px;
+                border-width: 5px;
+                border-style: solid;
+                border-color: #333 transparent transparent transparent;
+            }}
+            .visit-detail {{
+                margin-bottom: 8px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #555;
+            }}
+            .visit-detail:last-child {{
+                border-bottom: none;
+                margin-bottom: 0;
+            }}
+            .visit-detail strong {{
+                color: #007bff;
+            }}
         </style>
     </head>
     <body>
         <div class="container">
             <h1>KMC Visit Data - Exploratory Statistics</h1>
+            
+            <!-- Tooltip div -->
+            <div id="visit-tooltip" class="tooltip"></div>
             
             <div class="stats-summary">
                 <h2>Summary Statistics</h2>
@@ -375,9 +592,9 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 <h2>Raw Data Table</h2>
                 <p>Showing all {len(df)} records from the KMC visit data:</p>
                 <div class="table-container">
-                    {df.to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
-                               index=False, 
-                               float_format='%.2f')}
+                    {df.drop(columns=['form_json']).to_html(classes=['data-table', 'table', 'table-striped', 'table-hover'], 
+                               float_format='%.2f',
+                               table_id='raw-data-table')}
                 </div>
             </div>
             
@@ -387,6 +604,128 @@ def generate_exploratory_stats_html(df: pd.DataFrame, output_file: str = None) -
                 Report generated on: {timestamp}
             </div>
         </div>
+        
+        <!-- jQuery -->
+        <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+        
+        <!-- DataTables JS -->
+        <script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+        
+        <script>
+            $(document).ready(function() {{
+                // Initialize DataTable for raw data
+                $('#raw-data-table').DataTable({{
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy',
+                        'csv',
+                        'excel',
+                        'pdf',
+                        'print'
+                    ],
+                    scrollX: true,
+                    scrollY: '800px',
+                    scrollCollapse: true
+                }});
+                
+                // Initialize DataTable for case visit table
+                $('#case-visit-table').DataTable({{
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy',
+                        'csv',
+                        'excel',
+                        'pdf',
+                        'print'
+                    ],
+                    scrollX: true,
+                    scrollY: '800px',
+                    scrollCollapse: true
+                }});
+                
+                // Wait a bit for DataTables to fully initialize, then set up tooltip events
+                setTimeout(function() {{
+                    console.log('Setting up tooltip events...');
+                    
+                    // Handle click events on visit markers using event delegation
+                    $(document).on('click', '.visit-marker', function(e) {{
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        console.log('Visit marker clicked!');
+                        
+                        try {{
+                            const visits = JSON.parse($(this).attr('data-visits'));
+                            const tooltip = $('#visit-tooltip');
+                            
+                            console.log('Visits data:', visits);
+                            
+                            // Build tooltip content
+                            let content = '<div style="font-weight: bold; margin-bottom: 10px; color: #007bff;">Visit Details</div>';
+                            
+                            visits.forEach((visit, index) => {{
+                                content += `<div class="visit-detail"><strong>Visit ${{index + 1}}:</strong><br>`;
+                                
+                                // Dynamically display all available fields
+                                Object.keys(visit).forEach(key => {{
+                                    const value = visit[key];
+                                    if (value !== 'N/A' && value !== null && value !== undefined) {{
+                                        // Format the key name for display
+                                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                        content += `<strong>${{displayKey}}:</strong> ${{value}}<br>`;
+                                    }}
+                                }});
+                                
+                                content += `</div>`;
+                            }});
+                            
+                            tooltip.html(content);
+                            
+                            // Position tooltip near the clicked element
+                            const rect = this.getBoundingClientRect();
+                            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                            
+                            tooltip.css({{
+                                top: rect.bottom + scrollTop + 5,
+                                left: rect.left + scrollLeft - 200,
+                                display: 'block'
+                            }});
+                            
+                            console.log('Tooltip positioned and shown');
+                        }} catch (error) {{
+                            console.error('Error showing tooltip:', error);
+                        }}
+                    }});
+                    
+                    // Hide tooltip when clicking elsewhere
+                    $(document).on('click', function(e) {{
+                        if (!$(e.target).hasClass('visit-marker')) {{
+                            $('#visit-tooltip').hide();
+                        }}
+                    }});
+                    
+                    // Hide tooltip on escape key
+                    $(document).on('keydown', function(e) {{
+                        if (e.key === 'Escape') {{
+                            $('#visit-tooltip').hide();
+                        }}
+                    }});
+                    
+                    console.log('Tooltip events set up complete');
+                }}, 1000);
+            }});
+        </script>
     </body>
     </html>
     """

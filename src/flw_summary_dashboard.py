@@ -371,7 +371,7 @@ def create_flw_dashboard(coverage_data_objects):
                 y='avrg_forms_per_day_mavrg',
                 color='opportunity',
                 title='7-Day Rolling Average of Forms Submitted',
-                labels={"visit_day": "Visit Day", "lifeExp": "Average Form Submissions"}
+                labels={"visit_day": "Visit Day", "avrg_forms_per_day_mavrg": "Average Form Submissions"}
             )
 
             dus_fig = px.line(

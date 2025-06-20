@@ -556,7 +556,7 @@ def create_html_report(coverage_data):
         sa_id = sa_data['service_area_id']
         html_content += f"""
                             <tr>
-                                <td><a href="#" class="service-area-link" data-sa-id="{sa_id}">{sa_id}</a></td>
+                                <td><a href="#" class="service-area-link" data-sa-id={json.dumps(sa_id)}>{sa_id}</a></td>
                                 <td>{sa_data['total_buildings']:,}</td>
                                 <td>{sa_data['total_delivery_units']:,}</td>
                                 <td>{sa_data['completed_units']:,}</td>
@@ -732,14 +732,14 @@ def create_html_report(coverage_data):
     for sa_data in service_area_data:
         sa_id = sa_data['service_area_id']
         html_content += f"""
-                "{sa_id}": {{
+                {json.dumps(sa_id)}: {{
                     "total_buildings": {sa_data['total_buildings']},
                     "total_delivery_units": {sa_data['total_delivery_units']},
                     "completed_units": {sa_data['completed_units']},
                     "is_started": {str(sa_data['is_started']).lower()},
                     "is_completed": {str(sa_data['is_completed']).lower()},
-                    "assigned_flws": "{sa_data['assigned_flws']}",
-                    "last_activity_date": "{sa_data['last_activity_date']}",
+                    "assigned_flws": {json.dumps(sa_data['assigned_flws'])},
+                    "last_activity_date": {json.dumps(sa_data['last_activity_date'])},
                     "delivery_units": [
         """
         
@@ -747,9 +747,9 @@ def create_html_report(coverage_data):
             status_class = du.status if du.status else 'unvisited'
             html_content += f"""
                         {{
-                            "name": "{du.du_name}",
-                            "status": "{du.status if du.status else 'unvisited'}",
-                            "status_class": "{status_class}",
+                            "name": {json.dumps(du.du_name)},
+                            "status": {json.dumps(du.status if du.status else 'unvisited')},
+                            "status_class": {json.dumps(status_class)},
                             "buildings": {du.buildings},
                             "delivery_count": {du.delivery_count}
                         }},

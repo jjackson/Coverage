@@ -504,7 +504,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     <div class="section-title">Layer Controls</div>
                     <div class="layer-toggle">
                         <label>
-                            <input type="checkbox" id="toggle-delivery-points" checked> 
+                            <input type="checkbox" id="toggle-delivery-points"> 
                             Show Service Delivery Points
                         </label>
                     </div>
@@ -599,7 +599,7 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             // Each feature has its own layer that we'll manage directly
             
             // Create layers for service points
-            const servicePointsLayer = L.layerGroup().addTo(map);
+            const servicePointsLayer = L.layerGroup();
             let allServicePoints = []; // Store all service points for filtering
             let minServiceDate = null; // Track earliest service date
             let maxServiceDate = null; // Track latest service date

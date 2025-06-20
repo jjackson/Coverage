@@ -4,7 +4,7 @@ This project contains tools for analyzing delivery coverage data and generating 
 
 ## Project Structure
 
-The project is organized into the following directories:
+The project is organized into the following directories :
 
 ### Root Level Entry Points
 

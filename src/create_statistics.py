@@ -502,10 +502,367 @@ def create_html_report(coverage_data):
             </section>
     """
     
+    # Create service area summary data
+    service_area_data = []
+    for sa_id, service_area in coverage_data.service_areas.items():
+        last_activity = service_area.last_activity_date
+        last_activity_str = last_activity.strftime('%Y-%m-%d') if last_activity else ''
+        
+        # Get assigned FLWs, filtering out empty strings
+        assigned_flws_list = sorted(list(set(du.flw_commcare_id for du in service_area.delivery_units if du.flw_commcare_id)))
+        
+        service_area_data.append({
+            'service_area_id': sa_id,
+            'total_buildings': service_area.total_buildings,
+            'total_delivery_units': service_area.total_units,
+            'completed_units': service_area.completed_units,
+            'is_started': service_area.is_started,
+            'is_completed': service_area.is_completed,
+            'assigned_flws': ", ".join(assigned_flws_list),
+            'last_activity_date': last_activity_str,
+            'delivery_units': service_area.delivery_units
+        })
+    
+    # Add Service Areas table section
+    html_content += f"""
+            <section>
+                <h2>Service Areas Summary</h2>
+                <div class="table-info">
+                    Showing {len(service_area_data):,} service areas. Click on a service area name to view its delivery units.
+                </div>
+                <div class="service-areas-table-container">
+                    <table id="service-areas-table" class="display">
+                        <thead>
+                            <tr>
+                                <th>Service Area Name</th>
+                                <th>Total Buildings</th>
+                                <th>Total Delivery Units</th>
+                                <th>Completed Units</th>
+                                <th>Is Started</th>
+                                <th>Is Completed</th>
+                                <th>Assigned FLWs</th>
+                                <th>Last Activity Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    """
+    
+    # Add table rows with data
+    for sa_data in service_area_data:
+        sa_id = sa_data['service_area_id']
+        html_content += f"""
+                            <tr>
+                                <td><a href="#" class="service-area-link" data-sa-id="{sa_id}">{sa_id}</a></td>
+                                <td>{sa_data['total_buildings']:,}</td>
+                                <td>{sa_data['total_delivery_units']:,}</td>
+                                <td>{sa_data['completed_units']:,}</td>
+                                <td>{'Yes' if sa_data['is_started'] else 'No'}</td>
+                                <td>{'Yes' if sa_data['is_completed'] else 'No'}</td>
+                                <td>{sa_data['assigned_flws']}</td>
+                                <td>{sa_data['last_activity_date']}</td>
+                            </tr>
+        """
+    
+    html_content += """
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+    """
+    
+    # Add modal for service area details
+    html_content += """
+            <!-- Modal for Service Area Details -->
+            <div id="serviceAreaModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="modalTitle">Service Area Details</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div id="modalContent">
+                            <!-- Content will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+    """
+    
+    # Add CSS for modal
+    html_content += """
+        <style>
+            /* Modal styles */
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+                background-color: rgba(0,0,0,0.4);
+            }
+            
+            .modal-content {
+                background-color: #fefefe;
+                margin: 5% auto;
+                padding: 0;
+                border: 1px solid #888;
+                width: 80%;
+                max-width: 800px;
+                border-radius: 5px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            
+            .modal-header {
+                background-color: #2980b9;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 5px 5px 0 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .modal-header h3 {
+                margin: 0;
+                color: white;
+            }
+            
+            .close {
+                color: white;
+                font-size: 28px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            
+            .close:hover,
+            .close:focus {
+                color: #ddd;
+            }
+            
+            .modal-body {
+                padding: 20px;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+            
+            .service-area-link {
+                color: #2980b9;
+                text-decoration: none;
+                font-weight: bold;
+            }
+            
+            .service-area-link:hover {
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            
+            .du-list {
+                margin-top: 15px;
+            }
+            
+            .du-item {
+                padding: 8px 12px;
+                margin: 5px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: #f9f9f9;
+            }
+            
+            .du-item.completed {
+                background-color: #d4edda;
+                border-color: #c3e6cb;
+            }
+            
+            .du-item.visited {
+                background-color: #fff3cd;
+                border-color: #ffeaa7;
+            }
+            
+            .du-item.unvisited {
+                background-color: #f8d7da;
+                border-color: #f5c6cb;
+            }
+            
+            .du-name {
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            
+            .du-status {
+                float: right;
+                padding: 2px 8px;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            
+            .du-status.completed {
+                background-color: #28a745;
+                color: white;
+            }
+            
+            .du-status.visited {
+                background-color: #ffc107;
+                color: #212529;
+            }
+            
+            .du-status.unvisited {
+                background-color: #dc3545;
+                color: white;
+            }
+        </style>
+    """
+    
+    # Add JavaScript for modal functionality
+    html_content += """
+        <script>
+            // Service area data for modal
+            var serviceAreaData = {
+    """
+    
+    # Add service area data to JavaScript
+    for sa_data in service_area_data:
+        sa_id = sa_data['service_area_id']
+        html_content += f"""
+                "{sa_id}": {{
+                    "total_buildings": {sa_data['total_buildings']},
+                    "total_delivery_units": {sa_data['total_delivery_units']},
+                    "completed_units": {sa_data['completed_units']},
+                    "is_started": {str(sa_data['is_started']).lower()},
+                    "is_completed": {str(sa_data['is_completed']).lower()},
+                    "assigned_flws": "{sa_data['assigned_flws']}",
+                    "last_activity_date": "{sa_data['last_activity_date']}",
+                    "delivery_units": [
+        """
+        
+        for du in sa_data['delivery_units']:
+            status_class = du.status if du.status else 'unvisited'
+            html_content += f"""
+                        {{
+                            "name": "{du.du_name}",
+                            "status": "{du.status if du.status else 'unvisited'}",
+                            "status_class": "{status_class}",
+                            "buildings": {du.buildings},
+                            "delivery_count": {du.delivery_count}
+                        }},
+            """
+        
+        html_content += """
+                    ]
+                },
+        """
+    
+    html_content += """
+            };
+            
+            // Modal functionality
+            var modal = document.getElementById("serviceAreaModal");
+            var span = document.getElementsByClassName("close")[0];
+            
+            // Close modal when clicking X
+            span.onclick = function() {
+                modal.style.display = "none";
+            }
+            
+            // Close modal when clicking outside
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+            
+            // Handle service area link clicks
+            $(document).on('click', '.service-area-link', function(e) {
+                e.preventDefault();
+                var saId = $(this).data('sa-id');
+                showServiceAreaDetails(saId);
+            });
+            
+            function showServiceAreaDetails(saId) {
+                var data = serviceAreaData[saId];
+                if (!data) return;
+                
+                // Update modal title
+                document.getElementById('modalTitle').textContent = 'Service Area: ' + saId;
+                
+                // Create content
+                var content = '<div class="service-area-summary">';
+                content += '<h4>Summary</h4>';
+                content += '<p><strong>Total Buildings:</strong> ' + data.total_buildings.toLocaleString() + '</p>';
+                content += '<p><strong>Total Delivery Units:</strong> ' + data.total_delivery_units.toLocaleString() + '</p>';
+                content += '<p><strong>Completed Units:</strong> ' + data.completed_units.toLocaleString() + '</p>';
+                content += '<p><strong>Assigned FLWs:</strong> ' + data.assigned_flws + '</p>';
+                content += '<p><strong>Is Started:</strong> ' + (data.is_started ? 'Yes' : 'No') + '</p>';
+                content += '<p><strong>Is Completed:</strong> ' + (data.is_completed ? 'Yes' : 'No') + '</p>';
+                content += '<p><strong>Last Activity Date:</strong> ' + data.last_activity_date + '</p>';
+                content += '</div>';
+                
+                content += '<div class="du-list">';
+                content += '<h4>Delivery Units</h4>';
+                
+                data.delivery_units.forEach(function(du) {
+                    content += '<div class="du-item ' + du.status_class + '">';
+                    content += '<span class="du-name">' + du.name + '</span>';
+                    content += '<span class="du-status ' + du.status_class + '">' + du.status + '</span>';
+                    content += '<br><small>Buildings: ' + du.buildings + ' | Deliveries: ' + du.delivery_count + '</small>';
+                    content += '</div>';
+                });
+                
+                content += '</div>';
+                
+                document.getElementById('modalContent').innerHTML = content;
+                modal.style.display = "block";
+            }
+        </script>
+    """
+    
     # Close the HTML
     html_content += f"""
             <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         </div>
+        
+        <!-- DataTables initialization script -->
+        <script>
+            $(document).ready(function() {{
+                // Initialize the Delivery Units table
+                $('#delivery-units-table').DataTable({{
+                    paging: true,
+                    searching: true,
+                    ordering: true,
+                    info: true,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy', 'csv', 'excel'
+                    ],
+                    order: [[0, 'asc']],
+                    scrollX: true,
+                    colReorder: true,
+                    pageLength: 25
+                }});
+                
+                // Initialize the Service Areas table
+                $('#service-areas-table').DataTable({{
+                    paging: true,
+                    searching: true,
+                    ordering: true,
+                    info: true,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        'copy', 'csv', 'excel'
+                    ],
+                    order: [[0, 'asc']],
+                    scrollX: true,
+                    colReorder: true,
+                    pageLength: 25
+                }});
+            }});
+        </script>
     </body>
     </html>
     """

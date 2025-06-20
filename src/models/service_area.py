@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Optional
 import numpy as np
 from geopy.distance import geodesic
+from datetime import datetime
 
 if TYPE_CHECKING:
     from .delivery_unit import DeliveryUnit
@@ -122,4 +123,21 @@ class ServiceArea:
         """Calculate building density (buildings per sq km)"""
         if self.total_surface_area == 0:
             return 0.0
-        return self.total_buildings / (self.total_surface_area / 1000000) 
+        return self.total_buildings / (self.total_surface_area / 1000000)
+
+    @property
+    def last_activity_date(self) -> Optional[datetime]:
+        """
+        Get the last activity date for the service area.
+        This is the latest last_activity_date of any delivery unit in the service area.
+        """
+        dates = [
+            du.last_activity_date
+            for du in self.delivery_units
+            if du.last_activity_date is not None
+        ]
+
+        if not dates:
+            return None
+
+        return max(dates) 

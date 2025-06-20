@@ -28,6 +28,10 @@ class DeliveryUnit:
     checked_in_date: Optional[str] = None
     centroid: Optional[tuple] = None
     last_modified_date: Optional[datetime] = None
+    
+    # This field is computed in the CoverageData object.
+    # If the DU has no deliveries but is marked as 'completed', the checked_in_date is used.
+    # If the DU has one or more deliveries, the date of the earliest service delivery point (visit_date) is used.
     computed_du_completion_date: Optional[datetime] = None
     service_points: List['ServiceDeliveryPoint'] = field(default_factory=list)
 
@@ -47,6 +51,44 @@ class DeliveryUnit:
         if self.delivery_target == 0:
             return 0.0
         return (self.delivery_count / self.delivery_target) * 100
+    
+    @property
+    def last_activity_date(self) -> Optional[datetime]:
+        """
+        Get the last activity date for the delivery unit.
+        
+        This is the latest date among:
+        - checked_in_date
+        - checked_out_date
+        - last_modified_date
+        - computed_du_completion_date
+        """
+        dates = []
+        
+        # Collect all available dates
+        if self.checked_in_date:
+            dates.append(self.checked_in_date)
+        if self.checked_out_date:
+            dates.append(self.checked_out_date)
+        if self.last_modified_date:
+            dates.append(self.last_modified_date)
+        if self.computed_du_completion_date:
+            dates.append(self.computed_du_completion_date)
+        
+        if not dates:
+            return None
+            
+        # Convert all to timezone-naive datetime objects for comparison
+        parsed_dates = [pd.to_datetime(d, errors='coerce').tz_localize(None) for d in dates]
+        
+        # Filter out any NaT (Not a Time) values from failed parsing
+        valid_dates = [d for d in parsed_dates if pd.notna(d)]
+        
+        if not valid_dates:
+            return None
+            
+        # Return the latest date as a Python datetime object
+        return max(valid_dates).to_pydatetime()
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeliveryUnit':

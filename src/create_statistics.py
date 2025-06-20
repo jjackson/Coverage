@@ -508,8 +508,12 @@ def create_html_report(coverage_data):
         last_activity = service_area.last_activity_date
         last_activity_str = last_activity.strftime('%Y-%m-%d') if last_activity else ''
         
-        # Get assigned FLWs, filtering out empty strings
-        assigned_flws_list = sorted(list(set(du.flw_commcare_id for du in service_area.delivery_units if du.flw_commcare_id)))
+        # Get assigned FLW IDs, filtering out empty strings
+        assigned_flw_ids = sorted(list(set(du.flw_commcare_id for du in service_area.delivery_units if du.flw_commcare_id)))
+        
+        # Map IDs to names, falling back to ID if no name is found
+        flw_name_map = coverage_data.flw_commcare_id_to_name_map
+        assigned_flw_names = [flw_name_map.get(flw_id, flw_id) for flw_id in assigned_flw_ids]
         
         service_area_data.append({
             'service_area_id': sa_id,
@@ -518,7 +522,7 @@ def create_html_report(coverage_data):
             'completed_units': service_area.completed_units,
             'is_started': service_area.is_started,
             'is_completed': service_area.is_completed,
-            'assigned_flws': ", ".join(assigned_flws_list),
+            'assigned_flws': ", ".join(assigned_flw_names),
             'last_activity_date': last_activity_str,
             'delivery_units': service_area.delivery_units
         })

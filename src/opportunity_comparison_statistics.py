@@ -75,6 +75,7 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
             'completed_dus_count': len([du for du in coverage_data.delivery_units.values() if du.status == 'completed']) if coverage_data.delivery_units else 0,
             'total_flws': len(coverage_data.flws) if coverage_data.flws else 0,
             'total_service_areas': len(coverage_data.service_areas) if coverage_data.service_areas else 0,
+            'started_sas_count': len([sa for sa in coverage_data.service_areas.values() if sa.is_started]) if coverage_data.service_areas else 0,
             'completed_sas_count': len([sa for sa in coverage_data.service_areas.values() if sa.is_completed]) if coverage_data.service_areas else 0,
         }
         
@@ -92,6 +93,7 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
         'total_service_points': sum(p['service_points_count'] for p in stats['projects'].values()),
         'total_completed_dus': sum(p['completed_dus_count'] for p in stats['projects'].values()),
         'total_service_areas': sum(p['total_service_areas'] for p in stats['projects'].values()),
+        'total_started_sas': sum(p['started_sas_count'] for p in stats['projects'].values()),
         'total_completed_sas': sum(p['completed_sas_count'] for p in stats['projects'].values()),
         'average_coverage': sum(p['coverage_percentage'] for p in stats['projects'].values()) / len(stats['projects']) if stats['projects'] else 0,
         'total_flws': sum(p['total_flws'] for p in stats['projects'].values()),
@@ -290,6 +292,7 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             <td>{project_stats['completed_dus_count']}</td>
             <td>{project_stats['service_points_count']}</td>
             <td>{project_stats['total_service_areas']}</td>
+            <td>{project_stats['started_sas_count']}</td>
             <td>{project_stats['completed_sas_count']}</td>
             <td>{project_stats['total_flws']}</td>
             <td>{project_stats['coverage_percentage']:.1f}%</td>
@@ -436,6 +439,10 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 <div class="stat-label">Total Service Areas</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value">{comparison_stats['summary_comparisons']['total_started_sas']}</div>
+                <div class="stat-label">Started SAs</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-value">{comparison_stats['summary_comparisons']['total_completed_sas']}</div>
                 <div class="stat-label">Completed SAs</div>
             </div>
@@ -463,6 +470,7 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                     <th>Completed DUs</th>
                     <th>Service Points</th>
                     <th>Total SA</th>
+                    <th>Started SAs</th>
                     <th>Completed SAs</th>
                     <th>FLWs</th>
                     <th>Coverage %</th>

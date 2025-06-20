@@ -226,7 +226,8 @@ def create_flw_dashboard(coverage_data_objects):
             #median_metrics = pd.DataFrame(columns=['opportunity', 'visit_day', 'visit_count_median'])
             median_metrics = []
             for current_date in unique_dates:
-                median_metrics_temp = pd.DataFrame(columns=['opportunity', 'visit_day', 'visit_count_median'])
+
+                window_metrics_temp = pd.DataFrame(columns=['opportunity', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg', 'visit_count_median'])
                 # Calculate the 7-day window
                 window_start = current_date - timedelta(days=6)
 
@@ -234,38 +235,33 @@ def create_flw_dashboard(coverage_data_objects):
                 window_data = service_timeline_df[
                     (service_timeline_df['visit_day'] >= window_start) &
                     (service_timeline_df['visit_day'] <= current_date)
-                ]
+                    ]
 
                 # Calculate metrics for this window
-                window_metrics = window_data.groupby(['opportunity','visit_day']).agg(
+                window_metrics = window_data.groupby(['opportunity', 'visit_day']).agg(
                     visits_last7=('visit_id', 'count'),
                     dus_last7=('du_name', pd.Series.nunique)
                 ).reset_index()
 
-
-                recent_median_df = window_data.groupby(['opportunity','visit_day']).agg(
+                recent_median_df = window_data.groupby(['opportunity', 'visit_day']).agg(
                     visit_count=('visit_id', 'count')
                 ).reset_index()
 
-
+                #looping through all unique opportunities to calculate all average parameters of each opportunity for current_data
                 unique_opportunities = sorted(recent_median_df['opportunity'].unique())
-                count = 0
+                init_row = 0
                 for opp in unique_opportunities:
-                    visit_median = recent_median_df[recent_median_df['opportunity'] == opp]['visit_count'].median()
-                    median_metrics_temp.loc[count] = {'opportunity': opp, 'visit_day': current_date, 'visit_count_median' : visit_median}
-                    count = count + 1
+                    visit_median = round(recent_median_df[recent_median_df['opportunity'] == opp]['visit_count'].median(),2)
+                    window_visit_average = round(window_metrics[window_metrics['opportunity'] == opp]['visits_last7'].sum()/7, 2)
+                    window_du_visit_average = round(window_metrics[window_metrics['opportunity'] == opp]['dus_last7'].sum()/7, 2)
+                    window_metrics_temp.loc[init_row] = {'opportunity': opp, 'visit_day': current_date,
+                                                         'avrg_forms_per_day_mavrg': window_visit_average,
+                                                      'dus_per_day_mavrg': window_du_visit_average, 'visit_count_median': visit_median}
 
-                # Calculate 7-day averages
-                window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
-                window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
-
-                # Add date
-                window_metrics['visit_day'] = current_date
-                median_metrics.append(median_metrics_temp)
-                historical_metrics.append(window_metrics)
+                    init_row = init_row + 1
+                historical_metrics.append(window_metrics_temp)
 
             # Combine all historical metrics
-            median_data = pd.concat(median_metrics, ignore_index=True )
             chart_data = pd.concat(historical_metrics, ignore_index=True)
 
         else:
@@ -286,7 +282,8 @@ def create_flw_dashboard(coverage_data_objects):
                         df = df[df['visit_date'].notna()]
                         df['visit_day'] = pd.to_datetime(df['visit_date'], format='ISO8601', utc=True).dt.date
                         df['opportunity'] = org
-                        all_service_dfs.append(df[['flw_name', 'visit_day', 'flw_id', 'opportunity', 'visit_id', 'du_name']])
+                        all_service_dfs.append(
+                            df[['flw_name', 'visit_day', 'flw_id', 'opportunity', 'visit_id', 'du_name']])
 
             service_timeline_df = pd.concat(all_service_dfs)
 
@@ -297,6 +294,9 @@ def create_flw_dashboard(coverage_data_objects):
             unique_dates = sorted(service_timeline_df['visit_day'].unique())
 
             for current_date in unique_dates:
+                window_metrics_temp = pd.DataFrame(
+                    columns=['flw_id', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg',
+                             'visit_count_median'])
                 # Calculate the 7-day window
                 window_start = current_date - timedelta(days=6)
 
@@ -304,7 +304,7 @@ def create_flw_dashboard(coverage_data_objects):
                 window_data = service_timeline_df[
                     (service_timeline_df['visit_day'] >= window_start) &
                     (service_timeline_df['visit_day'] <= current_date)
-                ]
+                    ]
 
                 # Calculate metrics for this window
                 window_metrics = window_data.groupby(['flw_id', 'opportunity']).agg(
@@ -312,26 +312,55 @@ def create_flw_dashboard(coverage_data_objects):
                     dus_last7=('du_name', pd.Series.nunique)
                 ).reset_index()
 
-                #adding back flw_name
-                window_metrics = window_metrics.merge(
+                recent_median_df = window_data.groupby(['flw_id', 'visit_day']).agg(
+                    visit_count=('visit_id', 'count')
+                ).reset_index()
+
+                # looping through all unique opportunities to calculate all average parameters of each opportunity for current_data
+                unique_flw_ids = sorted(recent_median_df['flw_id'].unique())
+                init_row = 0
+                for flw_id in unique_flw_ids:
+                    visit_median = round(
+                        recent_median_df[recent_median_df['flw_id'] == flw_id]['visit_count'].median(), 2)
+                    window_visit_average = round(
+                        window_metrics[window_metrics['flw_id'] == flw_id]['visits_last7'].sum()/7, 2)
+                    window_du_visit_average = round(
+                        window_metrics[window_metrics['flw_id'] == flw_id]['dus_last7'].sum()/7, 2)
+                    window_metrics_temp.loc[init_row] = {'flw_id': flw_id, 'visit_day': current_date,
+                                                         'avrg_forms_per_day_mavrg': window_visit_average,
+                                                         'dus_per_day_mavrg': window_du_visit_average,
+                                                         'visit_count_median': visit_median}
+
+                    init_row = init_row + 1
+
+                # adding back flw_name
+                window_metrics_temp = window_metrics_temp.merge(
                     window_data[['flw_id', 'flw_name']].drop_duplicates(),
                     on='flw_id',
                     how='left'
                 )
+                historical_metrics.append(window_metrics_temp)
 
-                # Calculate 7-day averages
-                window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
-                window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
+                # #adding back flw_name
+                # window_metrics = window_metrics.merge(
+                #     window_data[['flw_id', 'flw_name']].drop_duplicates(),
+                #     on='flw_id',
+                #     how='left'
+                # )
+
+                # # Calculate 7-day averages
+                # window_metrics['avrg_forms_per_day_mavrg'] = window_metrics['visits_last7'] / 7
+                # window_metrics['dus_per_day_mavrg'] = window_metrics['dus_last7'] / 7
 
                 # Add date
-                window_metrics['visit_day'] = current_date
+                # window_metrics['visit_day'] = current_date
 
-                historical_metrics.append(window_metrics)
+                # historical_metrics.append(window_metrics)
 
             # Combine all historical metrics
             chart_data = pd.concat(historical_metrics, ignore_index=True)
             #saving flw_id joined with flw_name as a new column to show on graph
-            chart_data["flw"] = chart_data["flw_name"] + "(" +chart_data["flw_id"] + ")"
+            chart_data["flw"] = chart_data["flw_name"] + "(" + chart_data["flw_id"] + ")"
 
         # Create the charts
         if not selected_orgs:
@@ -341,7 +370,8 @@ def create_flw_dashboard(coverage_data_objects):
                 x='visit_day',
                 y='avrg_forms_per_day_mavrg',
                 color='opportunity',
-                title='7-Day Rolling Average of Forms Submitted'
+                title='7-Day Rolling Average of Forms Submitted',
+                labels={"visit_day": "Visit Day", "lifeExp": "Average Form Submissions"}
             )
 
             dus_fig = px.line(
@@ -349,15 +379,17 @@ def create_flw_dashboard(coverage_data_objects):
                 x='visit_day',
                 y='dus_per_day_mavrg',
                 color='opportunity',
-                title='7-Day Rolling Average of DUs Visited'
+                title='7-Day Rolling Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "}
             )
 
             median_fig = px.line(
-                median_data,
+                chart_data,
                 x='visit_day',
                 y='visit_count_median',
                 color='opportunity',
-                title='7-Day Median Average of DUs Visited'
+                title='7-Day Median Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"}
             )
         else:
             # FLW level charts
@@ -366,7 +398,8 @@ def create_flw_dashboard(coverage_data_objects):
                 x='visit_day',
                 y='avrg_forms_per_day_mavrg',
                 color='flw',
-                title='7-Day Rolling Average of Forms Submitted'
+                title='7-Day Rolling Average of Forms Submitted',
+                labels={"visit_day": "Visit Day", "avrg_forms_per_day_mavrg": "Average Form Submissions"}
             )
 
             dus_fig = px.line(
@@ -374,14 +407,16 @@ def create_flw_dashboard(coverage_data_objects):
                 x='visit_day',
                 y='dus_per_day_mavrg',
                 color='flw',
-                title='7-Day Rolling Average of DUs Visited'
+                title='7-Day Rolling Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "}
             )
             median_fig = px.line(
-                median_data,
+                chart_data,
                 x='visit_day',
                 y='visit_count_median',
-                color='opportunity',
-                title='7-Day Median Average of DUs Visited'
+                color='flw',
+                title='7-Day Median Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"}
             )
 
         return summary_df.to_dict('records'), forms_fig, dus_fig, median_fig
@@ -391,7 +426,7 @@ def create_flw_dashboard(coverage_data_objects):
 
 def create_static_flw_report(coverage_data_objects, output_dir):
     """Create a static HTML report for FLW summary data."""
-    
+
     # Generate the same data as the dashboard
     summaries = {}
     toplines = {}
@@ -402,7 +437,7 @@ def create_static_flw_report(coverage_data_objects, output_dir):
         toplines[key] = topline
 
     combined_df = pd.concat(summaries.values(), ignore_index=True)
-    
+
     # Create HTML content
     html_content = f"""
     <!DOCTYPE html>
@@ -436,7 +471,7 @@ def create_static_flw_report(coverage_data_objects, output_dir):
     <body>
         <h1>Field Level Worker Summary Report</h1>
     """
-    
+
     # Add topline metrics
     html_content += "<div class='card'><h2>Topline Metrics</h2>"
     for org, topline in toplines.items():
@@ -446,27 +481,28 @@ def create_static_flw_report(coverage_data_objects, output_dir):
             html_content += f"<tr><td>{key}</td><td>{value}</td></tr>"
         html_content += "</table>"
     html_content += "</div>"
-    
+
     # Add FLW summary table
     html_content += "<div class='card'><h2>FLW Summary</h2>"
     html_content += summary_df.to_html(classes='table', index=False)
     html_content += "</div>"
-    
+
     # Close HTML
     html_content += """
     </body>
     </html>
     """
-    
+
     # Write to file
     output_path = os.path.join(output_dir, "flw_summary.html")
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-    
+
     return output_path
 
 
 if __name__ == "__main__":
     from run_flw_dashboard import load_coverage_data_objects
+
     coverage_data_objects = load_coverage_data_objects()
     create_flw_dashboard(coverage_data_objects)

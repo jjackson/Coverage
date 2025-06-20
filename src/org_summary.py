@@ -55,6 +55,9 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
             summary['flw_id'] = None
             summary['flw_name'] = None
 
+
+
+
             # Add completed and visited DUs for opportunity level
             for org, cov in coverage_data_objects.items():
                 if org in summary['opportunity'].values:
@@ -100,19 +103,19 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 visits_last7=('visit_id', 'count'),
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
+
+
         else:
             recent_grouped = recent.groupby(['flw_id', 'opportunity']).agg(
                 visits_last7=('visit_id', 'count'),
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
-        
         recent_grouped['avrg_forms_per_day_mavrg'] = round(recent_grouped['visits_last7'] / 7.0, 2)
         recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)
-        
+
         # Merge recent activity with full summary
         summary = summary.merge(recent_grouped, on=['opportunity'] if group_by == 'opportunity' else ['flw_id', 'opportunity'], how='left')
         summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0}, inplace=True)
-
         all_summaries.append(summary)
     
     # Combine all summaries

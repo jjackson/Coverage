@@ -201,7 +201,7 @@ def create_flw_dashboard(coverage_data_objects):
         Input('org-selector', 'value')
     )
     def update_dashboard(selected_orgs):
-        #("I came herein update !!")
+        sorted_by_flw = []
         if not selected_orgs:
             # No selection - show opportunity level summary
             summary_df, _ = generate_summary(coverage_data_objects, group_by='opportunity')
@@ -358,9 +358,11 @@ def create_flw_dashboard(coverage_data_objects):
                 # historical_metrics.append(window_metrics)
 
             # Combine all historical metrics
+
             chart_data = pd.concat(historical_metrics, ignore_index=True)
-            #saving flw_id joined with flw_name as a new column to show on graph
-            chart_data["flw"] = chart_data["flw_name"] + "(" + chart_data["flw_id"] + ")"
+            chart_data.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0, 'visit_count_median': 0}, inplace=True)
+            chart_data["flw"] = "(" + chart_data["flw_id"] + ")" +chart_data["flw_name"]
+            sorted_by_flw = sorted(chart_data['flw'].unique())
 
         # Create the charts
         if not selected_orgs:
@@ -371,7 +373,7 @@ def create_flw_dashboard(coverage_data_objects):
                 y='avrg_forms_per_day_mavrg',
                 color='opportunity',
                 title='7-Day Rolling Average of Forms Submitted',
-                labels={"visit_day": "Visit Day", "lifeExp": "Average Form Submissions"}
+                labels={"visit_day": "Visit Day", "avrg_forms_per_day_mavrg": "Average Form Submissions"}
             )
 
             dus_fig = px.line(
@@ -399,7 +401,9 @@ def create_flw_dashboard(coverage_data_objects):
                 y='avrg_forms_per_day_mavrg',
                 color='flw',
                 title='7-Day Rolling Average of Forms Submitted',
-                labels={"visit_day": "Visit Day", "avrg_forms_per_day_mavrg": "Average Form Submissions"}
+                labels={"visit_day": "Visit Day", "avrg_forms_per_day_mavrg": "Average Form Submissions"},
+                category_orders = {'flw': sorted_by_flw}
+
             )
 
             dus_fig = px.line(
@@ -408,7 +412,8 @@ def create_flw_dashboard(coverage_data_objects):
                 y='dus_per_day_mavrg',
                 color='flw',
                 title='7-Day Rolling Average of DUs Visited',
-                labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "}
+                labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "},
+                category_orders={'flw': sorted_by_flw}
             )
             median_fig = px.line(
                 chart_data,
@@ -416,7 +421,8 @@ def create_flw_dashboard(coverage_data_objects):
                 y='visit_count_median',
                 color='flw',
                 title='7-Day Median Average of DUs Visited',
-                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"}
+                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"},
+                category_orders={'flw': sorted_by_flw}
             )
 
         return summary_df.to_dict('records'), forms_fig, dus_fig, median_fig

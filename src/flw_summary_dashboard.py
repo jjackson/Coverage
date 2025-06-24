@@ -1,13 +1,106 @@
+import logging
 import os
-
-import dash
+import dash, json
 from dash import html, dcc, Input, Output
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
 from datetime import timedelta
 import plotly.express as px
+from dotenv import load_dotenv, find_dotenv
 
+find_dotenv()
+load_dotenv(override=True,verbose=True)
+org_values = list(json.loads(os.getenv("OPPORTUNITY_DOMAIN_MAPPING")).values())
+
+log_dir = '../../'
+os.makedirs(log_dir, exist_ok=True)  # Create directory if it doesn't exist
+log_file_path = os.path.join(log_dir, 'app.log')
+
+logging.basicConfig(
+    filename= log_file_path,           # Log file name
+    filemode='a',                 # Append mode ('w' to overwrite)
+    level=logging.INFO,           # Minimum log level
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def get_overall_opp_median_metrics_per_llo(data_median_metrics):
+    print("-----data_median_metrics------")
+    print(data_median_metrics)
+    median_metrics_initial = pd.DataFrame(columns=['opportunity','flw_id', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg'])
+    median_metrics_final = pd.DataFrame(columns=[ 'opportunity','visit_day', 'median_averge_visits', 'median_dus_per_day'])
+    unique_dates = sorted(data_median_metrics['visit_day'].unique())
+    
+    #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
+    init_row=0
+    for current_date in unique_dates:
+        for org in org_values:
+            #check if a row exists for that opportunity, visit day and flw_id
+            unique_flws = data_median_metrics[data_median_metrics['opportunity'] == org]['flw_id'].unique()
+            for flw in unique_flws: 
+                matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) & (data_median_metrics['flw_id'] == flw ) & (data_median_metrics['visit_day'] == current_date )].empty
+                if matching_rows_exists:
+                    median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id':  flw, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
+                else:
+                    eval_avrg_forms_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
+(data_median_metrics['visit_day'] == current_date) & (data_median_metrics['flw_id'] == flw)
+]['avrg_forms_per_day_mavrg'].iloc[0]
+                eval_dus_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
+(data_median_metrics['visit_day'] == current_date)(data_median_metrics['flw_id'] == flw)]['dus_per_day_mavrg'].iloc[0]
+                median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id' : flw , 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
+            init_row = init_row + 1
+
+    #Calculating median for each unique date for all LLO's
+    # init_row=0
+    # for current_date in unique_dates:
+    #         mask = median_metrics_initial['visit_day'] == current_date
+    #         median_averge_visits=round(median_metrics_initial[mask]['avrg_forms_per_day_mavrg'].median(), 2)
+    #         median_dus_per_day=round(median_metrics_initial[mask]['dus_per_day_mavrg'].median(), 2)
+    #         median_metrics_final.loc[init_row] = { 'visit_day': current_date,
+    #                                                      'median_averge_visits': median_averge_visits,
+    #                                                   'median_dus_per_day': median_dus_per_day}
+    #         init_row = init_row+1
+    print("-----median_metrics_initial------")
+    print(median_metrics_initial)
+    return median_metrics_initial      
+
+
+
+#----------------------Done--------------------------------#
+def get_overall_opp_median_metrics(data_median_metrics):
+    median_metrics_initial = pd.DataFrame(columns=['opportunity', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg'])
+    median_metrics_final = pd.DataFrame(columns=[ 'visit_day', 'median_averge_visits', 'median_dus_per_day'])
+    median_dus_per_day = pd.DataFrame(columns=['visit_day', 'median_averge_visits', 'median_dus_per_day'])
+    unique_dates = sorted(data_median_metrics['visit_day'].unique())
+    
+    #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
+    init_row=0
+    for current_date in unique_dates:
+        for org in org_values:
+            #check if a row exists for that opportunity and visit day
+            matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) & (data_median_metrics['visit_day'] == current_date )].empty
+            if matching_rows_exists:
+                median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
+            else:
+                eval_avrg_forms_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
+(data_median_metrics['visit_day'] == current_date)
+]['avrg_forms_per_day_mavrg'].iloc[0]
+                eval_dus_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
+(data_median_metrics['visit_day'] == current_date)]['dus_per_day_mavrg'].iloc[0]
+                median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
+            init_row = init_row + 1
+
+    #Calculating median for each unique date for all LLO's
+    init_row=0
+    for current_date in unique_dates:
+            mask = median_metrics_initial['visit_day'] == current_date
+            median_averge_visits=round(median_metrics_initial[mask]['avrg_forms_per_day_mavrg'].median(), 2)
+            median_dus_per_day=round(median_metrics_initial[mask]['dus_per_day_mavrg'].median(), 2)
+            median_metrics_final.loc[init_row] = { 'visit_day': current_date,
+                                                         'median_averge_visits': median_averge_visits,
+                                                      'median_dus_per_day': median_dus_per_day}
+            init_row = init_row+1
+    return median_metrics_final      
 
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
@@ -165,9 +258,13 @@ def create_flw_dashboard(coverage_data_objects):
                 }),
                 html.Div([
                     html.Div([
-                        dcc.Graph(id='median-avg-chart'),
-                    ], className='chart-item')
+                        dcc.Graph(id='forms-median-chart'),
+                    ], className='chart-item'),
+                    html.Div([
+                        dcc.Graph(id='dus-median-chart'),
+                    ],className='chart-item')
                 ], style={
+                    'display': 'grid',
                     'gridTemplateColumns': '1fr 1fr',
                     'gap': '30px',
                     'margin': '20px 0'
@@ -197,7 +294,8 @@ def create_flw_dashboard(coverage_data_objects):
         Output('flw-summary-table', 'data'),
         Output('forms-rolling-chart', 'figure'),
         Output('dus-rolling-chart', 'figure'),
-        Output('median-avg-chart', 'figure'),
+        Output('forms-median-chart', 'figure'),
+        Output('dus-median-chart', 'figure'),
         Input('org-selector', 'value')
     )
     def update_dashboard(selected_orgs):
@@ -220,14 +318,13 @@ def create_flw_dashboard(coverage_data_objects):
 
             # Create historical metrics DataFrame
             historical_metrics = []
-
+            median_metrics = []
             # Get unique dates
             unique_dates = sorted(service_timeline_df['visit_day'].unique())
-            #median_metrics = pd.DataFrame(columns=['opportunity', 'visit_day', 'visit_count_median'])
-            median_metrics = []
+            
+        
             for current_date in unique_dates:
-
-                window_metrics_temp = pd.DataFrame(columns=['opportunity', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg', 'visit_count_median'])
+                window_metrics_temp = pd.DataFrame(columns=['opportunity', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg'])
                 # Calculate the 7-day window
                 window_start = current_date - timedelta(days=6)
 
@@ -251,18 +348,24 @@ def create_flw_dashboard(coverage_data_objects):
                 unique_opportunities = sorted(recent_median_df['opportunity'].unique())
                 init_row = 0
                 for opp in unique_opportunities:
-                    visit_median = round(recent_median_df[recent_median_df['opportunity'] == opp]['visit_count'].median(),2)
+                    #visit_median = round(recent_median_df[recent_median_df['opportunity'] == opp]['visit_count'].median(),2)
                     window_visit_average = round(window_metrics[window_metrics['opportunity'] == opp]['visits_last7'].sum()/7, 2)
                     window_du_visit_average = round(window_metrics[window_metrics['opportunity'] == opp]['dus_last7'].sum()/7, 2)
                     window_metrics_temp.loc[init_row] = {'opportunity': opp, 'visit_day': current_date,
                                                          'avrg_forms_per_day_mavrg': window_visit_average,
-                                                      'dus_per_day_mavrg': window_du_visit_average, 'visit_count_median': visit_median}
+                                                      'dus_per_day_mavrg': window_du_visit_average}
 
                     init_row = init_row + 1
+
+                median_metrics.append(window_metrics_temp)
                 historical_metrics.append(window_metrics_temp)
+
+            
 
             # Combine all historical metrics
             chart_data = pd.concat(historical_metrics, ignore_index=True)
+            median_data = pd.concat(median_metrics, ignore_index=True)
+            data_median_metrics = get_overall_opp_median_metrics(median_data)
 
         else:
             # Selection made - show FLW level summary
@@ -295,8 +398,8 @@ def create_flw_dashboard(coverage_data_objects):
 
             for current_date in unique_dates:
                 window_metrics_temp = pd.DataFrame(
-                    columns=['flw_id', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg',
-                             'visit_count_median'])
+                    columns=['flw_id', 'visit_day', 'avrg_forms_per_day_mavrg', 'dus_per_day_mavrg'])
+
                 # Calculate the 7-day window
                 window_start = current_date - timedelta(days=6)
 
@@ -305,7 +408,6 @@ def create_flw_dashboard(coverage_data_objects):
                     (service_timeline_df['visit_day'] >= window_start) &
                     (service_timeline_df['visit_day'] <= current_date)
                     ]
-
                 # Calculate metrics for this window
                 window_metrics = window_data.groupby(['flw_id', 'opportunity']).agg(
                     visits_last7=('visit_id', 'count'),
@@ -320,16 +422,12 @@ def create_flw_dashboard(coverage_data_objects):
                 unique_flw_ids = sorted(recent_median_df['flw_id'].unique())
                 init_row = 0
                 for flw_id in unique_flw_ids:
-                    visit_median = round(
-                        recent_median_df[recent_median_df['flw_id'] == flw_id]['visit_count'].median(), 2)
-                    window_visit_average = round(
-                        window_metrics[window_metrics['flw_id'] == flw_id]['visits_last7'].sum()/7, 2)
-                    window_du_visit_average = round(
-                        window_metrics[window_metrics['flw_id'] == flw_id]['dus_last7'].sum()/7, 2)
+                    #visit_median = round(recent_median_df[recent_median_df['flw_id'] == flw_id]['visit_count'].median(), 2)
+                    window_visit_average = round(window_metrics[window_metrics['flw_id'] == flw_id]['visits_last7'].sum()/7, 2)
+                    window_du_visit_average = round(window_metrics[window_metrics['flw_id'] == flw_id]['dus_last7'].sum()/7, 2)
                     window_metrics_temp.loc[init_row] = {'flw_id': flw_id, 'visit_day': current_date,
                                                          'avrg_forms_per_day_mavrg': window_visit_average,
-                                                         'dus_per_day_mavrg': window_du_visit_average,
-                                                         'visit_count_median': visit_median}
+                                                         'dus_per_day_mavrg': window_du_visit_average}
 
                     init_row = init_row + 1
 
@@ -363,7 +461,7 @@ def create_flw_dashboard(coverage_data_objects):
             chart_data.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0, 'visit_count_median': 0}, inplace=True)
             chart_data["flw"] = "(" + chart_data["flw_id"] + ")" +chart_data["flw_name"]
             sorted_by_flw = sorted(chart_data['flw'].unique())
-
+            data_median_metrics_2 = get_overall_opp_median_metrics_per_llo(historical_metrics)
         # Create the charts
         if not selected_orgs:
             # Opportunity level charts
@@ -384,15 +482,23 @@ def create_flw_dashboard(coverage_data_objects):
                 title='7-Day Rolling Average of DUs Visited',
                 labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "}
             )
-
-            median_fig = px.line(
-                chart_data,
+            forms_fig2 = px.line(
+                data_median_metrics,
                 x='visit_day',
-                y='visit_count_median',
-                color='opportunity',
-                title='7-Day Median Average of DUs Visited',
-                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"}
+                y='median_averge_visits',
+                title='7-Day Median of Forms Submitted',
+                labels={"visit_day": "Visit Day", "median_averge_visits": "Median Form Submissions"}
             )
+
+            dus_fig2 = px.line(
+                data_median_metrics,
+                x='visit_day',
+                y='median_dus_per_day',
+                title='7-Day Median Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "median_dus_per_day": " Median DUs Visited "}
+            )
+
+            
         else:
             # FLW level charts
             forms_fig = px.line(
@@ -415,17 +521,24 @@ def create_flw_dashboard(coverage_data_objects):
                 labels={"visit_day": "Visit Day", "dus_per_day_mavrg": "Average DUs Visited "},
                 category_orders={'flw': sorted_by_flw}
             )
-            median_fig = px.line(
-                chart_data,
+            forms_fig2 = px.line(
+                data_median_metrics,
                 x='visit_day',
-                y='visit_count_median',
-                color='flw',
-                title='7-Day Median Average of DUs Visited',
-                labels={"visit_day": "Visit Day", "visit_count_median": "Median Form Submissions"},
-                category_orders={'flw': sorted_by_flw}
+                y='median_averge_visits',
+                title='7-Day Median of Forms Submitted',
+                labels={"visit_day": "Visit Day", "median_averge_visits": "Median Form Submissions"}
             )
 
-        return summary_df.to_dict('records'), forms_fig, dus_fig, median_fig
+            dus_fig2 = px.line(
+                data_median_metrics,
+                x='visit_day',
+                y='median_dus_per_day',
+                title='7-Day Median Average of DUs Visited',
+                labels={"visit_day": "Visit Day", "median_dus_per_day": "Median DUs Visited "}
+            )
+            
+
+        return summary_df.to_dict('records'), forms_fig, dus_fig, forms_fig2, dus_fig2 
 
     app.run(debug=True, port=8080)
 

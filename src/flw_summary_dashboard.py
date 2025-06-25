@@ -39,7 +39,6 @@ def get_overall_opp_median_metrics_per_opportunity(data_median_metrics,selected_
                 matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) &(data_median_metrics['visit_day'] == current_date) & (data_median_metrics['flw_id'] == flw)]
                 if  matching_rows_exists.empty:
                     median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id':  flw, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
-                    print("came here true")
                 else:
                     eval_avrg_forms_per_day_mavrg = matching_rows_exists['avrg_forms_per_day_mavrg'].iloc[0]
                     eval_dus_per_day_mavrg = matching_rows_exists['dus_per_day_mavrg'].iloc[0]    
@@ -73,7 +72,6 @@ def get_overall_opp_median_metrics(data_median_metrics):
             #check if a row exists for that opportunity and visit day
             matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) & (data_median_metrics['visit_day'] == current_date )].empty
             if matching_rows_exists:
-                print("came here true 2")
                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
             else:
                 eval_avrg_forms_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
@@ -85,15 +83,25 @@ def get_overall_opp_median_metrics(data_median_metrics):
             init_row = init_row + 1
 
     #Calculating median for each unique date for all LLO's
-    init_row=0
-    for current_date in unique_dates:
-            mask = median_metrics_initial['visit_day'] == current_date
-            median_averge_visits=round(median_metrics_initial[mask]['avrg_forms_per_day_mavrg'].median(), 2)
-            median_dus_per_day=round(median_metrics_initial[mask]['dus_per_day_mavrg'].median(), 2)
-            median_metrics_final.loc[init_row] = { 'visit_day': current_date,
-                                                         'median_averge_visits': median_averge_visits,
-                                                      'median_dus_per_day': median_dus_per_day}
-            init_row = init_row+1
+    # init_row=0
+    # for current_date in unique_dates:
+    #         mask = median_metrics_initial['visit_day'] == current_date
+    #         median_averge_visits=round(median_metrics_initial[mask]['avrg_forms_per_day_mavrg'].median(), 2)
+    #         median_dus_per_day=round(median_metrics_initial[mask]['dus_per_day_mavrg'].median(), 2)
+    #         median_metrics_final.loc[init_row] = { 'visit_day': current_date,
+    #                                                      'median_averge_visits': median_averge_visits,
+    #                                                   'median_dus_per_day': median_dus_per_day}
+    #         init_row = init_row+1
+    median_metrics_final = (
+    median_metrics_initial
+    .groupby([ 'visit_day'])[['avrg_forms_per_day_mavrg', 'dus_per_day_mavrg']]
+    .median()
+    .reset_index()
+    .rename(columns={
+        'avrg_forms_per_day_mavrg': 'median_averge_visits',
+        'dus_per_day_mavrg': 'median_dus_per_day'
+    })
+)
     return median_metrics_final      
 
 def create_flw_dashboard(coverage_data_objects):

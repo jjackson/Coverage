@@ -283,6 +283,7 @@ class AssessmentEngine:
         }
         self.column_patterns = {
             'flw_id': ['flw_id', 'flw id', 'worker_id'],
+            'flw_name': ['flw_name', 'flw name', 'worker_name', 'field_worker_name'],
             'opportunity_name': ['opportunity_name', 'opportunity', 'org'],
             'visit_date': ['visit_date', 'date', 'visit_time'],
             'status': ['Status', 'status', 'visit_status'],
@@ -461,14 +462,28 @@ class AssessmentEngine:
                 (df_clean['opportunity_name'] == opp_name)
             ].sort_values('visit_date', ascending=False).head(self.visit_threshold)
             
-            # Run each assessment
+            # Get FLW name if available
+            flw_name = None
+            if 'flw_name' in flw_visits.columns and len(flw_visits) > 0:
+                # Get the most common name for this FLW (in case of data inconsistencies)
+                flw_name_values = flw_visits['flw_name'].dropna()
+                if len(flw_name_values) > 0:
+                    flw_name = flw_name_values.mode().iloc[0] if len(flw_name_values.mode()) > 0 else flw_name_values.iloc[0]
+            
+           # Run each assessment
             flw_result = {
-                'flw_id': flw_id,
+                'flw_id': flw_id}
+
+            # Add flw_name if available
+            if flw_name:
+                flw_result['flw_name'] = flw_name
+
+            flw_result.update({
                 'opportunity_name': opp_name,
                 'total_visits': len(flw_visits),
                 'assessment_date': pd.Timestamp.now().strftime('%Y-%m-%d')
-            }
-            
+            })
+                   
             strong_negatives = 0
             insufficient_data_count = 0
             

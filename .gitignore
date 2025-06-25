@@ -31,6 +31,7 @@ __pycache__/
 *.js.map
 *.bak
 *.pkl
+*~
 
 # IDE files
 .idea/

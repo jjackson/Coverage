@@ -29,15 +29,20 @@ class ExcelExporter:
                 if df is None or len(df) == 0:
                     continue
                 
+                # Fix timezone issues before processing
+                df_clean = self._fix_timezone_issues(df)
+                
                 # Create worksheet
                 ws = wb.create_sheet(title=self._clean_sheet_name(tab_name))
                 
                 # Add data
-                for r in dataframe_to_rows(df, index=False, header=True):
+                for r in dataframe_to_rows(df_clean, index=False, header=True):
                     ws.append(r)
                 
                 # Format the sheet
-                self._format_worksheet(ws, df)
+                self._format_worksheet(ws, df_clean)
+                
+                self.log(f"Added sheet: {tab_name} ({len(df_clean)} rows)")
             
             # Save the workbook
             wb.save(output_path)
@@ -47,6 +52,38 @@ class ExcelExporter:
         except Exception as e:
             self.log(f"Error creating Excel file: {str(e)}")
             return None
+    
+    def _fix_timezone_issues(self, df):
+        """Fix timezone issues that cause Excel export problems"""
+        df_copy = df.copy()
+        
+        for col in df_copy.columns:
+            # Check if column contains datetime data
+            if df_copy[col].dtype.name.startswith('datetime'):
+                try:
+                    # If it's timezone-aware, convert to timezone-naive
+                    if hasattr(df_copy[col].dtype, 'tz') and df_copy[col].dtype.tz is not None:
+                        df_copy[col] = df_copy[col].dt.tz_localize(None)
+                        self.log(f"Removed timezone from column: {col}")
+                except Exception as e:
+                    self.log(f"Warning: Could not fix timezone for column {col}: {str(e)}")
+            
+            # Handle object columns that might contain datetime objects
+            elif df_copy[col].dtype == 'object':
+                try:
+                    # Check if it contains datetime-like objects
+                    sample = df_copy[col].dropna().head(3)
+                    if len(sample) > 0:
+                        first_val = sample.iloc[0]
+                        if hasattr(first_val, 'tz') and first_val.tz is not None:
+                            # Convert timezone-aware datetime objects to timezone-naive
+                            df_copy[col] = pd.to_datetime(df_copy[col]).dt.tz_localize(None)
+                            self.log(f"Fixed timezone in object column: {col}")
+                except:
+                    # If conversion fails, leave the column as-is
+                    pass
+        
+        return df_copy
     
     def _clean_sheet_name(self, name):
         """Clean sheet name to be Excel-compatible"""
@@ -95,5 +132,3 @@ class ExcelExporter:
             # Set width with reasonable bounds
             adjusted_width = min(max(max_length + 2, 10), 50)
             ws.column_dimensions[column_letter].width = adjusted_width
-
-

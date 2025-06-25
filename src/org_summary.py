@@ -1,5 +1,26 @@
+import logging
+import os
+
 import pandas as pd
 from datetime import date, timedelta
+
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)           # Prevent line wrapping
+pd.set_option('display.max_colwidth', None)    # Show full column content
+
+log_dir = '../../'
+os.makedirs(log_dir, exist_ok=True)  # Create directory if it doesn't exist
+log_file_path = os.path.join(log_dir, 'app.log')
+
+logging.basicConfig(
+    filename= log_file_path,           # Log file name
+    filemode='a',                 # Append mode ('w' to overwrite)
+    level=logging.INFO,           # Minimum log level
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+
 
 def generate_summary(coverage_data_objects, group_by='opportunity'):
     """
@@ -14,7 +35,6 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
         topline_stats: dict with aggregate metrics
     """
     all_summaries = []
-    
     for org, cov in coverage_data_objects.items():
         service_df = cov.create_service_points_dataframe()
         if service_df is None or service_df.empty:
@@ -82,7 +102,6 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                         flw_id_to_commcare[point.flw_id] = point.flw_commcare_id
                 
                 for flw_id in summary[summary['opportunity'] == org]['flw_id'].unique():
-                    # Get the corresponding commcare_id
                     commcare_id = flw_id_to_commcare.get(flw_id)
                     if commcare_id and commcare_id in cov.flws:
                         flw = cov.flws[commcare_id]
@@ -104,16 +123,15 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
 
-
         else:
             recent_grouped = recent.groupby(['flw_id', 'opportunity']).agg(
                 visits_last7=('visit_id', 'count'),
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
+
         recent_grouped['avrg_forms_per_day_mavrg'] = round(recent_grouped['visits_last7'] / 7.0, 2)
         recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)
-
-        # Merge recent activity with full summary
+     
         summary = summary.merge(recent_grouped, on=['opportunity'] if group_by == 'opportunity' else ['flw_id', 'opportunity'], how='left')
         summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0}, inplace=True)
         all_summaries.append(summary)

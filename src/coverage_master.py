@@ -316,10 +316,11 @@ def load_opportunity_domain_mapping() -> Dict[str, str]:
     
     if not mapping_str:
         # Return default mapping if no environment variable is set
+
+        #Ashish changed this to reduce default load data
         return {
-            "ZEGCAWIS | CHC Givewell Scale Up": "ccc-chc-zegcawis-2024-25",
-            "COWACDI | CHC Givewell Scale Up": "ccc-chc-cowacdi-2024-25",
-            "ADD NEXT HERE": "ADD NEXT HERE"
+           "ZEGCAWIS | CHC Givewell Scale Up": "ccc-chc-zegcawis-2024-25",
+           "COWACDI | CHC Givewell Scale Up": "ccc-chc-cowacdi-2024-25"
         }
     
     try:
@@ -401,21 +402,24 @@ def main():
             print(f"Service points for this opportunity: {len(service_df)}")
 
             # Use mapped domain name if available, otherwise use opportunity name
-            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
-            
-            coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name) 
+            #-------Changing domain list to get data from env variables only -----#
+            if(domain_name is not None and domain_name != ""):
+                print("------domain_name------")
+                print(domain_name)
+                coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
                 domain=domain_name,
                 user=user,
                 api_key=api_key,
                 service_df=service_df)
 
-            coverage_data.project_space = domain_name
-            coverage_data.opportunity_name = opportunity_name
+                coverage_data.project_space = domain_name
+                coverage_data.opportunity_name = opportunity_name
             
             # Store with a combined key
-            key = domain_name
-            coverage_data_objects[key] = coverage_data
-            print(f"Successfully loaded coverage data for {key}")
+                key = domain_name
+                coverage_data_objects[key] = coverage_data
+                print(f"Successfully loaded coverage data for {key}")
                         
         print(f"\nTotal coverage data objects created: {len(coverage_data_objects)}")
         
@@ -481,7 +485,9 @@ def main():
             # Load the data using the CoverageData model
             print(f"  Loading data from Excel file and CSV data...")
             coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel_file, None)
-            
+            print("----Ashish-----")
+            print("coverage_data")
+            print(coverage_data)
             # Load service delivery data from the dataframe for this opportunity
             coverage_data.load_service_delivery_from_datafame(service_df)
             

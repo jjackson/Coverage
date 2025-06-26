@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="96705d45-a7e7-4aac-bc51-38205902e1c9" name="Changes" comment="" />
+    <list default="true" id="96705d45-a7e7-4aac-bc51-38205902e1c9" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/flw_summary_dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/flw_summary_dashboard.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/org_summary.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/org_summary.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -59,7 +63,7 @@
     &quot;Python.run_report_generator.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;sathy__branch&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;ayogi__fixing__average__issue&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;C:/Users/sathy/Quick_Coverage&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;

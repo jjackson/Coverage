@@ -1,13 +1,14 @@
 import logging
 import os
 import dash, json
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output,no_update
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
 from datetime import timedelta
 import plotly.express as px
 from dotenv import load_dotenv, find_dotenv
+from dash_ag_grid import AgGrid
 
 find_dotenv()
 load_dotenv(override=True,verbose=True)
@@ -26,23 +27,6 @@ logging.basicConfig(
 
 def get_overall_opp_median_metrics_per_opportunity(data_median_metrics,selected_orgs):
     median_metrics_final = pd.DataFrame(columns=[ 'opportunity','visit_day', 'median_averge_visits', 'median_dus_per_day'])
-    #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
-    # init_row=0
-    # for current_date in unique_dates:
-    #     for org in selected_orgs:
-    #         #check if a row exists for that opportunity, visit day and flw_id
-    #         unique_flws = data_median_metrics[data_median_metrics['opportunity'] == org]['flw_id'].unique()
-    #         for flw in unique_flws: 
-    #             matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) &(data_median_metrics['visit_day'] == current_date) & (data_median_metrics['flw_id'] == flw)]
-    #             if  matching_rows_exists.empty:
-    #                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id':  flw, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
-    #             else:
-    #                 eval_avrg_forms_per_day_mavrg = matching_rows_exists['avrg_forms_per_day_mavrg'].iloc[0]
-    #                 eval_dus_per_day_mavrg = matching_rows_exists['dus_per_day_mavrg'].iloc[0]    
-    #                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id' : flw , 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
-    #         init_row = init_row + 1
-
-   
     median_metrics_final = (
     data_median_metrics
     .groupby(['opportunity', 'visit_day'])[['avrg_forms_per_day_mavrg', 'dus_per_day_mavrg']]
@@ -58,25 +42,6 @@ def get_overall_opp_median_metrics_per_opportunity(data_median_metrics,selected_
 
 def get_overall_opp_median_metrics(data_median_metrics):
     median_metrics_final = pd.DataFrame(columns=[ 'visit_day', 'median_averge_visits', 'median_dus_per_day'])
-    
-#     #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
-#     init_row=0
-#     for current_date in unique_dates:
-#         for org in org_values:
-#             #check if a row exists for that opportunity and visit day
-#             matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) & (data_median_metrics['visit_day'] == current_date )].empty
-#             if matching_rows_exists:
-#                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
-#             else:
-#                 eval_avrg_forms_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
-# (data_median_metrics['visit_day'] == current_date)
-# ]['avrg_forms_per_day_mavrg'].iloc[0]
-#                 eval_dus_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
-# (data_median_metrics['visit_day'] == current_date)]['dus_per_day_mavrg'].iloc[0]
-#                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
-#             init_row = init_row + 1
-
-
     median_metrics_final = (
     data_median_metrics
     .groupby([ 'visit_day'])[['avrg_forms_per_day_mavrg', 'dus_per_day_mavrg']]
@@ -171,56 +136,46 @@ def create_flw_dashboard(coverage_data_objects):
                     'fontFamily': 'Arial, sans-serif'
                 }
             ),
-            dash_table.DataTable(
+           html.Button("Export as CSV", id="export-csv-btn", n_clicks=0, style={"marginBottom": "10px"}), 
+            AgGrid(
                 id='flw-summary-table',
-                columns=[{"name": i, "id": i} for i in summary_df.columns],
-                style_table={
-                    'overflowX': 'auto',
-                    'boxShadow': '0 0 10px rgba(0,0,0,0.1)',
-                    'borderRadius': '5px',
-                    'marginBottom': '30px',
-                    'maxHeight': '800px',
-                    'overflowY': 'scroll',
-                    'margin': '0px',
-                    'width': '100%',
-                    'max-width': 'none'
-                },
-                fill_width=False,
-                fixed_columns={'headers': True, 'data': 2},
-                filter_action='native',
-                sort_action='native',
-                export_format='csv',
-                export_headers='display',
-                style_data_conditional=style_data_conditional,
-                style_cell={
-                    'textAlign': 'center',
-                    'padding': '2px',
-                    'fontFamily': 'Arial, sans-serif',
-                    'fontSize': '14px',
-                    'border': '1px solid #ddd',
-                    'whiteSpace': 'normal',
-                    'width': '140px',
-                    'minWidth': '120px',
-                    'maxWidth': '150px',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis'
-                },
-                style_header={
-                    'backgroundColor': '#f2f2f2',
-                    'fontWeight': 'bold',
-                    'textAlign': 'center',
-                    'border': '1px solid #ddd',
-                    'padding': '6px',
-                    'whiteSpace': 'normal',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis',
-                },
-                style_data={
-                    'border': '1px solid #ddd',
-                    'whiteSpace': 'normal',
-                    'height': 'auto'
-                },
-                page_size=10
+                columnDefs=[{"headerName": summary_df.columns[0], "field": summary_df.columns[0], "headerClass": "wrap-header", "pinned": "left", "width": 90, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+    {"headerName": summary_df.columns[1], "field": summary_df.columns[1], "headerClass": "wrap-header", "pinned": "left", "width": 90, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+] + [
+    {"headerName": i, "field": i, "headerClass": "wrap-header", "width": 100, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}}
+    for i in summary_df.columns[2:]],
+                rowData=summary_df.to_dict("records"),
+            defaultColDef={
+                "resizable": True,
+                "sortable": True,
+                "filter": True,
+                "wrapHeaderText": False,  # Enable header wrapping
+                "autoHeaderHeight": True, # Adjust header height automatically,
+                "flex":1, # This allows columns to grow/shrink to fill the grid width
+                "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}  # Prevent trimming  # Wrap row data
+            },
+            dashGridOptions = {
+                "domLayout": "normal",  # or "normal" for fixed height
+                "maxRowsToShow": 5,  # Adjust this to your desired maximum
+                "pagination": True,  # Enable pagination
+                "paginationPageSize" : 10, # Number of rows per page
+                "rowSelection": "multiple",
+                "suppressHorizontalScroll": False,  # Explicitly allow horizontal scrolling 
+                "enableBrowserTooltips": True,        # <-- Optional: tooltips for overflow
+                "enableExport": True,
+                "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab"],  # Show all menu tabs
+                "getMainMenuItems": {
+                    "function": "defaultItems => [...defaultItems, 'export']"
+                }
+            },
+            enableEnterpriseModules=True, 
+            csvExportParams={                         # <-- Optional: customize CSV export
+                "fileName": "flw_summary_export.csv",
+                "allColumns": True
+            },
+            style={'height': '400px', 'width': '100%', 'overflowX' : 'auto'},
+            className="ag-theme-alpine",
+            
             ),
             html.Div([
                 html.H2("Rolling 7-Day Averages", style={
@@ -278,13 +233,14 @@ def create_flw_dashboard(coverage_data_objects):
     })
 
     @app.callback(
-        Output('flw-summary-table', 'data'),
+        Output('flw-summary-table', 'rowData'),
         Output('forms-rolling-chart', 'figure'),
         Output('dus-rolling-chart', 'figure'),
         Output('forms-median-chart', 'figure'),
         Output('dus-median-chart', 'figure'),
         Input('org-selector', 'value')
     )
+
     def update_dashboard(selected_orgs):
         sorted_by_flw = []
         if not selected_orgs:
@@ -537,7 +493,15 @@ def create_flw_dashboard(coverage_data_objects):
             
 
         return summary_df.to_dict('records'), forms_fig, dus_fig, forms_fig2, dus_fig2 
-
+    @app.callback(
+        Output('flw-summary-table', 'exportDataAsCsv'),
+        Input('export-csv-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def export_csv(n_clicks):
+        if n_clicks:
+            return True  # Triggers export with default params
+        return no_update
     app.run(debug=True, port=8080)
 
 

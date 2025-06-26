@@ -1,0 +1,5 @@
+.ag-theme-alpine .ag-header-cell-label,
+.ag-theme-alpine .ag-cell {
+    overflow-wrap: anywhere !important;
+    white-space: pre-line !important;
+}

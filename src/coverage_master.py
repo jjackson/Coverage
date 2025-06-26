@@ -10,6 +10,17 @@ from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
 from .models import CoverageData
 import pickle  # Add this import at the top
+import logging
+log_dir = '../../'
+os.makedirs(log_dir, exist_ok=True)  # Create directory if it doesn't exist
+log_file_path = os.path.join(log_dir, 'app.log')
+
+logging.basicConfig(
+    filename= log_file_path,           # Log file name
+    filemode='a',                 # Append mode ('w' to overwrite)
+    level=logging.INFO,           # Minimum log level
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 try:
     from .opportunity_comparison_statistics import create_opportunity_comparison_report
@@ -313,6 +324,8 @@ def generate_index_html(output_dir, output_info_list):
 def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
     mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
+    print("----mapping_str-----")
+    print(mapping_str)
     
     if not mapping_str:
         # Return default mapping if no environment variable is set
@@ -353,7 +366,6 @@ def main():
     
     # Load opportunity to domain mapping from environment
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
-    
     coverage_data_objects = {}
     use_api = os.environ.get('USE_API', '').upper() == 'TRUE'
 
@@ -388,6 +400,7 @@ def main():
         service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
             superset_url, superset_username, superset_password
         )
+        
 
         print("Loading Delivery Units from API, opportunity names found in CSV:")
         for key, value in service_delivery_by_opportunity_df.items():
@@ -399,10 +412,8 @@ def main():
         for opportunity_name, service_df in service_delivery_by_opportunity_df.items():
             print(f"\nProcessing opportunity: {opportunity_name}")
             print(f"Service points for this opportunity: {len(service_df)}")
-
             # Use mapped domain name if available, otherwise use opportunity name
-            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
-            
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name) 
             coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
                 domain=domain_name,
                 user=user,

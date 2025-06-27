@@ -5,7 +5,6 @@ from src.utils import data_loader
 from src.coverage_master import load_opportunity_domain_mapping
 from src.flw_summary_dashboard import create_flw_dashboard
 import pandas as pd
-from src.models import CoverageData
 from src.create_flw_views import create_flw_views_report
 from src.create_statistics import create_statistics_report
 from src.create_delivery_map import create_leaflet_map

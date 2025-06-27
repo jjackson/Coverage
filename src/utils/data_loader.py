@@ -15,9 +15,16 @@ from datetime import datetime
 import time
 import json
 from dotenv import load_dotenv
-from src.models import CoverageData
 from functools import lru_cache
 from src.sqlqueries import sql_queries
+try:
+    # When imported as a module
+    from models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
+except ImportError:
+    # When run as a script
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
 
 def get_available_files(directory: str = 'data', file_type: str = None) -> List[str]:
     """

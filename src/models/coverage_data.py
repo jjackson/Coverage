@@ -789,6 +789,7 @@ class CoverageData:
         }
 
     def get_gps_accuracy_heatmap_data(self, flw_filter=None, date_start=None, date_end=None):
+
         """
         Returns a heatmap matrix of mean GPS accuracy per FLW per day.
         - flw_filter: optional list of FLW IDs to include
@@ -874,3 +875,68 @@ class CoverageData:
             'dates': dates,
             'matrix': matrix
         } 
+    
+    def to_dict(self):
+        return {
+        "service_areas": list(self.service_areas.keys()),
+        "delivery_units": list(self.delivery_units.keys()),
+        "service_points": [str(sp) for sp in self.service_points],
+        "flws": list(self.flws.keys()),
+        "project_space": self.project_space,
+        "opportunity_name": self.opportunity_name,
+        "flw_commcare_id_to_name_map": self.flw_commcare_id_to_name_map,
+        "unique_service_area_ids": self.unique_service_area_ids,
+        "unique_flw_names": self.unique_flw_names,
+        "unique_status_values": self.unique_status_values,
+        "delivery_status_counts": self.delivery_status_counts,
+        # Add more fields as needed
+    }
+
+    def get_active_flws_last7days(self):
+
+        dataframe_active_flws = self.create_service_points_dataframe()
+    
+        selected_columns = ['flw_id','visit_id','visit_date']
+        dataframe_active_flws_selected = dataframe_active_flws[selected_columns]
+        # Convert 'visit_date' to datetime if not already
+        # Suppose your column is named 'visit_date' and is of string type
+        dataframe_active_flws_selected['visit_date'] = pd.to_datetime(dataframe_active_flws_selected['visit_date'].str[:10], format='%Y-%m-%d', errors='coerce')
+        # Get today's date
+        today = pd.Timestamp(datetime.now().date())
+
+        # Filter for last 7 days (including today)
+        last_7_days = today - pd.Timedelta(days=6)
+        recent_visits = dataframe_active_flws_selected[
+        (dataframe_active_flws_selected['visit_date'] >= last_7_days) &
+        (dataframe_active_flws_selected['visit_date'] <= today)]
+
+        # Count unique flw_id
+        num_unique_flws = recent_visits['flw_id'].nunique()
+        return num_unique_flws
+    
+    def get_average_visits_data(self):
+        dataframe_dus_visit = self.create_service_points_dataframe()
+        selected_columns = ['visit_id','visit_date','du_name']
+        dataframe_dus_visit = dataframe_dus_visit[selected_columns]
+        # Convert 'visit_date' to datetime if not already
+        # Suppose your column is named 'visit_date' and is of string type
+        dataframe_dus_visit['visit_date'] = pd.to_datetime(dataframe_dus_visit['visit_date'].str[:10], format='%Y-%m-%d', errors='coerce')
+        # Get today's date
+        today = pd.Timestamp(datetime.now().date())
+
+        # Filter for last 7 days (including today)
+        last_7_days = today - pd.Timedelta(days=6)
+        recent_visits = dataframe_dus_visit[
+        (dataframe_dus_visit['visit_date'] >= last_7_days) &
+        (dataframe_dus_visit['visit_date'] <= today)]
+
+        window_metrics = recent_visits.groupby(['visit_date']).agg(
+                    visits_last7=('visit_id', 'count'),
+                    dus_last7=('du_name', pd.Series.nunique)
+                ).reset_index()
+
+        average_visits_last7days = round(window_metrics['visits_last7'].sum()/7, 2)
+        average_dus_last7days = round(window_metrics['dus_last7'].sum()/7, 2)
+
+        return average_dus_last7days, average_visits_last7days 
+        

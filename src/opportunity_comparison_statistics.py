@@ -11,9 +11,12 @@ import pandas as pd
 from datetime import datetime, date
 from typing import Dict, List, Any
 import json
-from .models.coverage_data import CoverageData
 from .models.delivery_unit import DeliveryUnit
+from .models.coverage_data import CoverageData
 from .utils.logging import Logger
+
+# Handle imports based on how the module is used
+
 
 logger = Logger()
 
@@ -77,7 +80,9 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
             'project_space': getattr(coverage_data, 'project_space', 'Unknown'),
             'delivery_units_count': len(coverage_data.delivery_units) if coverage_data.delivery_units else 0,
             'service_points_count': len(coverage_data.service_points) if coverage_data.service_points else 0,
+            'visits_per_day' : coverage_data.get_average_visits_data()[1],
             'completed_dus_count': len([du for du in coverage_data.delivery_units.values() if du.status == 'completed']) if coverage_data.delivery_units else 0,
+            'dus_per_day' : coverage_data.get_average_visits_data()[0],
             'total_flws': len(coverage_data.flws) if coverage_data.flws else 0,
             'total_service_areas': len(coverage_data.service_areas) if coverage_data.service_areas else 0,
             'started_sas_count': len([sa for sa in coverage_data.service_areas.values() if sa.is_started]) if coverage_data.service_areas else 0,
@@ -305,7 +310,9 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             <td>{project_stats['project_space']}</td>
             <td>{project_stats['delivery_units_count']}</td>
             <td>{project_stats['completed_dus_count']}</td>
+            <td>{project_stats['dus_per_day']}</td>
             <td>{project_stats['service_points_count']}</td>
+            <td>{project_stats['visits_per_day']}</td>
             <td>{project_stats['total_service_areas']}</td>
             <td>{project_stats['started_sas_count']}</td>
             <td>{project_stats['completed_sas_count']}</td>
@@ -485,13 +492,15 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                     <th>Project Space</th>
                     <th>Total DUs</th>
                     <th>Completed DUs</th>
+                    <th title="Average Delivery Units served in last 7 days" >DUs per Day</th>
                     <th>Service Points</th>
+                    <th title="Average vists in last 7 days">Forms per Day</th>
                     <th>Total SA</th>
                     <th>Started SAs</th>
                     <th>Completed SAs</th>
                     <th>FLWs</th>
-                    <th>Active FLWs</th>
-                    <th>Active FLWs %</th>
+                    <th title="Active FLWs in last 7 days">Active FLWs</th>
+                    <th title="Percentage Active FLWs in last 7 days>Active FLWs %</th>
                     <th>Coverage %</th>
                 </tr>
             </thead>

@@ -15,9 +15,9 @@ from datetime import datetime
 import time
 import json
 from dotenv import load_dotenv
-from src.models import CoverageData
 from functools import lru_cache
 from src.sqlqueries import sql_queries
+from src.models import CoverageData
 
 def get_available_files(directory: str = 'data', file_type: str = None) -> List[str]:
     """

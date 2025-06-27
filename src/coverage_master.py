@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Dict
 from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
-from .models import CoverageData
 import pickle  # Add this import at the top
 
 try:

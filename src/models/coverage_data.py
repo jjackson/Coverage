@@ -5,6 +5,9 @@ import geopandas as gpd
 from geopy.distance import geodesic
 import numpy as np
 import time
+from src.utils.logging import Logger
+
+logger = Logger()
 
 if TYPE_CHECKING:
     from .service_area import ServiceArea
@@ -913,5 +916,30 @@ class CoverageData:
         # Count unique flw_id
         num_unique_flws = recent_visits['flw_id'].nunique()
         return num_unique_flws
-      
+    
+    def get_average_visits_data(self):
+        dataframe_dus_visit = self.create_service_points_dataframe()
+        selected_columns = ['visit_id','visit_date','du_name']
+        dataframe_dus_visit = dataframe_dus_visit[selected_columns]
+        # Convert 'visit_date' to datetime if not already
+        # Suppose your column is named 'visit_date' and is of string type
+        dataframe_dus_visit['visit_date'] = pd.to_datetime(dataframe_dus_visit['visit_date'].str[:10], format='%Y-%m-%d', errors='coerce')
+        # Get today's date
+        today = pd.Timestamp(datetime.now().date())
+
+        # Filter for last 7 days (including today)
+        last_7_days = today - pd.Timedelta(days=6)
+        recent_visits = dataframe_dus_visit[
+        (dataframe_dus_visit['visit_date'] >= last_7_days) &
+        (dataframe_dus_visit['visit_date'] <= today)]
+
+        window_metrics = recent_visits.groupby(['visit_date']).agg(
+                    visits_last7=('visit_id', 'count'),
+                    dus_last7=('du_name', pd.Series.nunique)
+                ).reset_index()
+
+        average_visits_last7days = round(window_metrics['visits_last7'].sum()/7, 2)
+        average_dus_last7days = round(window_metrics['dus_last7'].sum()/7, 2)
+
+        return average_dus_last7days, average_visits_last7days 
         

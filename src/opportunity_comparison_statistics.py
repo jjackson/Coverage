@@ -498,15 +498,15 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                     <th>Project Space</th>
                     <th>Total DUs</th>
                     <th>Completed DUs</th>
-                    <th title="Average Delivery Units served in last 7 days" >DUs per Day</th>
+                    <th>DUs per Day</th>
                     <th>Service Points</th>
-                    <th title="Average vists in last 7 days">Forms per Day</th>
+                    <th>Forms per Day</th>
                     <th>Total SA</th>
                     <th>Started SAs</th>
                     <th>Completed SAs</th>
                     <th>FLWs</th>
-                    <th title="Active FLWs in last 7 days">Active FLWs</th>
-                    <th title="Percentage Active FLWs in last 7 days>Active FLWs %</th>
+                    <th>Active FLWs</th>
+                    <th>Active FLWs %</th>
                     <th>Coverage %</th>
                 </tr>
             </thead>

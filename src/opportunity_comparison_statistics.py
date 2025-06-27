@@ -6,12 +6,17 @@ CoverageData objects to analyze differences between opportunities/projects.
 """
 
 import os
+import pprint
 import pandas as pd
 from datetime import datetime, date
 from typing import Dict, List, Any
 import json
 from .models.coverage_data import CoverageData
 from .models.delivery_unit import DeliveryUnit
+from .utils.logging import Logger
+
+logger = Logger()
+
 
 def create_opportunity_comparison_report(coverage_data_objects: Dict[str, CoverageData], clumping_ratio: float = 10.0, lookback_days: int = 10) -> str:
     """
@@ -77,6 +82,7 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
             'total_service_areas': len(coverage_data.service_areas) if coverage_data.service_areas else 0,
             'started_sas_count': len([sa for sa in coverage_data.service_areas.values() if sa.is_started]) if coverage_data.service_areas else 0,
             'completed_sas_count': len([sa for sa in coverage_data.service_areas.values() if sa.is_completed]) if coverage_data.service_areas else 0,
+            'active_flw_last7days': coverage_data.get_active_flws_last7days()
         }
         
         # Calculate coverage percentage
@@ -84,6 +90,15 @@ def _generate_comparison_statistics(coverage_data_objects: Dict[str, CoverageDat
             project_stats['coverage_percentage'] = (project_stats['completed_dus_count'] / project_stats['delivery_units_count']) * 100
         else:
             project_stats['coverage_percentage'] = 0.0
+        
+        # Calculate %age active flws
+        if project_stats['total_flws'] > 0:
+            project_stats['pct_active_flw_last7days'] = (project_stats['active_flw_last7days'] / project_stats['total_flws']) * 100
+        else:
+            project_stats['pct_active_flw_last7days'] = 0.0
+        
+        
+
         
         stats['projects'][project_key] = project_stats
     
@@ -295,6 +310,8 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             <td>{project_stats['started_sas_count']}</td>
             <td>{project_stats['completed_sas_count']}</td>
             <td>{project_stats['total_flws']}</td>
+            <td>{project_stats['active_flw_last7days']}</td>
+            <td>{project_stats['pct_active_flw_last7days']:.1f}%</td>
             <td>{project_stats['coverage_percentage']:.1f}%</td>
         </tr>
         """
@@ -473,6 +490,8 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                     <th>Started SAs</th>
                     <th>Completed SAs</th>
                     <th>FLWs</th>
+                    <th>Active FLWs</th>
+                    <th>Active FLWs %</th>
                     <th>Coverage %</th>
                 </tr>
             </thead>

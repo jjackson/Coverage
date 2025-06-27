@@ -316,8 +316,6 @@ def load_opportunity_domain_mapping() -> Dict[str, str]:
     
     if not mapping_str:
         # Return default mapping if no environment variable is set
-
-        #Ashish changed this to reduce default load data
         return {
            "ZEGCAWIS | CHC Givewell Scale Up": "ccc-chc-zegcawis-2024-25",
            "COWACDI | CHC Givewell Scale Up": "ccc-chc-cowacdi-2024-25"
@@ -485,9 +483,7 @@ def main():
             # Load the data using the CoverageData model
             print(f"  Loading data from Excel file and CSV data...")
             coverage_data = data_loader.get_coverage_data_from_excel_and_csv(matching_excel_file, None)
-            print("----Ashish-----")
-            print("coverage_data")
-            print(coverage_data)
+  
             # Load service delivery data from the dataframe for this opportunity
             coverage_data.load_service_delivery_from_datafame(service_df)
             

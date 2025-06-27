@@ -26,23 +26,6 @@ logging.basicConfig(
 
 def get_overall_opp_median_metrics_per_opportunity(data_median_metrics,selected_orgs):
     median_metrics_final = pd.DataFrame(columns=[ 'opportunity','visit_day', 'median_averge_visits', 'median_dus_per_day'])
-    #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
-    # init_row=0
-    # for current_date in unique_dates:
-    #     for org in selected_orgs:
-    #         #check if a row exists for that opportunity, visit day and flw_id
-    #         unique_flws = data_median_metrics[data_median_metrics['opportunity'] == org]['flw_id'].unique()
-    #         for flw in unique_flws: 
-    #             matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) &(data_median_metrics['visit_day'] == current_date) & (data_median_metrics['flw_id'] == flw)]
-    #             if  matching_rows_exists.empty:
-    #                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id':  flw, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
-    #             else:
-    #                 eval_avrg_forms_per_day_mavrg = matching_rows_exists['avrg_forms_per_day_mavrg'].iloc[0]
-    #                 eval_dus_per_day_mavrg = matching_rows_exists['dus_per_day_mavrg'].iloc[0]    
-    #                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'flw_id' : flw , 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
-    #         init_row = init_row + 1
-
-   
     median_metrics_final = (
     data_median_metrics
     .groupby(['opportunity', 'visit_day'])[['avrg_forms_per_day_mavrg', 'dus_per_day_mavrg']]
@@ -58,25 +41,6 @@ def get_overall_opp_median_metrics_per_opportunity(data_median_metrics,selected_
 
 def get_overall_opp_median_metrics(data_median_metrics):
     median_metrics_final = pd.DataFrame(columns=[ 'visit_day', 'median_averge_visits', 'median_dus_per_day'])
-    
-#     #Checking if values exisits for all LLO's. If not, setting it to zero for each unique date
-#     init_row=0
-#     for current_date in unique_dates:
-#         for org in org_values:
-#             #check if a row exists for that opportunity and visit day
-#             matching_rows_exists = data_median_metrics[(data_median_metrics['opportunity'] == org) & (data_median_metrics['visit_day'] == current_date )].empty
-#             if matching_rows_exists:
-#                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : 0 , 'dus_per_day_mavrg' : 0  } 
-#             else:
-#                 eval_avrg_forms_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
-# (data_median_metrics['visit_day'] == current_date)
-# ]['avrg_forms_per_day_mavrg'].iloc[0]
-#                 eval_dus_per_day_mavrg = data_median_metrics[(data_median_metrics['opportunity'] == org) & 
-# (data_median_metrics['visit_day'] == current_date)]['dus_per_day_mavrg'].iloc[0]
-#                 median_metrics_initial.loc[init_row] = {'opportunity' : org, 'visit_day' : current_date, 'avrg_forms_per_day_mavrg' : eval_avrg_forms_per_day_mavrg , 'dus_per_day_mavrg' : eval_dus_per_day_mavrg  }       
-#             init_row = init_row + 1
-
-
     median_metrics_final = (
     data_median_metrics
     .groupby([ 'visit_day'])[['avrg_forms_per_day_mavrg', 'dus_per_day_mavrg']]

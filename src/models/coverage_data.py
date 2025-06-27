@@ -5,9 +5,6 @@ import geopandas as gpd
 from geopy.distance import geodesic
 import numpy as np
 import time
-from src.utils.logging import Logger
-
-logger = Logger()
 
 if TYPE_CHECKING:
     from .service_area import ServiceArea

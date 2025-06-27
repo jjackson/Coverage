@@ -6,14 +6,20 @@ CoverageData objects to analyze differences between opportunities/projects.
 """
 
 import os
-import pprint
 import pandas as pd
 from datetime import datetime, date
 from typing import Dict, List, Any
 import json
-from .models.delivery_unit import DeliveryUnit
-from .models.coverage_data import CoverageData
 from .utils.logging import Logger
+try:
+    # When imported as a module
+    from .models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
+except ImportError:
+    # When run as a script
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
+
 
 # Handle imports based on how the module is used
 

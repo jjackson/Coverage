@@ -139,14 +139,14 @@ def create_flw_dashboard(coverage_data_objects):
            html.Button("Export as CSV", id="export-csv-btn", n_clicks=0, style={"marginBottom": "10px"}), 
             AgGrid(
                 id='flw-summary-table',
-                columnDefs=[{"headerName": summary_df.columns[0], "field": summary_df.columns[0], "headerClass": "wrap-header", "pinned": "left", "width": 90, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
-    {"headerName": summary_df.columns[1], "field": summary_df.columns[1], "headerClass": "wrap-header", "pinned": "left", "width": 90, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+                columnDefs=[{"headerName": summary_df.columns[0], "field": summary_df.columns[0], "headerClass": "wrap-header", "pinned": "left", "width": 120,"minWidth": 110, "maxWidth": 130, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+    {"headerName": summary_df.columns[1], "field": summary_df.columns[1], "headerClass": "wrap-header", "pinned": "left", "width": 120,"minWidth": 110, "maxWidth": 130, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
 ] + [
-    {"headerName": i, "field": i, "headerClass": "wrap-header", "width": 100, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}}
+    {"headerName": i, "field": i, "headerClass": "wrap-header", "width": 120, "minWidth": 110, "maxWidth": 130, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}}
     for i in summary_df.columns[2:]],
                 rowData=summary_df.to_dict("records"),
             defaultColDef={
-                "resizable": True,
+                
                 "sortable": True,
                 "filter": True,
                 "wrapHeaderText": False,  # Enable header wrapping

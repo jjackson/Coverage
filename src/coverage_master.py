@@ -323,8 +323,6 @@ def generate_index_html(output_dir, output_info_list):
 def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
     mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
-    print("----mapping_str-----")
-    print(mapping_str)
     
     if not mapping_str:
         # Return default mapping if no environment variable is set

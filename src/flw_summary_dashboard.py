@@ -165,7 +165,7 @@ def create_flw_dashboard(coverage_data_objects):
                 "enableExport": True,
                 "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab"],  # Show all menu tabs
                 "getMainMenuItems": {
-                    "function": "defaultItems => [...defaultItems, 'export']"
+                    "function": "defaultItems => [...defaultItems, 'export']" 
                 }
             },
             enableEnterpriseModules=True, 

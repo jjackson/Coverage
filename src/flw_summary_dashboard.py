@@ -1,13 +1,14 @@
 import logging
 import os
 import dash, json
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output,no_update
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
 from datetime import timedelta
 import plotly.express as px
 from dotenv import load_dotenv, find_dotenv
+from dash_ag_grid import AgGrid
 
 find_dotenv()
 load_dotenv(override=True,verbose=True)
@@ -135,56 +136,46 @@ def create_flw_dashboard(coverage_data_objects):
                     'fontFamily': 'Arial, sans-serif'
                 }
             ),
-            dash_table.DataTable(
+           html.Button("Export as CSV", id="export-csv-btn", n_clicks=0, style={"marginBottom": "10px"}), 
+            AgGrid(
                 id='flw-summary-table',
-                columns=[{"name": i, "id": i} for i in summary_df.columns],
-                style_table={
-                    'overflowX': 'auto',
-                    'boxShadow': '0 0 10px rgba(0,0,0,0.1)',
-                    'borderRadius': '5px',
-                    'marginBottom': '30px',
-                    'maxHeight': '800px',
-                    'overflowY': 'scroll',
-                    'margin': '0px',
-                    'width': '100%',
-                    'max-width': 'none'
-                },
-                fill_width=False,
-                fixed_columns={'headers': True, 'data': 2},
-                filter_action='native',
-                sort_action='native',
-                export_format='csv',
-                export_headers='display',
-                style_data_conditional=style_data_conditional,
-                style_cell={
-                    'textAlign': 'center',
-                    'padding': '2px',
-                    'fontFamily': 'Arial, sans-serif',
-                    'fontSize': '14px',
-                    'border': '1px solid #ddd',
-                    'whiteSpace': 'normal',
-                    'width': '140px',
-                    'minWidth': '120px',
-                    'maxWidth': '150px',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis'
-                },
-                style_header={
-                    'backgroundColor': '#f2f2f2',
-                    'fontWeight': 'bold',
-                    'textAlign': 'center',
-                    'border': '1px solid #ddd',
-                    'padding': '6px',
-                    'whiteSpace': 'normal',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis',
-                },
-                style_data={
-                    'border': '1px solid #ddd',
-                    'whiteSpace': 'normal',
-                    'height': 'auto'
-                },
-                page_size=10
+                columnDefs=[{"headerName": summary_df.columns[0], "field": summary_df.columns[0], "headerClass": "wrap-header", "pinned": "left", "width": 150,"minWidth": 140, "maxWidth": 160, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+    {"headerName": summary_df.columns[1], "field": summary_df.columns[1], "headerClass": "wrap-header", "pinned": "left", "width": 150,"minWidth": 140, "maxWidth": 160, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
+{"headerName": summary_df.columns[2], "field": summary_df.columns[2], "headerClass": "wrap-header",  "width": 240,"minWidth": 220, "maxWidth": 250, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}} ] + [
+    {"headerName": i, "field": i, "headerClass": "wrap-header", "width": 140, "minWidth": 130, "maxWidth": 150, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}}
+    for i in summary_df.columns[3:]],
+                rowData=summary_df.to_dict("records"),
+            defaultColDef={
+                
+                "sortable": True,
+                "filter": True,
+                "wrapHeaderText": False,  # Enable header wrapping
+                "autoHeaderHeight": True, # Adjust header height automatically,
+                "flex":1, # This allows columns to grow/shrink to fill the grid width
+                "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}  # Prevent trimming  # Wrap row data
+            },
+            dashGridOptions = {
+                "domLayout": "normal",  # or "normal" for fixed height
+                "maxRowsToShow": 5,  # Adjust this to your desired maximum
+                "pagination": True,  # Enable pagination
+                "paginationPageSize" : 10, # Number of rows per page
+                "rowSelection": "multiple",
+                "suppressHorizontalScroll": False,  # Explicitly allow horizontal scrolling 
+                "enableBrowserTooltips": True,        # <-- Optional: tooltips for overflow
+                "enableExport": True,
+                "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab"],  # Show all menu tabs
+                "getMainMenuItems": {
+                    "function": "defaultItems => [...defaultItems, 'export']" 
+                }
+            },
+            enableEnterpriseModules=True, 
+            csvExportParams={                         # <-- Optional: customize CSV export
+                "fileName": "flw_summary_export.csv",
+                "allColumns": True
+            },
+            style={'height': '400px', 'width': '100%', 'overflowX' : 'auto'},
+            className="ag-theme-alpine",
+            
             ),
             html.Div([
                 html.H2("Rolling 7-Day Averages", style={
@@ -242,13 +233,14 @@ def create_flw_dashboard(coverage_data_objects):
     })
 
     @app.callback(
-        Output('flw-summary-table', 'data'),
+        Output('flw-summary-table', 'rowData'),
         Output('forms-rolling-chart', 'figure'),
         Output('dus-rolling-chart', 'figure'),
         Output('forms-median-chart', 'figure'),
         Output('dus-median-chart', 'figure'),
         Input('org-selector', 'value')
     )
+
     def update_dashboard(selected_orgs):
         sorted_by_flw = []
         if not selected_orgs:
@@ -501,7 +493,15 @@ def create_flw_dashboard(coverage_data_objects):
             
 
         return summary_df.to_dict('records'), forms_fig, dus_fig, forms_fig2, dus_fig2 
-
+    @app.callback(
+        Output('flw-summary-table', 'exportDataAsCsv'),
+        Input('export-csv-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def export_csv(n_clicks):
+        if n_clicks:
+            return True  # Triggers export with default params
+        return no_update
     app.run(debug=True, port=8080)
 
 

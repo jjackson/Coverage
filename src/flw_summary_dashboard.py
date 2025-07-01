@@ -57,67 +57,10 @@ def get_overall_opp_median_metrics(data_median_metrics):
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
     summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
-
-    # Define color coding conditions for the table
-    style_data_conditional = [
-        # {
-        #     'if': {
-        #         'filter_query': '{days_since_active} < 7',
-        #         'column_id': 'days_since_active'
-        #     },
-        #     'backgroundColor': '#d4edda',
-        #     'color': '#155724',
-        # },
-        {
-            'if': {
-                'filter_query': '{days_since_active} >= 7',
-                'column_id': 'days_since_active'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-        # Color code average forms per day
-        # {
-        #     'if': {
-        #         'filter_query': '{avrg_forms_per_day_mavrg} >= 10',
-        #         'column_id': 'avrg_forms_per_day_mavrg'
-        #     },
-        #     'backgroundColor': '#d4edda',
-        #     'color': '#155724',
-        # },
-        {
-            'if': {
-                'filter_query': '{avrg_forms_per_day_mavrg} < 10',
-                'column_id': 'avrg_forms_per_day_mavrg'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        },
-        # Color code dus per day
-        # {
-        #     'if': {
-        #         'filter_query': '{dus_per_day_mavrg} >= 1',
-        #         'column_id': 'dus_per_day_mavrg'
-        #     },
-        #     'backgroundColor': '#d4edda',
-        #     'color': '#155724',
-        # },
-        {
-            'if': {
-                'filter_query': '{dus_per_day_mavrg} < 1',
-                'column_id': 'dus_per_day_mavrg'
-            },
-            'backgroundColor': '#f8d7da',
-            'color': '#721c24',
-        }
-        # ,
-        # # Add alternating row colors
-        # {
-        #     'if': {'row_index': 'odd'},
-        #     'backgroundColor': '#f9f9f9'
-        # }
-    ]
-
+    summary_df['days_since_active'] = pd.to_numeric(summary_df['days_since_active'], errors='coerce')
+    summary_df['avrg_forms_per_day_mavrg'] = pd.to_numeric(summary_df['avrg_forms_per_day_mavrg'], errors='coerce')
+    summary_df['dus_per_day_mavrg'] = pd.to_numeric(summary_df['dus_per_day_mavrg'], errors='coerce')
+    
     app.layout = html.Div([
         html.Div([
             html.H1("FLW Summary Dashboard", style={
@@ -139,11 +82,74 @@ def create_flw_dashboard(coverage_data_objects):
            html.Button("Export as CSV", id="export-csv-btn", n_clicks=0, style={"marginBottom": "10px"}), 
             AgGrid(
                 id='flw-summary-table',
-                columnDefs=[{"headerName": summary_df.columns[0], "field": summary_df.columns[0], "headerClass": "wrap-header", "pinned": "left", "width": 150,"minWidth": 140, "maxWidth": 160, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
-    {"headerName": summary_df.columns[1], "field": summary_df.columns[1], "headerClass": "wrap-header", "pinned": "left", "width": 150,"minWidth": 140, "maxWidth": 160, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}},
-{"headerName": summary_df.columns[2], "field": summary_df.columns[2], "headerClass": "wrap-header",  "width": 240,"minWidth": 220, "maxWidth": 250, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}} ] + [
+                columnDefs=[
+    {
+        "headerName": summary_df.columns[0],
+        "field": summary_df.columns[0],
+        "headerClass": "wrap-header",
+        "pinned": "left",
+        "width": 150,
+        "minWidth": 140,
+        "maxWidth": 160,
+        "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}
+    },
+    {
+        "headerName": summary_df.columns[1],
+        "field": summary_df.columns[1],
+        "headerClass": "wrap-header",
+        "pinned": "left",
+        "width": 150,
+        "minWidth": 140,
+        "maxWidth": 160,
+        "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}
+    },
+    {
+        "headerName": summary_df.columns[2],
+        "field": summary_df.columns[2],
+        "headerClass": "wrap-header",
+        "width": 240,
+        "minWidth": 220,
+        "maxWidth": 250,
+        "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}
+    },
+    # Conditional formatting for days_since_active
+    {
+        "headerName": "days_since_active",
+    "field": "days_since_active",
+    "width": 140,
+    "minWidth": 130,
+    "maxWidth": 150,
+    "cellClassRules": {
+        "cell-abnormal": "params.value > 7"
+        }
+    },
+    # Conditional formatting for avrg_forms_per_day_mavrg
+    {
+        "headerName": "avrg_forms_per_day_mavrg",
+        "field": "avrg_forms_per_day_mavrg",
+        "width": 140,
+        "minWidth": 130,
+        "maxWidth": 150,
+       "cellClassRules": {
+        "cell-abnormal": "params.value < 10"
+        }
+    },
+    # Conditional formatting for dus_per_day_mavrg
+    {
+        "headerName": "dus_per_day_mavrg",
+        "field": "dus_per_day_mavrg",
+        "width": 140,
+        "minWidth": 130,
+        "maxWidth": 150,
+        "cellClassRules": {
+        "cell-abnormal": "params.value < 1"
+        }
+    },
+    # ...add other columns as needed...
+] + [
     {"headerName": i, "field": i, "headerClass": "wrap-header", "width": 140, "minWidth": 130, "maxWidth": 150, "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}}
-    for i in summary_df.columns[3:]],
+    for i in summary_df.columns[3:] if i not in ["days_since_active", "avrg_forms_per_day_mavrg", "dus_per_day_mavrg"]
+],
                 rowData=summary_df.to_dict("records"),
             defaultColDef={
                 
@@ -152,23 +158,24 @@ def create_flw_dashboard(coverage_data_objects):
                 "wrapHeaderText": False,  # Enable header wrapping
                 "autoHeaderHeight": True, # Adjust header height automatically,
                 "flex":1, # This allows columns to grow/shrink to fill the grid width
-                "cellStyle": {"whiteSpace": "pre-line", "overflowWrap": "anywhere"}  # Prevent trimming  # Wrap row data
+                
             },
             dashGridOptions = {
                 "domLayout": "normal",  # or "normal" for fixed height
                 "maxRowsToShow": 5,  # Adjust this to your desired maximum
                 "pagination": True,  # Enable pagination
                 "paginationPageSize" : 10, # Number of rows per page
+                "paginationPageSizeSelector": [10, 20, 50, 100],  # User can pick page size
                 "rowSelection": "multiple",
                 "suppressHorizontalScroll": False,  # Explicitly allow horizontal scrolling 
                 "enableBrowserTooltips": True,        # <-- Optional: tooltips for overflow
                 "enableExport": True,
                 "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab"],  # Show all menu tabs
-                "getMainMenuItems": {
-                    "function": "defaultItems => [...defaultItems, 'export']" 
-                }
+                # "getMainMenuItems": {
+                #     "function": "defaultItems => [...defaultItems, 'export']" 
+                # }
             },
-            enableEnterpriseModules=True, 
+            #enableEnterpriseModules=True, 
             csvExportParams={                         # <-- Optional: customize CSV export
                 "fileName": "flw_summary_export.csv",
                 "allColumns": True

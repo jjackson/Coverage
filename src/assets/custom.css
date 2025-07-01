@@ -1,5 +1,16 @@
 .ag-theme-alpine .ag-header-cell-label,
-.ag-theme-alpine .ag-cell {
+.ag-theme-alpine  {
     overflow-wrap: anywhere !important;
     white-space: pre-line !important;
+}
+
+.ag-theme-alpine .cell-abnormal {
+    color : #f8d7da !important;
+    background:#721c24 !important;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+.ag-theme-alpine .cell-normal {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }

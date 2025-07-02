@@ -133,7 +133,7 @@ def create_case_visit_table(df: pd.DataFrame) -> str:
         return "<p>Error: Missing required columns for case visit table</p>"
     
     # Convert visit_date to datetime if it's not already
-    df['visit_date'] = pd.to_datetime(df['visit_date'])
+    df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
     
     # Convert latitude and longitude to numeric, handling any non-numeric values
     df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')

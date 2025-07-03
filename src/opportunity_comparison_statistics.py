@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime, date
 from typing import Dict, List, Any
 import json
-from .utils.logging import Logger
+
 try:
     # When imported as a module
     from .models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
@@ -23,8 +23,6 @@ except ImportError:
 
 # Handle imports based on how the module is used
 
-
-logger = Logger()
 
 
 def create_opportunity_comparison_report(coverage_data_objects: Dict[str, CoverageData], clumping_ratio: float = 10.0, lookback_days: int = 10) -> str:

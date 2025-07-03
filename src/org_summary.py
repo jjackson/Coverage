@@ -129,8 +129,10 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
                 dus_last7=('du_name', pd.Series.nunique)
             ).reset_index()
 
+        recent_grouped['visits_last7'] = pd.to_numeric(recent_grouped['visits_last7'], errors='coerce').fillna(0)
+        recent_grouped['dus_last7'] = pd.to_numeric(recent_grouped['dus_last7'], errors='coerce').fillna(0)
         recent_grouped['avrg_forms_per_day_mavrg'] = round(recent_grouped['visits_last7'] / 7.0, 2)
-        recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)
+        recent_grouped['dus_per_day_mavrg'] = round(recent_grouped['dus_last7'] / 7.0, 2)   
      
         summary = summary.merge(recent_grouped, on=['opportunity'] if group_by == 'opportunity' else ['flw_id', 'opportunity'], how='left')
         summary.fillna({'avrg_forms_per_day_mavrg': 0, 'dus_per_day_mavrg': 0}, inplace=True)

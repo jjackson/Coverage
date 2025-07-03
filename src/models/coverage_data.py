@@ -893,50 +893,59 @@ class CoverageData:
     }
 
     def get_active_flws_last7days(self):
-
-        dataframe_active_flws = self.create_service_points_dataframe()
-    
-        selected_columns = ['flw_id','visit_id','visit_date']
-        dataframe_active_flws_selected = dataframe_active_flws[selected_columns]
-        # Convert 'visit_date' to datetime if not already
-        # Suppose your column is named 'visit_date' and is of string type
-        dataframe_active_flws_selected['visit_date'] = pd.to_datetime(dataframe_active_flws_selected['visit_date'].str[:10], format='%Y-%m-%d', errors='coerce')
-        # Get today's date
-        today = pd.Timestamp(datetime.now().date())
-
-        # Filter for last 7 days (including today)
-        last_7_days = today - pd.Timedelta(days=6)
-        recent_visits = dataframe_active_flws_selected[
-        (dataframe_active_flws_selected['visit_date'] >= last_7_days) &
-        (dataframe_active_flws_selected['visit_date'] <= today)]
-
-        # Count unique flw_id
-        num_unique_flws = recent_visits['flw_id'].nunique()
-        return num_unique_flws
+        """Count unique FLWs who made visits in the last 7 days (including today)."""
+        if not self.flws:
+            return 0
+        
+        # Calculate date range (last 7 days including today)
+        today = datetime.now().date()
+        start_date = today - pd.Timedelta(days=6)
+        
+        # Count FLWs who have any activity in the last 7 days
+        active_flws = 0
+        for flw in self.flws.values():
+            # Check if any of the FLW's active dates fall within the last 7 days
+            if any(start_date <= active_date <= today for active_date in flw.dates_active):
+                active_flws += 1
+        
+        return active_flws
     
     def get_average_visits_data(self):
-        dataframe_dus_visit = self.create_service_points_dataframe()
-        selected_columns = ['visit_id','visit_date','du_name']
-        dataframe_dus_visit = dataframe_dus_visit[selected_columns]
-        # Convert 'visit_date' to datetime if not already
-        # Suppose your column is named 'visit_date' and is of string type
-        dataframe_dus_visit['visit_date'] = pd.to_datetime(dataframe_dus_visit['visit_date'].str[:10], format='%Y-%m-%d', errors='coerce')
-        # Get today's date
-        today = pd.Timestamp(datetime.now().date())
-
-        # Filter for last 7 days (including today)
-        last_7_days = today - pd.Timedelta(days=6)
-        recent_visits = dataframe_dus_visit[
-        (dataframe_dus_visit['visit_date'] >= last_7_days) &
-        (dataframe_dus_visit['visit_date'] <= today)]
-
-        window_metrics = recent_visits.groupby(['visit_date']).agg(
-                    visits_last7=('visit_id', 'count'),
-                    dus_last7=('du_name', pd.Series.nunique)
-                ).reset_index()
-
-        average_visits_last7days = round(window_metrics['visits_last7'].sum()/7, 2)
-        average_dus_last7days = round(window_metrics['dus_last7'].sum()/7, 2)
-
+        """Calculate average visits and delivery units visited per day over the last 7 days."""
+        
+        # Calculate date range (last 7 days including today)
+        today = datetime.now().date()
+        start_date = today - pd.Timedelta(days=6)
+        
+        # Track visits and unique DUs per day
+        daily_visits = {}
+        daily_dus = {}
+        
+        for service_point in self.service_points:
+            if not service_point.visit_date:
+                continue
+                
+            # Parse visit_date - handle various formats
+            visit_date = pd.to_datetime(service_point.visit_date, errors='coerce').date()
+            
+            # Skip if date parsing failed or outside date range
+            if visit_date is None or pd.isna(visit_date) or not (start_date <= visit_date <= today):
+                continue
+            
+            # Count visits per day
+            daily_visits[visit_date] = daily_visits.get(visit_date, 0) + 1
+            
+            # Track unique DUs per day
+            if visit_date not in daily_dus:
+                daily_dus[visit_date] = set()
+            daily_dus[visit_date].add(service_point.du_name)
+        
+        # Calculate averages
+        total_visits = sum(daily_visits.values())
+        total_unique_dus = sum(len(dus) for dus in daily_dus.values())
+        
+        average_visits_last7days = round(total_visits / 7, 2)
+        average_dus_last7days = round(total_unique_dus / 7, 2)
+        
         return average_dus_last7days, average_visits_last7days 
         

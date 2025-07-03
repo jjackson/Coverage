@@ -219,8 +219,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
             progress_data['service_delivery_progress'][opportunity_name] = service_progress
             progress_data['cumulative_service_delivery'][opportunity_name] = service_progress
         
-        first_completion_date = min(du_completion_by_day.keys())
         if du_completion_by_day:
+            first_completion_date = min(du_completion_by_day.keys())
             du_progress = []
             cumulative_dus = 0
             

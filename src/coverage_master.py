@@ -313,7 +313,6 @@ def generate_index_html(output_dir, output_info_list):
 def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
     mapping_str = os.environ.get('OPPORTUNITY_DOMAIN_MAPPING', '')
-    
     if not mapping_str:
         # Return default mapping if no environment variable is set
         return {
@@ -399,11 +398,11 @@ def main():
             print(f"\nProcessing opportunity: {opportunity_name}")
             print(f"Service points for this opportunity: {len(service_df)}")
             # Use mapped domain name if available, otherwise use opportunity name
-            domain_name = opportunity_to_domain_mapping.get(opportunity_name) 
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
+            print("----domain_name-----")
+            print(domain_name) 
             #-------Changing domain list to get data from env variables only -----#
             if(domain_name is not None and domain_name != ""):
-                print("------domain_name------")
-                print(domain_name)
                 coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
                 domain=domain_name,
                 user=user,
@@ -459,7 +458,8 @@ def main():
 
             # Use mapped domain name if available, otherwise use opportunity name
             domain_name = opportunity_to_domain_mapping.get(opportunity_name)
-            
+            print("----domain_name inside-------")
+            print(domain_name)
             if not domain_name:
                 print(f"  Warning: No domain mapping found for opportunity '{opportunity_name}', skipping")
                 continue

@@ -9,16 +9,19 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)           # Prevent line wrapping
 pd.set_option('display.max_colwidth', None)    # Show full column content
 
-log_dir = '../../'
+log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)  # Create directory if it doesn't exist
 log_file_path = os.path.join(log_dir, 'app.log')
 
-logging.basicConfig(
-    filename= log_file_path,           # Log file name
-    filemode='a',                 # Append mode ('w' to overwrite)
-    level=logging.INFO,           # Minimum log level
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+try:
+    logging.basicConfig(
+        filename=log_file_path,           # Log file name
+        level=logging.INFO,               # Log level
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+except Exception as e:
+    print(f"Could not set up logging to {log_file_path}: {e}")
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 
@@ -147,7 +150,7 @@ def generate_summary(coverage_data_objects, group_by='opportunity'):
     # change the date format of 'date_last_active' in 'DD-MM-YYYY'
     combined_summary['date_last_active'] = combined_summary['date_last_active'].dt.strftime('%m-%d-%Y')
 
-    # sort the 'combined_summary' data frame with '‘dus_per_day_mavrg’ ', 'days_since_active' , highest number on top
+    # sort the 'combined_summary' data frame with '‘dus_per_day_mavrg' ', 'days_since_active' , highest number on top
     combined_summary = combined_summary.sort_values(by='dus_per_day_mavrg', ascending=True)
 
     

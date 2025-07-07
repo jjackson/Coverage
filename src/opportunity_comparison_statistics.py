@@ -139,12 +139,18 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
         Dict containing progress data for charts
     """
     progress_data = {
-        'service_delivery_progress': {},
-        'du_completion_progress': {},
-        'cumulative_service_delivery': {},
-        'cumulative_du_completion': {},
-        'clumped_dus_progress': {},
-        'service_to_building_ratio': {}
+        'daily': {
+            'service_delivery': {},
+            'du_completion': {},
+            'clumped_dus': {},
+            'service_to_building_ratio': {}
+        },
+        'cumulative': {
+            'service_delivery': {},
+            'du_completion': {},
+            'clumped_dus': {},
+            'service_to_building_ratio': {}
+        }
     }
     
     for project_key, coverage_data in coverage_data_objects.items():
@@ -196,7 +202,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
         # Convert to days since start for each opportunity
         if service_delivery_by_day:
             first_service_date = min(service_delivery_by_day.keys())
-            service_progress = []
+            daily_service_data = []
+            cumulative_service_data = []
             cumulative_services = 0
             
             # Create a complete date range
@@ -208,21 +215,26 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                     daily_count = service_delivery_by_day.get(current_date, 0)
                     cumulative_services += daily_count
                     
-                    service_progress.append({
+                    daily_service_data.append({
                         'day': day_number,
-                        'daily_count': daily_count,
-                        'cumulative_count': cumulative_services
+                        'count': daily_count
+                    })
+                    
+                    cumulative_service_data.append({
+                        'day': day_number,
+                        'count': cumulative_services
                     })
                     
                     current_date = pd.to_datetime(current_date) + pd.Timedelta(days=1)
                     current_date = current_date.date()
             
-            progress_data['service_delivery_progress'][opportunity_name] = service_progress
-            progress_data['cumulative_service_delivery'][opportunity_name] = service_progress
+            progress_data['daily']['service_delivery'][opportunity_name] = daily_service_data
+            progress_data['cumulative']['service_delivery'][opportunity_name] = cumulative_service_data
         
         if du_completion_by_day:
             first_completion_date = min(du_completion_by_day.keys())
-            du_progress = []
+            daily_du_data = []
+            cumulative_du_data = []
             cumulative_dus = 0
             
             # Create a complete date range
@@ -234,21 +246,26 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                     daily_count = du_completion_by_day.get(current_date, 0)
                     cumulative_dus += daily_count
                     
-                    du_progress.append({
+                    daily_du_data.append({
                         'day': day_number,
-                        'daily_count': daily_count,
-                        'cumulative_count': cumulative_dus
+                        'count': daily_count
+                    })
+                    
+                    cumulative_du_data.append({
+                        'day': day_number,
+                        'count': cumulative_dus
                     })
                     
                     current_date = pd.to_datetime(current_date) + pd.Timedelta(days=1)
                     current_date = current_date.date()
             
-            progress_data['du_completion_progress'][opportunity_name] = du_progress
-            progress_data['cumulative_du_completion'][opportunity_name] = du_progress
+            progress_data['daily']['du_completion'][opportunity_name] = daily_du_data
+            progress_data['cumulative']['du_completion'][opportunity_name] = cumulative_du_data
         
         # Process clumped DUs progress data
         if clumped_dus_by_day:
-            clumped_progress = []
+            daily_clumped_data = []
+            cumulative_clumped_data = []
             cumulative_clumped = 0
             
             # Create a complete date range
@@ -275,10 +292,17 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                                 unique_flws_in_lookback.add(flw.id)
                         check_date += pd.Timedelta(days=1)
                     
-                    clumped_progress.append({
+                    daily_clumped_data.append({
                         'day': day_number,
-                        'daily_count': daily_count,
-                        'cumulative_count': cumulative_clumped,
+                        'count': daily_count,
+                        'clumped_dus': daily_clumped_dus,
+                        'unique_flws_in_lookback': list(unique_flws_in_lookback),
+                        'unique_flws_count_in_lookback': len(unique_flws_in_lookback)
+                    })
+                    
+                    cumulative_clumped_data.append({
+                        'day': day_number,
+                        'count': cumulative_clumped,
                         'clumped_dus': daily_clumped_dus,
                         'unique_flws_in_lookback': list(unique_flws_in_lookback),
                         'unique_flws_count_in_lookback': len(unique_flws_in_lookback)
@@ -287,11 +311,13 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                     current_date = pd.to_datetime(current_date) + pd.Timedelta(days=1)
                     current_date = current_date.date()
             
-            progress_data['clumped_dus_progress'][opportunity_name] = clumped_progress
+            progress_data['daily']['clumped_dus'][opportunity_name] = daily_clumped_data
+            progress_data['cumulative']['clumped_dus'][opportunity_name] = cumulative_clumped_data
         
         # Calculate service-to-building ratio progress
         if du_completion_by_day:
-            ratio_progress = []
+            daily_ratio_data = []
+            cumulative_ratio_data = []
             
             # Sort completion dates to process chronologically
             completion_dates = sorted(du_completion_by_day.keys())
@@ -299,9 +325,13 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
             for current_date in completion_dates:
                 day_number = (current_date - first_completion_date).days
                 
-                # Get all DUs completed up to this date (inclusive)
-                total_services = 0
-                total_buildings = 0
+                # Calculate daily ratio (services delivered on this day / buildings in DUs completed this day)
+                daily_services = 0
+                daily_buildings = 0
+                
+                # Calculate cumulative ratio (all services up to this date / all buildings in completed DUs up to this date)
+                cumulative_services = 0
+                cumulative_buildings = 0
                 
                 for du in coverage_data.delivery_units.values():
                     if (du.status == 'completed' and 
@@ -310,22 +340,36 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                         
                         du_completion_date = du.computed_du_completion_date.date()
                         
-                        # Include this DU if it was completed on or before current_date
+                        # For daily: include this DU if it was completed on current_date
+                        if du_completion_date == current_date:
+                            daily_services += len(du.service_points)
+                            daily_buildings += du.buildings
+                        
+                        # For cumulative: include this DU if it was completed on or before current_date
                         if du_completion_date <= current_date:
-                            total_services += len(du.service_points)
-                            total_buildings += du.buildings
+                            cumulative_services += len(du.service_points)
+                            cumulative_buildings += du.buildings
                 
-                # Calculate ratio (avoid division by zero)
-                ratio = total_services / total_buildings if total_buildings > 0 else 0
+                # Calculate ratios (avoid division by zero)
+                daily_ratio = daily_services / daily_buildings if daily_buildings > 0 else 0
+                cumulative_ratio = cumulative_services / cumulative_buildings if cumulative_buildings > 0 else 0
                 
-                ratio_progress.append({
+                daily_ratio_data.append({
                     'day': day_number,
-                    'total_services': total_services,
-                    'total_buildings': total_buildings,
-                    'ratio': ratio
+                    'count': daily_ratio,
+                    'total_services': daily_services,
+                    'total_buildings': daily_buildings
+                })
+                
+                cumulative_ratio_data.append({
+                    'day': day_number,
+                    'count': cumulative_ratio,
+                    'total_services': cumulative_services,
+                    'total_buildings': cumulative_buildings
                 })
             
-            progress_data['service_to_building_ratio'][opportunity_name] = ratio_progress
+            progress_data['daily']['service_to_building_ratio'][opportunity_name] = daily_ratio_data
+            progress_data['cumulative']['service_to_building_ratio'][opportunity_name] = cumulative_ratio_data
     
     return progress_data
 
@@ -477,6 +521,29 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             border-radius: 5px;
             margin: 20px 0;
         }}
+        .chart-toggle {{
+            text-align: center;
+            margin: 20px 0;
+        }}
+        .toggle-btn {{
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }}
+        .toggle-btn:hover {{
+            background-color: #e9ecef;
+        }}
+        .toggle-btn.active {{
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }}
     </style>
 </head>
 <body>
@@ -554,29 +621,26 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
         
         <h2>Progress Comparison Charts</h2>
         
+        <div class="chart-toggle">
+            <button id="toggle-daily" class="toggle-btn active">Show Daily</button>
+            <button id="toggle-cumulative" class="toggle-btn">Show Cumulative</button>
+        </div>
+        
         <div class="chart-grid">
             <div class="chart-item">
-                <div class="chart-title">Daily Service Deliveries</div>
-                <div id="daily-service-chart" style="height: 400px;"></div>
+                <div class="chart-title" id="service-chart-title">Daily Service Deliveries</div>
+                <div id="service-chart" style="height: 400px;"></div>
             </div>
             <div class="chart-item">
-                <div class="chart-title">Daily DU Completions</div>
-                <div id="daily-du-chart" style="height: 400px;"></div>
+                <div class="chart-title" id="du-chart-title">Daily DU Completions</div>
+                <div id="du-chart" style="height: 400px;"></div>
             </div>
             <div class="chart-item">
-                <div class="chart-title">Cumulative Service Deliveries</div>
-                <div id="cumulative-service-chart" style="height: 400px;"></div>
-            </div>
-            <div class="chart-item">
-                <div class="chart-title">Cumulative DU Completions</div>
-                <div id="cumulative-du-chart" style="height: 400px;"></div>
-            </div>
-            <div class="chart-item">
-                <div class="chart-title">FLWs clumping in trailing {lookback_days} days</div>
+                <div class="chart-title" id="flws-chart-title">FLWs clumping in trailing {lookback_days} days</div>
                 <div id="flws-clumping-chart" style="height: 400px;"></div>
             </div>
             <div class="chart-item">
-                <div class="chart-title">Service-to-Building Ratio in Completed DUs</div>
+                <div class="chart-title" id="ratio-chart-title">Service-to-Building Ratio in Completed DUs</div>
                 <div id="service-building-ratio-chart" style="height: 400px;"></div>
             </div>
         </div>
@@ -591,16 +655,19 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
         // Color palette for different opportunities
         const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
         
-        // Create daily service deliveries chart
-        function createDailyServiceChart() {{
+        // Current view mode
+        let currentView = 'daily';
+        
+        // Create service deliveries chart
+        function createServiceChart() {{
             const traces = [];
             let colorIndex = 0;
             
-            for (const [opportunity, data] of Object.entries(progressData.service_delivery_progress)) {{
+            for (const [opportunity, data] of Object.entries(progressData[currentView]['service_delivery'])) {{
                 if (data && data.length > 0) {{
                     traces.push({{
                         x: data.map(d => d.day),
-                        y: data.map(d => d.daily_count),
+                        y: data.map(d => d.count),
                         type: 'scatter',
                         mode: 'lines+markers',
                         name: opportunity,
@@ -611,27 +678,30 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 }}
             }}
             
+            const title = currentView === 'daily' ? 'Daily Service Deliveries' : 'Cumulative Service Deliveries';
+            const yAxisTitle = currentView === 'daily' ? 'Number of Service Deliveries' : 'Cumulative Service Deliveries';
+            
             const layout = {{
                 xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Number of Service Deliveries' }},
+                yaxis: {{ title: yAxisTitle }},
                 hovermode: 'x unified',
                 showlegend: true,
                 margin: {{ l: 50, r: 50, t: 30, b: 50 }}
             }};
             
-            Plotly.newPlot('daily-service-chart', traces, layout, {{responsive: true}});
+            Plotly.newPlot('service-chart', traces, layout, {{responsive: true}});
         }}
         
-        // Create daily DU completions chart
-        function createDailyDUChart() {{
+        // Create DU completions chart
+        function createDUChart() {{
             const traces = [];
             let colorIndex = 0;
             
-            for (const [opportunity, data] of Object.entries(progressData.du_completion_progress)) {{
+            for (const [opportunity, data] of Object.entries(progressData[currentView]['du_completion'])) {{
                 if (data && data.length > 0) {{
                     traces.push({{
                         x: data.map(d => d.day),
-                        y: data.map(d => d.daily_count),
+                        y: data.map(d => d.count),
                         type: 'scatter',
                         mode: 'lines+markers',
                         name: opportunity,
@@ -642,75 +712,18 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 }}
             }}
             
+            const title = currentView === 'daily' ? 'Daily DU Completions' : 'Cumulative DU Completions';
+            const yAxisTitle = currentView === 'daily' ? 'Number of DUs Completed' : 'Cumulative DUs Completed';
+            
             const layout = {{
                 xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Number of DUs Completed' }},
+                yaxis: {{ title: yAxisTitle }},
                 hovermode: 'x unified',
                 showlegend: true,
                 margin: {{ l: 50, r: 50, t: 30, b: 50 }}
             }};
             
-            Plotly.newPlot('daily-du-chart', traces, layout, {{responsive: true}});
-        }}
-        
-        // Create cumulative service deliveries chart
-        function createCumulativeServiceChart() {{
-            const traces = [];
-            let colorIndex = 0;
-            
-            for (const [opportunity, data] of Object.entries(progressData.cumulative_service_delivery)) {{
-                if (data && data.length > 0) {{
-                    traces.push({{
-                        x: data.map(d => d.day),
-                        y: data.map(d => d.cumulative_count),
-                        type: 'scatter',
-                        mode: 'lines',
-                        name: opportunity,
-                        line: {{ color: colors[colorIndex % colors.length], width: 3 }}
-                    }});
-                    colorIndex++;
-                }}
-            }}
-            
-            const layout = {{
-                xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Cumulative Service Deliveries' }},
-                hovermode: 'x unified',
-                showlegend: true,
-                margin: {{ l: 50, r: 50, t: 30, b: 50 }}
-            }};
-            
-            Plotly.newPlot('cumulative-service-chart', traces, layout, {{responsive: true}});
-        }}
-        
-        // Create cumulative DU completions chart
-        function createCumulativeDUChart() {{
-            const traces = [];
-            let colorIndex = 0;
-            
-            for (const [opportunity, data] of Object.entries(progressData.cumulative_du_completion)) {{
-                if (data && data.length > 0) {{
-                    traces.push({{
-                        x: data.map(d => d.day),
-                        y: data.map(d => d.cumulative_count),
-                        type: 'scatter',
-                        mode: 'lines',
-                        name: opportunity,
-                        line: {{ color: colors[colorIndex % colors.length], width: 3 }}
-                    }});
-                    colorIndex++;
-                }}
-            }}
-            
-            const layout = {{
-                xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Cumulative DUs Completed' }},
-                hovermode: 'x unified',
-                showlegend: true,
-                margin: {{ l: 50, r: 50, t: 30, b: 50 }}
-            }};
-            
-            Plotly.newPlot('cumulative-du-chart', traces, layout, {{responsive: true}});
+            Plotly.newPlot('du-chart', traces, layout, {{responsive: true}});
         }}
         
         // Create FLWs clumping chart
@@ -718,7 +731,7 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             const traces = [];
             let colorIndex = 0;
             
-            for (const [opportunity, data] of Object.entries(progressData.clumped_dus_progress)) {{
+            for (const [opportunity, data] of Object.entries(progressData[currentView]['clumped_dus'])) {{
                 if (data && data.length > 0) {{
                     traces.push({{
                         x: data.map(d => d.day),
@@ -733,9 +746,12 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 }}
             }}
             
+            const title = currentView === 'daily' ? 'Daily FLWs Clumping' : 'Cumulative FLWs Clumping';
+            const yAxisTitle = currentView === 'daily' ? 'Number of Unique FLWs' : 'Cumulative Unique FLWs';
+            
             const layout = {{
                 xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Number of Unique FLWs' }},
+                yaxis: {{ title: yAxisTitle }},
                 hovermode: 'x unified',
                 showlegend: true,
                 margin: {{ l: 50, r: 50, t: 30, b: 50 }}
@@ -749,11 +765,11 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             const traces = [];
             let colorIndex = 0;
             
-            for (const [opportunity, data] of Object.entries(progressData.service_to_building_ratio)) {{
+            for (const [opportunity, data] of Object.entries(progressData[currentView]['service_to_building_ratio'])) {{
                 if (data && data.length > 0) {{
                     traces.push({{
                         x: data.map(d => d.day),
-                        y: data.map(d => d.ratio),
+                        y: data.map(d => d.count),
                         type: 'scatter',
                         mode: 'lines+markers',
                         name: opportunity,
@@ -772,9 +788,12 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 }}
             }}
             
+            const title = currentView === 'daily' ? 'Daily Service-to-Building Ratio' : 'Cumulative Service-to-Building Ratio';
+            const yAxisTitle = currentView === 'daily' ? 'Daily Services per Building' : 'Cumulative Services per Building';
+            
             const layout = {{
                 xaxis: {{ title: 'Days Since First Active Day' }},
-                yaxis: {{ title: 'Services per Building' }},
+                yaxis: {{ title: yAxisTitle }},
                 hovermode: 'x unified',
                 showlegend: true,
                 margin: {{ l: 50, r: 50, t: 30, b: 50 }}
@@ -783,14 +802,48 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             Plotly.newPlot('service-building-ratio-chart', traces, layout, {{responsive: true}});
         }}
         
-        // Initialize all charts when page loads
-        document.addEventListener('DOMContentLoaded', function() {{
-            createDailyServiceChart();
-            createDailyDUChart();
-            createCumulativeServiceChart();
-            createCumulativeDUChart();
+        // Function to update all charts based on current view
+        function updateAllCharts() {{
+            createServiceChart();
+            createDUChart();
             createFLWsClumpingChart();
             createServiceBuildingRatioChart();
+            updateChartTitles();
+        }}
+        
+        // Function to update chart titles
+        function updateChartTitles() {{
+            document.getElementById('service-chart-title').textContent = 
+                currentView === 'daily' ? 'Daily Service Deliveries' : 'Cumulative Service Deliveries';
+            document.getElementById('du-chart-title').textContent = 
+                currentView === 'daily' ? 'Daily DU Completions' : 'Cumulative DU Completions';
+            document.getElementById('flws-chart-title').textContent = 
+                currentView === 'daily' ? 'FLWs clumping in trailing {lookback_days} days (Daily)' : 'FLWs clumping in trailing {lookback_days} days (Cumulative)';
+            document.getElementById('ratio-chart-title').textContent = 
+                currentView === 'daily' ? 'Daily Service-to-Building Ratio in Completed DUs' : 'Cumulative Service-to-Building Ratio in Completed DUs';
+        }}
+        
+        // Toggle event handlers
+        function setupToggleHandlers() {{
+            document.getElementById('toggle-daily').addEventListener('click', function() {{
+                currentView = 'daily';
+                document.getElementById('toggle-daily').classList.add('active');
+                document.getElementById('toggle-cumulative').classList.remove('active');
+                updateAllCharts();
+            }});
+            
+            document.getElementById('toggle-cumulative').addEventListener('click', function() {{
+                currentView = 'cumulative';
+                document.getElementById('toggle-cumulative').classList.add('active');
+                document.getElementById('toggle-daily').classList.remove('active');
+                updateAllCharts();
+            }});
+        }}
+        
+        // Initialize all charts when page loads
+        document.addEventListener('DOMContentLoaded', function() {{
+            setupToggleHandlers();
+            updateAllCharts();
         }});
     </script>
 </body>

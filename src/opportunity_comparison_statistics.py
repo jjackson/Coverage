@@ -143,7 +143,8 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
         'du_completion_progress': {},
         'cumulative_service_delivery': {},
         'cumulative_du_completion': {},
-        'clumped_dus_progress': {}
+        'clumped_dus_progress': {},
+        'service_to_building_ratio': {}
     }
     
     for project_key, coverage_data in coverage_data_objects.items():
@@ -287,6 +288,44 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                     current_date = current_date.date()
             
             progress_data['clumped_dus_progress'][opportunity_name] = clumped_progress
+        
+        # Calculate service-to-building ratio progress
+        if du_completion_by_day:
+            ratio_progress = []
+            
+            # Sort completion dates to process chronologically
+            completion_dates = sorted(du_completion_by_day.keys())
+            
+            for current_date in completion_dates:
+                day_number = (current_date - first_completion_date).days
+                
+                # Get all DUs completed up to this date (inclusive)
+                total_services = 0
+                total_buildings = 0
+                
+                for du in coverage_data.delivery_units.values():
+                    if (du.status == 'completed' and 
+                        isinstance(du.computed_du_completion_date, datetime) and 
+                        not pd.isna(du.computed_du_completion_date)):
+                        
+                        du_completion_date = du.computed_du_completion_date.date()
+                        
+                        # Include this DU if it was completed on or before current_date
+                        if du_completion_date <= current_date:
+                            total_services += len(du.service_points)
+                            total_buildings += du.buildings
+                
+                # Calculate ratio (avoid division by zero)
+                ratio = total_services / total_buildings if total_buildings > 0 else 0
+                
+                ratio_progress.append({
+                    'day': day_number,
+                    'total_services': total_services,
+                    'total_buildings': total_buildings,
+                    'ratio': ratio
+                })
+            
+            progress_data['service_to_building_ratio'][opportunity_name] = ratio_progress
     
     return progress_data
 
@@ -536,6 +575,10 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
                 <div class="chart-title">FLWs clumping in trailing {lookback_days} days</div>
                 <div id="flws-clumping-chart" style="height: 400px;"></div>
             </div>
+            <div class="chart-item">
+                <div class="chart-title">Service-to-Building Ratio in Completed DUs</div>
+                <div id="service-building-ratio-chart" style="height: 400px;"></div>
+            </div>
         </div>
         
         <p class="timestamp">Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
@@ -701,6 +744,45 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             Plotly.newPlot('flws-clumping-chart', traces, layout, {{responsive: true}});
         }}
         
+        // Create service-to-building ratio chart
+        function createServiceBuildingRatioChart() {{
+            const traces = [];
+            let colorIndex = 0;
+            
+            for (const [opportunity, data] of Object.entries(progressData.service_to_building_ratio)) {{
+                if (data && data.length > 0) {{
+                    traces.push({{
+                        x: data.map(d => d.day),
+                        y: data.map(d => d.ratio),
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: opportunity,
+                        line: {{ color: colors[colorIndex % colors.length] }},
+                        marker: {{ size: 6 }},
+                        customdata: data.map(d => [d.total_services, d.total_buildings]),
+                        hovertemplate: 
+                            '<b>%{{fullData.name}}</b><br>' +
+                            'Day: %{{x}}<br>' +
+                            'Ratio: %{{y:.2f}}<br>' +
+                            'Total Services: %{{customdata[0]}}<br>' +
+                            'Total Buildings: %{{customdata[1]}}' +
+                            '<extra></extra>'
+                    }});
+                    colorIndex++;
+                }}
+            }}
+            
+            const layout = {{
+                xaxis: {{ title: 'Days Since First Active Day' }},
+                yaxis: {{ title: 'Services per Building' }},
+                hovermode: 'x unified',
+                showlegend: true,
+                margin: {{ l: 50, r: 50, t: 30, b: 50 }}
+            }};
+            
+            Plotly.newPlot('service-building-ratio-chart', traces, layout, {{responsive: true}});
+        }}
+        
         // Initialize all charts when page loads
         document.addEventListener('DOMContentLoaded', function() {{
             createDailyServiceChart();
@@ -708,6 +790,7 @@ def _generate_html_report(comparison_stats: Dict[str, Any], coverage_data_object
             createCumulativeServiceChart();
             createCumulativeDUChart();
             createFLWsClumpingChart();
+            createServiceBuildingRatioChart();
         }});
     </script>
 </body>

@@ -1,7 +1,7 @@
 import logging
 import os
 import dash, json
-from dash import html, dcc, Input, Output,no_update
+from dash import html, dcc, Input, Output, State, no_update
 import pandas as pd
 from dash import dash_table
 from src.org_summary import generate_summary
@@ -9,6 +9,9 @@ from datetime import timedelta
 import plotly.express as px
 from dotenv import load_dotenv, find_dotenv
 from dash_ag_grid import AgGrid
+from src.flw_pathways import integrate_with_flw_dashboard
+from geopy.distance import geodesic
+import folium
 
 find_dotenv()
 load_dotenv(override=True,verbose=True)
@@ -54,12 +57,474 @@ def get_overall_opp_median_metrics(data_median_metrics):
 )
     return median_metrics_final      
 
+def _generate_lightweight_pathway_data(coverage_data_objects):
+    """
+    Generate lightweight pathway statistics without creating HTML maps.
+    This is much faster and uses less memory.
+    """
+    # Combine all service data
+    all_service_data = []
+    for org, coverage_data in coverage_data_objects.items():
+        service_df = coverage_data.create_service_points_dataframe()
+        if service_df is not None and not service_df.empty:
+            service_df['opportunity'] = org
+            all_service_data.append(service_df)
+    
+    if not all_service_data:
+        return {'summary': {}, 'flw_statistics': []}
+    
+    combined_service_df = pd.concat(all_service_data, ignore_index=True)
+    
+    # Clean and prepare data
+    df = combined_service_df.copy()
+    df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
+    df = df.dropna(subset=['lattitude', 'longitude', 'visit_date'])
+    df = df.sort_values(['flw_id', 'visit_date'])
+    df['date'] = df['visit_date'].dt.date
+    
+    # Calculate pathway segments
+    segments = []
+    flw_stats = {}
+    
+    for flw_id in df['flw_id'].unique():
+        flw_data = df[df['flw_id'] == flw_id].copy()
+        flw_segments = []
+        
+        # Group by date
+        for date in flw_data['date'].unique():
+            daily_data = flw_data[flw_data['date'] == date].copy()
+            
+            if len(daily_data) < 2:
+                continue
+            
+            daily_data = daily_data.sort_values('visit_date')
+            
+            # Create segments between consecutive visits
+            for i in range(len(daily_data) - 1):
+                current = daily_data.iloc[i]
+                next_visit = daily_data.iloc[i + 1]
+                
+                try:
+                    distance = geodesic(
+                        (current['lattitude'], current['longitude']),
+                        (next_visit['lattitude'], next_visit['longitude'])
+                    ).kilometers
+                except:
+                    distance = 0
+                
+                time_diff = (next_visit['visit_date'] - current['visit_date']).total_seconds() / 3600
+                is_unusual = distance > 5 or time_diff > 2
+                
+                segment = {
+                    'flw_id': flw_id,
+                    'distance': distance,
+                    'is_unusual': is_unusual
+                }
+                
+                flw_segments.append(segment)
+        
+        if flw_segments:
+            flw_distance = sum(seg['distance'] for seg in flw_segments)
+            flw_unusual = sum(1 for seg in flw_segments if seg['is_unusual'])
+            flw_avg_distance = flw_distance / len(flw_segments) if flw_segments else 0
+            
+            flw_stats[flw_id] = {
+                'flw_id': flw_id,
+                'flw_name': flw_data['flw_name'].iloc[0] if not flw_data.empty else '',
+                'total_segments': len(flw_segments),
+                'total_distance_km': round(flw_distance, 2),
+                'unusual_segments': flw_unusual,
+                'avg_segment_distance_km': round(flw_avg_distance, 2)
+            }
+            
+            segments.extend(flw_segments)
+    
+    # Calculate summary statistics
+    if segments:
+        total_distance = sum(seg['distance'] for seg in segments)
+        unusual_segments = sum(1 for seg in segments if seg['is_unusual'])
+        avg_distance = total_distance / len(segments) if segments else 0
+        
+        summary = {
+            'total_flws': len(flw_stats),
+            'total_segments': len(segments),
+            'total_distance_km': round(total_distance, 2),
+            'unusual_segments': unusual_segments,
+            'unusual_percentage': round((unusual_segments / len(segments)) * 100, 1),
+            'avg_segment_distance_km': round(avg_distance, 2)
+        }
+    else:
+        summary = {}
+    
+    return {
+        'summary': summary,
+        'flw_statistics': list(flw_stats.values())
+    }
+
+def _generate_lightweight_pathway_data_for_flws(coverage_data_objects, target_flw_ids):
+    """
+    Generate lightweight pathway statistics for specific FLW IDs only.
+    """
+    # Combine all service data
+    all_service_data = []
+    for org, coverage_data in coverage_data_objects.items():
+        service_df = coverage_data.create_service_points_dataframe()
+        if service_df is not None and not service_df.empty:
+            service_df['opportunity'] = org
+            all_service_data.append(service_df)
+    
+    if not all_service_data:
+        return {'summary': {}, 'flw_statistics': []}
+    
+    combined_service_df = pd.concat(all_service_data, ignore_index=True)
+    
+    # Filter for specific FLW IDs
+    filtered_df = combined_service_df[combined_service_df['flw_id'].isin(target_flw_ids)].copy()
+    
+    if filtered_df.empty:
+        return {'summary': {}, 'flw_statistics': []}
+    
+    # Clean and prepare data
+    df = filtered_df.copy()
+    df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
+    df = df.dropna(subset=['lattitude', 'longitude', 'visit_date'])
+    df = df.sort_values(['flw_id', 'visit_date'])
+    df['date'] = df['visit_date'].dt.date
+    
+    # Calculate pathway segments
+    segments = []
+    flw_stats = {}
+    
+    for flw_id in df['flw_id'].unique():
+        flw_data = df[df['flw_id'] == flw_id].copy()
+        flw_segments = []
+        
+        # Group by date
+        for date in flw_data['date'].unique():
+            daily_data = flw_data[flw_data['date'] == date].copy()
+            
+            if len(daily_data) < 2:
+                continue
+            
+            daily_data = daily_data.sort_values('visit_date')
+            
+            # Create segments between consecutive visits
+            for i in range(len(daily_data) - 1):
+                current = daily_data.iloc[i]
+                next_visit = daily_data.iloc[i + 1]
+                
+                try:
+                    distance = geodesic(
+                        (current['lattitude'], current['longitude']),
+                        (next_visit['lattitude'], next_visit['longitude'])
+                    ).kilometers
+                except:
+                    distance = 0
+                
+                time_diff = (next_visit['visit_date'] - current['visit_date']).total_seconds() / 3600
+                is_unusual = distance > 5 or time_diff > 2
+                
+                segment = {
+                    'flw_id': flw_id,
+                    'distance': distance,
+                    'is_unusual': is_unusual
+                }
+                
+                flw_segments.append(segment)
+        
+        if flw_segments:
+            flw_distance = sum(seg['distance'] for seg in flw_segments)
+            flw_unusual = sum(1 for seg in flw_segments if seg['is_unusual'])
+            flw_avg_distance = flw_distance / len(flw_segments) if flw_segments else 0
+            
+            flw_stats[flw_id] = {
+                'flw_id': flw_id,
+                'flw_name': flw_data['flw_name'].iloc[0] if not flw_data.empty else '',
+                'total_segments': len(flw_segments),
+                'total_distance_km': round(flw_distance, 2),
+                'unusual_segments': flw_unusual,
+                'avg_segment_distance_km': round(flw_avg_distance, 2)
+            }
+            
+            segments.extend(flw_segments)
+    
+    # Calculate summary statistics
+    if segments:
+        total_distance = sum(seg['distance'] for seg in segments)
+        unusual_segments = sum(1 for seg in segments if seg['is_unusual'])
+        avg_distance = total_distance / len(segments) if segments else 0
+        
+        summary = {
+            'total_flws': len(flw_stats),
+            'total_segments': len(segments),
+            'total_distance_km': round(total_distance, 2),
+            'unusual_segments': unusual_segments,
+            'unusual_percentage': round((unusual_segments / len(segments)) * 100, 1),
+            'avg_segment_distance_km': round(avg_distance, 2)
+        }
+    else:
+        summary = {}
+    
+    return {
+        'summary': summary,
+        'flw_statistics': list(flw_stats.values())
+    }
+
+def _generate_pathway_map(coverage_data_objects, target_flw_ids):
+    """
+    Generate an interactive map showing pathway segments for specific FLW IDs.
+    """
+    try:
+        import folium
+        from folium import Icon, Marker
+        
+        # Combine all service data
+        all_service_data = []
+        for org, coverage_data in coverage_data_objects.items():
+            service_df = coverage_data.create_service_points_dataframe()
+            if service_df is not None and not service_df.empty:
+                service_df['opportunity'] = org
+                all_service_data.append(service_df)
+        
+        if not all_service_data:
+            return html.P("No data available for map generation")
+        
+        combined_service_df = pd.concat(all_service_data, ignore_index=True)
+        
+        # Filter for specific FLW IDs
+        filtered_df = combined_service_df[combined_service_df['flw_id'].isin(target_flw_ids)].copy()
+        
+        if filtered_df.empty:
+            return html.P("No data found for the specified FLW IDs")
+        
+        # Clean and prepare data
+        df = filtered_df.copy()
+        df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
+        df = df.dropna(subset=['lattitude', 'longitude', 'visit_date'])
+        df = df.sort_values(['flw_id', 'visit_date'])
+        df['date'] = df['visit_date'].dt.date
+        
+        # Create pathway segments for mapping
+        segments = []
+        for flw_id in df['flw_id'].unique():
+            flw_data = df[df['flw_id'] == flw_id].copy()
+            
+            # Group by date
+            for date in flw_data['date'].unique():
+                daily_data = flw_data[flw_data['date'] == date].copy()
+                
+                if len(daily_data) < 2:
+                    continue
+                
+                daily_data = daily_data.sort_values('visit_date')
+                
+                # Create segments between consecutive visits
+                for i in range(len(daily_data) - 1):
+                    current = daily_data.iloc[i]
+                    next_visit = daily_data.iloc[i + 1]
+                    
+                    try:
+                        distance = geodesic(
+                            (current['lattitude'], current['longitude']),
+                            (next_visit['lattitude'], next_visit['longitude'])
+                        ).kilometers
+                    except:
+                        distance = 0
+                    
+                    time_diff = (next_visit['visit_date'] - current['visit_date']).total_seconds() / 3600
+                    is_unusual = distance > 5 or time_diff > 2
+                    
+                    segment = {
+                        'flw_id': flw_id,
+                        'flw_name': current['flw_name'],
+                        'date': date,
+                        'latitude': current['lattitude'],
+                        'longitude': current['longitude'],
+                        'lat_next': next_visit['lattitude'],
+                        'lon_next': next_visit['longitude'],
+                        'distance': distance,
+                        'time_diff_hours': time_diff,
+                        'is_unusual': is_unusual,
+                        'du_name': current['du_name'],
+                        'next_du_name': next_visit['du_name']
+                    }
+                    
+                    segments.append(segment)
+        
+        if not segments:
+            return html.P("No pathway segments found for mapping")
+        
+        # Center the map around the average coordinates
+        avg_lat = sum(seg['latitude'] for seg in segments) / len(segments)
+        avg_lon = sum(seg['longitude'] for seg in segments) / len(segments)
+        
+        m = folium.Map(location=[avg_lat, avg_lon], zoom_start=12)
+        
+        # Add segments to map
+        for segment in segments:
+            if pd.notnull(segment['lat_next']) and pd.notnull(segment['lon_next']):
+                coords = [(segment['latitude'], segment['longitude']), 
+                         (segment['lat_next'], segment['lon_next'])]
+                
+                color = 'red' if segment['is_unusual'] else 'blue'
+                
+                folium.PolyLine(
+                    coords,
+                    color=color,
+                    weight=3,
+                    tooltip=f"{segment['flw_name']} | {segment['date']} | {segment['distance']:.2f} km"
+                ).add_to(m)
+        
+        # Add start and end markers for each day
+        daily_groups = {}
+        for segment in segments:
+            date = segment['date']
+            if date not in daily_groups:
+                daily_groups[date] = []
+            daily_groups[date].append(segment)
+        
+        for date, day_segments in daily_groups.items():
+            if day_segments:
+                # Start marker
+                start_seg = day_segments[0]
+                Marker(
+                    location=(start_seg['latitude'], start_seg['longitude']),
+                    popup=f"START: {start_seg['flw_name']} on {date}",
+                    icon=Icon(color='green', icon='play')
+                ).add_to(m)
+                
+                # End marker
+                end_seg = day_segments[-1]
+                Marker(
+                    location=(end_seg['lat_next'], end_seg['lon_next']),
+                    popup=f"END: {end_seg['flw_name']} on {date}",
+                    icon=Icon(color='red', icon='stop')
+                ).add_to(m)
+        
+        # Add legend
+        legend_html = '''
+        <div style="position: fixed; 
+                    bottom: 50px; left: 50px; width: 200px; height: 90px; 
+                    background-color: white; border:2px solid grey; z-index:9999; 
+                    font-size:14px; padding: 10px">
+        <p><b>Pathway Legend</b></p>
+        <p><i class="fa fa-circle" style="color:blue"></i> Normal Segment</p>
+        <p><i class="fa fa-circle" style="color:red"></i> Unusual Segment</p>
+        <p><i class="fa fa-play" style="color:green"></i> Start Point</p>
+        <p><i class="fa fa-stop" style="color:red"></i> End Point</p>
+        </div>
+        '''
+        m.get_root().html.add_child(folium.Element(legend_html))
+        
+        # Convert map to HTML
+        map_html = m._repr_html_()
+        
+        return html.Iframe(
+            srcDoc=map_html,
+            style={'width': '100%', 'height': '500px', 'border': 'none'},
+            title="FLW Pathway Map"
+        )
+        
+    except Exception as e:
+        return html.P(f"Error generating map: {str(e)}", style={'color': 'red'})
+
+def _generate_recent_unusual_segments(coverage_data_objects):
+    """
+    Generate a list of unusual segments from the past 7 days.
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        # Combine all service data
+        all_service_data = []
+        for org, coverage_data in coverage_data_objects.items():
+            service_df = coverage_data.create_service_points_dataframe()
+            if service_df is not None and not service_df.empty:
+                service_df['opportunity'] = org
+                all_service_data.append(service_df)
+        
+        if not all_service_data:
+            return []
+        
+        combined_service_df = pd.concat(all_service_data, ignore_index=True)
+        
+        # Clean and prepare data
+        df = combined_service_df.copy()
+        df['visit_date'] = pd.to_datetime(df['visit_date'], errors='coerce')
+        df = df.dropna(subset=['lattitude', 'longitude', 'visit_date'])
+        df = df.sort_values(['flw_id', 'visit_date'])
+        df['date'] = df['visit_date'].dt.date
+        
+        # Filter for past 7 days
+        seven_days_ago = datetime.now().date() - timedelta(days=7)
+        df = df[df['date'] >= seven_days_ago].copy()
+        
+        if df.empty:
+            return []
+        
+        # Create pathway segments
+        unusual_segments = []
+        
+        for flw_id in df['flw_id'].unique():
+            flw_data = df[df['flw_id'] == flw_id].copy()
+            
+            # Group by date
+            for date in flw_data['date'].unique():
+                daily_data = flw_data[flw_data['date'] == date].copy()
+                
+                if len(daily_data) < 2:
+                    continue
+                
+                daily_data = daily_data.sort_values('visit_date')
+                
+                # Create segments between consecutive visits
+                for i in range(len(daily_data) - 1):
+                    current = daily_data.iloc[i]
+                    next_visit = daily_data.iloc[i + 1]
+                    
+                    try:
+                        distance = geodesic(
+                            (current['lattitude'], current['longitude']),
+                            (next_visit['lattitude'], next_visit['longitude'])
+                        ).kilometers
+                    except:
+                        distance = 0
+                    
+                    time_diff = (next_visit['visit_date'] - current['visit_date']).total_seconds() / 3600
+                    is_unusual = distance > 5 or time_diff > 2
+                    
+                    if is_unusual:
+                        segment = {
+                            'flw_id': flw_id,
+                            'flw_name': current['flw_name'],
+                            'date': date,
+                            'distance_km': round(distance, 2),
+                            'time_diff_hours': round(time_diff, 1),
+                            'du_name': current['du_name'],
+                            'next_du_name': next_visit['du_name'],
+                            'opportunity': current.get('opportunity', 'Unknown'),
+                            'reason': 'Distance' if distance > 5 else 'Time' if time_diff > 2 else 'Both'
+                        }
+                        unusual_segments.append(segment)
+        
+        # Sort by date (most recent first)
+        unusual_segments.sort(key=lambda x: x['date'], reverse=True)
+        
+        return unusual_segments
+        
+    except Exception as e:
+        logging.error(f"Error generating recent unusual segments: {str(e)}")
+        return []
+
 def create_flw_dashboard(coverage_data_objects):
     app = dash.Dash(__name__)
     summary_df, _ = generate_summary(coverage_data_objects, group_by='flw')
     summary_df['days_since_active'] = pd.to_numeric(summary_df['days_since_active'], errors='coerce')
     summary_df['avrg_forms_per_day_mavrg'] = pd.to_numeric(summary_df['avrg_forms_per_day_mavrg'], errors='coerce')
     summary_df['dus_per_day_mavrg'] = pd.to_numeric(summary_df['dus_per_day_mavrg'], errors='coerce')
+    
+    # Initialize empty pathway data - will be populated on demand
+    pathway_data = {'summary': {}, 'flw_statistics': []}
     
     app.layout = html.Div([
         html.Div([
@@ -223,6 +688,170 @@ def create_flw_dashboard(coverage_data_objects):
                 'padding': '20px',
                 'borderRadius': '5px',
                 'marginTop': '30px'
+            }),
+            
+            # FLW Pathway Analysis Section
+            html.Div([
+                html.H2("FLW Pathway Analysis", style={
+                    'color': '#333',
+                    'borderBottom': '1px solid #ddd',
+                    'paddingBottom': '10px',
+                    'marginTop': '40px',
+                    'marginBottom': '20px'
+                }),
+                
+                # Recent Unusual Segments Table
+                html.Div([
+                    html.H3("Recent Unusual Segments (Past 7 Days)", style={
+                        'color': '#333',
+                        'marginBottom': '15px'
+                    }),
+                    html.Div(id='recent-unusual-segments-container', style={
+                        'backgroundColor': 'white',
+                        'padding': '15px',
+                        'borderRadius': '5px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                        'marginBottom': '20px'
+                    })
+                ], style={
+                    'backgroundColor': 'white',
+                    'padding': '20px',
+                    'borderRadius': '5px',
+                    'marginBottom': '20px',
+                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                }),
+                
+                # FLW ID Input Section
+                html.Div([
+                    html.H3("Analyze Specific FLW Pathways", style={
+                        'color': '#333',
+                        'marginBottom': '15px'
+                    }),
+                    html.P("Enter specific FLW IDs to analyze their pathways (comma-separated):", style={
+                        'color': '#666',
+                        'marginBottom': '10px'
+                    }),
+                    dcc.Input(
+                        id='flw-ids-input',
+                        type='text',
+                        placeholder='e.g., 1298, 1208, 1500',
+                        style={
+                            'width': '100%',
+                            'padding': '10px',
+                            'border': '1px solid #ddd',
+                            'borderRadius': '5px',
+                            'marginBottom': '10px'
+                        }
+                    ),
+                    html.Button(
+                        'Analyze Pathways',
+                        id='analyze-pathways-btn',
+                        n_clicks=0,
+                        style={
+                            'backgroundColor': '#4CAF50',
+                            'color': 'white',
+                            'padding': '10px 20px',
+                            'border': 'none',
+                            'borderRadius': '5px',
+                            'cursor': 'pointer',
+                            'marginBottom': '20px'
+                        }
+                    ),
+                    html.Div(id='pathway-analysis-status', style={
+                        'marginBottom': '20px',
+                        'padding': '10px',
+                        'borderRadius': '5px'
+                    })
+                ], style={
+                    'backgroundColor': 'white',
+                    'padding': '20px',
+                    'borderRadius': '5px',
+                    'marginBottom': '20px',
+                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                }),
+                
+                # Pathway Summary Cards
+                html.Div([
+                    html.Div([
+                        html.H3("Total FLWs Analyzed", style={'margin': '0', 'color': '#666'}),
+                        html.H2(id='total-flws-analyzed', style={'margin': '10px 0', 'color': '#4CAF50'})
+                    ], style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    }),
+                    html.Div([
+                        html.H3("Total Distance", style={'margin': '0', 'color': '#666'}),
+                        html.H2(id='total-distance', style={'margin': '10px 0', 'color': '#2196F3'})
+                    ], style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    }),
+                    html.Div([
+                        html.H3("Unusual Segments", style={'margin': '0', 'color': '#666'}),
+                        html.H2(id='unusual-segments', style={'margin': '10px 0', 'color': '#FF9800'})
+                    ], style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    }),
+                    html.Div([
+                        html.H3("Avg Segment Distance", style={'margin': '0', 'color': '#666'}),
+                        html.H2(id='avg-segment-distance', style={'margin': '10px 0', 'color': '#9C27B0'})
+                    ], style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    })
+                ], style={
+                    'display': 'grid',
+                    'gridTemplateColumns': 'repeat(4, 1fr)',
+                    'gap': '20px',
+                    'marginBottom': '30px'
+                }),
+                
+                # FLW Pathway Table
+                html.Div([
+                    html.H3("Individual FLW Pathway Statistics", style={
+                        'color': '#333',
+                        'marginBottom': '15px'
+                    }),
+                    html.Div(id='pathway-table-container', style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    })
+                ]),
+                
+                # Pathway Map Section
+                html.Div([
+                    html.H3("FLW Pathway Map", style={
+                        'color': '#333',
+                        'marginBottom': '15px'
+                    }),
+                    html.Div(id='pathway-map-container', style={
+                        'backgroundColor': 'white',
+                        'padding': '20px',
+                        'borderRadius': '5px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                        'minHeight': '500px'
+                    })
+                ])
+            ], style={
+                'backgroundColor': '#f8f9fa',
+                'padding': '20px',
+                'borderRadius': '5px',
+                'marginTop': '30px'
             })
         ], style={
             'maxWidth': '1400px',
@@ -238,6 +867,43 @@ def create_flw_dashboard(coverage_data_objects):
         'padding': '20px',
         'backgroundColor': '#f5f5f5'
     })
+    
+    # Add custom CSS for pathway section
+    app.index_string = '''
+    <!DOCTYPE html>
+    <html>
+        <head>
+            {%metas%}
+            <title>FLW Summary Dashboard</title>
+            {%favicon%}
+            {%css%}
+            <style>
+                .pathway-card {
+                    transition: transform 0.2s ease-in-out;
+                }
+                .pathway-card:hover {
+                    transform: translateY(-2px);
+                }
+                .pathway-table {
+                    margin-top: 20px;
+                }
+                .pathway-table .dash-table-container {
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                }
+            </style>
+        </head>
+        <body>
+            {%app_entry%}
+            <footer>
+                {%config%}
+                {%scripts%}
+                {%renderer%}
+            </footer>
+        </body>
+    </html>
+    '''
 
     @app.callback(
         Output('flw-summary-table', 'rowData'),
@@ -499,6 +1165,8 @@ def create_flw_dashboard(coverage_data_objects):
             )
             
 
+
+        
         return summary_df.to_dict('records'), forms_fig, dus_fig, forms_fig2, dus_fig2 
     @app.callback(
         Output('flw-summary-table', 'exportDataAsCsv'),
@@ -509,6 +1177,171 @@ def create_flw_dashboard(coverage_data_objects):
         if n_clicks:
             return True  # Triggers export with default params
         return no_update
+    
+    @app.callback(
+        Output('total-flws-analyzed', 'children'),
+        Output('total-distance', 'children'),
+        Output('unusual-segments', 'children'),
+        Output('avg-segment-distance', 'children'),
+        Output('pathway-table-container', 'children'),
+        Output('pathway-analysis-status', 'children'),
+        Output('pathway-map-container', 'children'),
+        Input('analyze-pathways-btn', 'n_clicks'),
+        State('flw-ids-input', 'value'),
+        prevent_initial_call=True
+    )
+    def analyze_pathways(n_clicks, flw_ids_input):
+        if not n_clicks or not flw_ids_input:
+            return "0", "0 km", "0", "0 km", html.P("No pathway data available"), "", html.P("No map data available")
+        
+        try:
+            # Parse FLW IDs from input
+            flw_ids = [flw_id.strip() for flw_id in flw_ids_input.split(',') if flw_id.strip()]
+            
+            if not flw_ids:
+                return "0", "0 km", "0", "0 km", html.P("No valid FLW IDs provided"), html.P("Please enter valid FLW IDs", style={'color': 'red'}), html.P("No map data available")
+            
+            # Generate pathway data for specific FLWs
+            pathway_data = _generate_lightweight_pathway_data_for_flws(coverage_data_objects, flw_ids)
+            
+            summary_info = pathway_data.get('summary', {})
+            flw_stats = pathway_data.get('flw_statistics', [])
+            
+            # Generate pathway map
+            pathway_map = _generate_pathway_map(coverage_data_objects, flw_ids)
+            
+            # Create pathway table
+            if flw_stats:
+                pathway_df = pd.DataFrame(flw_stats)
+                pathway_table = dash_table.DataTable(
+                    id='pathway-table',
+                    columns=[
+                        {"name": "FLW ID", "id": "flw_id"},
+                        {"name": "FLW Name", "id": "flw_name"},
+                        {"name": "Total Segments", "id": "total_segments"},
+                        {"name": "Total Distance (km)", "id": "total_distance_km"},
+                        {"name": "Unusual Segments", "id": "unusual_segments"},
+                        {"name": "Avg Segment Distance (km)", "id": "avg_segment_distance_km"}
+                    ],
+                    data=pathway_df.to_dict('records'),
+                    style_table={'overflowX': 'auto'},
+                    style_cell={'textAlign': 'left', 'padding': '10px'},
+                    style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+                    style_data_conditional=[
+                        {
+                            'if': {'column_id': 'unusual_segments', 'filter_query': '{unusual_segments} > 0'},
+                            'backgroundColor': '#fff3cd',
+                            'color': '#856404'
+                        }
+                    ]
+                )
+            else:
+                pathway_table = html.P("No pathway data found for the specified FLW IDs")
+            
+            status_message = html.P(f"Successfully analyzed {len(flw_stats)} FLW(s)", style={'color': 'green'})
+            
+            return (
+                summary_info.get('total_flws', 0),
+                f"{summary_info.get('total_distance_km', 0)} km",
+                summary_info.get('unusual_segments', 0),
+                f"{summary_info.get('avg_segment_distance_km', 0)} km",
+                pathway_table,
+                status_message,
+                pathway_map
+            )
+            
+        except Exception as e:
+            error_message = html.P(f"Error analyzing pathways: {str(e)}", style={'color': 'red'})
+            return "0", "0 km", "0", "0 km", html.P("Error occurred during analysis"), error_message, html.P("Error occurred during map generation")
+    
+    @app.callback(
+        Output('recent-unusual-segments-container', 'children'),
+        Input('org-selector', 'value')
+    )
+    def update_recent_unusual_segments(selected_orgs):
+        """Update the recent unusual segments table when organization selection changes."""
+        try:
+            # Generate recent unusual segments data
+            unusual_segments = _generate_recent_unusual_segments(coverage_data_objects)
+            
+            if not unusual_segments:
+                return html.P("No unusual segments found in the past 7 days.", style={
+                    'textAlign': 'center',
+                    'color': '#666',
+                    'fontStyle': 'italic'
+                })
+            
+            # Create table data
+            table_data = []
+            for segment in unusual_segments:
+                table_data.append({
+                    'FLW ID': segment['flw_id'],
+                    'FLW Name': segment['flw_name'],
+                    'Date': segment['date'].strftime('%Y-%m-%d'),
+                    'Distance (km)': segment['distance_km'],
+                    'Time Gap (hrs)': segment['time_diff_hours'],
+                    'From DU': segment['du_name'],
+                    'To DU': segment['next_du_name'],
+                    'Opportunity': segment['opportunity'],
+                    'Reason': segment['reason']
+                })
+            
+            # Create the table
+            return dash_table.DataTable(
+                id='recent-unusual-segments-table',
+                columns=[
+                    {'name': 'FLW ID', 'id': 'FLW ID'},
+                    {'name': 'FLW Name', 'id': 'FLW Name'},
+                    {'name': 'Date', 'id': 'Date'},
+                    {'name': 'Distance (km)', 'id': 'Distance (km)'},
+                    {'name': 'Time Gap (hrs)', 'id': 'Time Gap (hrs)'},
+                    {'name': 'From DU', 'id': 'From DU'},
+                    {'name': 'To DU', 'id': 'To DU'},
+                    {'name': 'Opportunity', 'id': 'Opportunity'},
+                    {'name': 'Reason', 'id': 'Reason'}
+                ],
+                data=table_data,
+                style_table={
+                    'overflowX': 'auto',
+                    'borderRadius': '8px',
+                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)'
+                },
+                style_header={
+                    'backgroundColor': '#f8f9fa',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center',
+                    'border': '1px solid #dee2e6'
+                },
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '12px',
+                    'border': '1px solid #dee2e6',
+                    'fontSize': '14px'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'column_id': 'Distance (km)', 'filter_query': '{Distance (km)} > 5'},
+                        'backgroundColor': '#fff3cd',
+                        'color': '#856404'
+                    },
+                    {
+                        'if': {'column_id': 'Time Gap (hrs)', 'filter_query': '{Time Gap (hrs)} > 2'},
+                        'backgroundColor': '#f8d7da',
+                        'color': '#721c24'
+                    }
+                ],
+                page_size=10,
+                sort_action='native',
+                filter_action='native',
+                sort_mode='multi'
+            )
+            
+        except Exception as e:
+            return html.P(f"Error loading recent unusual segments: {str(e)}", style={
+                'color': 'red',
+                'textAlign': 'center'
+            })
+    
     app.run(debug=True, port=8080)
 
 

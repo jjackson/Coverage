@@ -1,4 +1,4 @@
-﻿# Environment files
+# Environment files
 .env
 */.env
 .env.*
@@ -11,6 +11,7 @@ flw_dashboard_*/
 /data/
 data/
 data/*
+data/muac photos/*
 *.xlsx
 *.csv
 *.json
@@ -54,3 +55,5 @@ Thumbs.db
 
 # Logs
 logs/
+
+data/config.json

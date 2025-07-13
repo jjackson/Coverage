@@ -1,6 +1,6 @@
 """
-FLW Assessment Framework - Updated Version
-Implements the assessment pipeline for Front Line Worker analysis
+FLW Assessment Framework - Extended with Batching Support
+Implements batch-based assessment pipeline for Front Line Worker analysis
 
 Save this file as: src/reports/flw_assessment_framework.py
 """
@@ -10,6 +10,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from scipy import stats
 import warnings
+from .utils.batch_utility import BatchUtility
 warnings.filterwarnings('ignore')
 
 
@@ -93,12 +94,22 @@ class GenderRatioAssessment(Assessment):
             result = "."
             description = ""  # No description for normal cases
         
+        # Calculate quality metric if population stats available
+        quality_metric_name = None
+        quality_metric_value = None
+        if population_stats is not None and 'gender_ratio' in population_stats:
+            pop_female_ratio = population_stats['gender_ratio']['female_ratio']
+            quality_metric_name = 'gender_deviation_from_population'
+            quality_metric_value = round(abs(female_ratio - pop_female_ratio), 4)
+        
         return {
             'result': result,
             'indicator_name': 'female_child_ratio',
             'indicator_value': round(female_ratio, 4),
             'valid_count': total_count,
-            'description': description
+            'description': description,
+            'quality_metric_name': quality_metric_name,
+            'quality_metric_value': quality_metric_value
         }
     
     def _wilson_ci(self, successes, total, confidence=0.99):
@@ -122,7 +133,9 @@ class GenderRatioAssessment(Assessment):
             'indicator_name': 'female_child_ratio',
             'indicator_value': None,
             'valid_count': 0,
-            'description': reason
+            'description': reason,
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
     
     def _no_assessment(self, reason):
@@ -132,7 +145,9 @@ class GenderRatioAssessment(Assessment):
             'indicator_name': 'female_child_ratio',
             'indicator_value': None,
             'valid_count': 0,
-            'description': ""  # Empty description for display as "."
+            'description': "",  # Empty description for display as "."
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
 
 
@@ -179,7 +194,9 @@ class LowRedMUACAssessment(Assessment):
             'indicator_name': 'red_muac_percentage',
             'indicator_value': round(red_ratio, 4),
             'valid_count': total_count,
-            'description': description
+            'description': description,
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
     
     def _insufficient_data(self, reason):
@@ -189,7 +206,9 @@ class LowRedMUACAssessment(Assessment):
             'indicator_name': 'red_muac_percentage',
             'indicator_value': None,
             'valid_count': 0,
-            'description': reason
+            'description': reason,
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
     
     def _no_assessment(self, reason):
@@ -199,7 +218,9 @@ class LowRedMUACAssessment(Assessment):
             'indicator_name': 'red_muac_percentage',
             'indicator_value': None,
             'valid_count': 0,
-            'description': ""  # Empty description for display as "."
+            'description': "",  # Empty description for display as "."
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
 
 
@@ -247,7 +268,9 @@ class LowYoungChildAssessment(Assessment):
             'indicator_name': 'under_12_months_percentage',
             'indicator_value': round(under_12_ratio, 4),
             'valid_count': total_count,
-            'description': description
+            'description': description,
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
     
     def _insufficient_data(self, reason):
@@ -257,7 +280,9 @@ class LowYoungChildAssessment(Assessment):
             'indicator_name': 'under_12_months_percentage',
             'indicator_value': None,
             'valid_count': 0,
-            'description': reason
+            'description': reason,
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
     
     def _no_assessment(self, reason):
@@ -267,15 +292,18 @@ class LowYoungChildAssessment(Assessment):
             'indicator_name': 'under_12_months_percentage',
             'indicator_value': None,
             'valid_count': 0,
-            'description': ""  # Empty description for display as "."
+            'description': "",  # Empty description for display as "."
+            'quality_metric_name': None,
+            'quality_metric_value': None
         }
 
 
 class AssessmentEngine:
     """Main engine for running assessments on FLW data"""
     
-    def __init__(self, visit_threshold=300):
-        self.visit_threshold = visit_threshold
+    def __init__(self, visit_threshold=300, batch_size=300, min_size=100):
+        self.visit_threshold = visit_threshold  # Keep for backward compatibility
+        self.batch_utility = BatchUtility(batch_size=batch_size, min_size=min_size)
         self.assessments = {
             'gender_ratio': GenderRatioAssessment(),
             'low_red_muac': LowRedMUACAssessment(),
@@ -420,104 +448,141 @@ class AssessmentEngine:
         
         return population_stats
     
-    def run_assessments(self, df):
-        """Run complete assessment pipeline"""
+    def run_assessments(self, df_clean):
+        """Run complete assessment pipeline with batching on pre-prepared data"""
         
-        print("=== FLW Assessment Pipeline ===")
+        print("=== FLW Quality Assessment Pipeline ===")
         
-        # Auto-detect columns
-        print("Auto-detecting columns...")
-        detected_columns, missing_columns = self.auto_detect_columns(df)
-        
-        if missing_columns:
-            print(f"Warning: Missing columns: {missing_columns}")
-        
-        print(f"Detected columns: {detected_columns}")
-        
-        # Prepare data
-        print("Preparing data...")
-        df_clean = self.prepare_data(df, detected_columns)
-        
-        # Calculate population statistics
+        # Calculate population statistics using prepared data
         print("Calculating population statistics...")
         population_stats = self.calculate_population_stats(df_clean)
         
         # Get FLW/opportunity pairs with sufficient visits
         print("Identifying FLW/opportunity pairs with sufficient visits...")
         flw_opp_visits = df_clean.groupby(['flw_id', 'opportunity_name']).size().reset_index(name='visit_count')
-        eligible_pairs = flw_opp_visits[flw_opp_visits['visit_count'] >= self.visit_threshold]
+        eligible_pairs = flw_opp_visits[flw_opp_visits['visit_count'] >= self.batch_utility.min_size]
         
-        print(f"Found {len(eligible_pairs)} FLW/opportunity pairs with >= {self.visit_threshold} visits")
+        print(f"Found {len(eligible_pairs)} FLW/opportunity pairs with >= {self.batch_utility.min_size} visits")
         
-        # Run assessments for each eligible pair
-        assessment_results = []
+        # Run assessments for each eligible pair and their batches
+        all_batch_results = []
+        excel_results = []  # Most recent batch for each FLW/opp pair
         
         for _, pair in eligible_pairs.iterrows():
             flw_id = pair['flw_id']
             opp_name = pair['opportunity_name']
             
-            # Get this FLW's visits (most recent N)
+            # Get this FLW's visits
             flw_visits = df_clean[
                 (df_clean['flw_id'] == flw_id) & 
                 (df_clean['opportunity_name'] == opp_name)
-            ].sort_values('visit_date', ascending=False).head(self.visit_threshold)
+            ]
             
             # Get FLW name if available
             flw_name = None
             if 'flw_name' in flw_visits.columns and len(flw_visits) > 0:
-                # Get the most common name for this FLW (in case of data inconsistencies)
                 flw_name_values = flw_visits['flw_name'].dropna()
                 if len(flw_name_values) > 0:
                     flw_name = flw_name_values.mode().iloc[0] if len(flw_name_values.mode()) > 0 else flw_name_values.iloc[0]
             
-           # Run each assessment
-            flw_result = {
-                'flw_id': flw_id}
-
-            # Add flw_name if available
-            if flw_name:
-                flw_result['flw_name'] = flw_name
-
-            flw_result.update({
-                'opportunity_name': opp_name,
-                'total_visits': len(flw_visits),
-                'assessment_date': pd.Timestamp.now().strftime('%Y-%m-%d')
-            })
-                   
-            strong_negatives = 0
-            insufficient_data_count = 0
+            # Create batches for this FLW/opp pair (including "all" batch)
+            batches = self.batch_utility.create_flw_batches(flw_visits, include_all_batch=True)
             
-            for assessment_name, assessment in self.assessments.items():
-                result = assessment.assess(flw_visits, self.visit_threshold, population_stats)
-                
-                # Add assessment-specific columns
-                flw_result[f"{result['indicator_name']}"] = result['indicator_value']
-                flw_result[f"{result['indicator_name']}_result"] = result['result']
-                flw_result[f"{result['indicator_name']}_valid_count"] = result['valid_count']
-                
-                # Handle description display
-                if result['result'] == 'insufficient_data':
-                    flw_result[f"{result['indicator_name']}_description"] = result['description']
-                    insufficient_data_count += 1
-                elif result['result'] == 'strong_negative':
-                    flw_result[f"{result['indicator_name']}_description"] = result['description']
-                    strong_negatives += 1
+            if not batches:
+                continue
+            
+            # Process each batch
+            max_batch_number = 0
+            excel_result = None
+            
+            for batch_df, batch_number, start_date, end_date, visit_count in batches:
+                # Skip "all" batch for Excel results (only use numbered batches)
+                if batch_number != "all":
+                    # Run assessments on this batch
+                    batch_result = self._assess_single_batch(
+                        flw_id, flw_name, opp_name, batch_df, batch_number, 
+                        start_date, end_date, visit_count, population_stats
+                    )
+                    
+                    all_batch_results.append(batch_result)
+                    
+                    # Keep track of most recent batch for Excel output
+                    if isinstance(batch_number, int) and batch_number > max_batch_number:
+                        max_batch_number = batch_number
+                        excel_result = batch_result.copy()
                 else:
-                    # no_assessment - show as "."
-                    flw_result[f"{result['indicator_name']}_description"] = "."
+                    # Handle "all" batch
+                    batch_result = self._assess_single_batch(
+                        flw_id, flw_name, opp_name, batch_df, batch_number, 
+                        start_date, end_date, visit_count, population_stats
+                    )
+                    all_batch_results.append(batch_result)
             
-            flw_result['num_strong_negative'] = strong_negatives
-            flw_result['num_insufficient_data'] = insufficient_data_count
-            flw_result['has_any_strong_negative'] = strong_negatives > 0
-            flw_result['has_insufficient_data'] = insufficient_data_count > 0
+            # Add the most recent numbered batch to Excel results
+            if excel_result:
+                excel_results.append(excel_result)
+        
+        print(f"Assessment complete: {len(all_batch_results)} total batches assessed")
+        print(f"Excel output: {len(excel_results)} FLW/opportunity pairs (most recent batches)")
+        
+        return pd.DataFrame(excel_results), pd.DataFrame(all_batch_results), population_stats
+    
+    def _assess_single_batch(self, flw_id, flw_name, opp_name, batch_df, batch_number, 
+                           start_date, end_date, visit_count, population_stats):
+        """Assess a single batch and return results"""
+        
+        # Create base result row
+        result = {
+            'flw_id': flw_id,
+            'opportunity_name': opp_name,
+            'batch_number': batch_number,
+            'batch_start_date': start_date.date() if hasattr(start_date, 'date') else start_date,
+            'batch_end_date': end_date.date() if hasattr(end_date, 'date') else end_date,
+            'visits_in_batch': visit_count,
+            'assessment_date': pd.Timestamp.now().strftime('%Y-%m-%d')
+        }
+        
+        # Add flw_name if available
+        if flw_name:
+            result['flw_name'] = flw_name
+        
+        # Run each assessment
+        strong_negatives = 0
+        insufficient_data_count = 0
+        
+        for assessment_name, assessment in self.assessments.items():
+            assessment_result = assessment.assess(batch_df, self.batch_utility.min_size, population_stats)
             
-            assessment_results.append(flw_result)
+            # Add assessment-specific columns
+            result[f"{assessment_result['indicator_name']}"] = assessment_result['indicator_value']
+            result[f"{assessment_result['indicator_name']}_result"] = assessment_result['result']
+            result[f"{assessment_result['indicator_name']}_valid_count"] = assessment_result['valid_count']
+            
+            # Add quality metrics if available
+            if assessment_result.get('quality_metric_name'):
+                result[f"{assessment_result['indicator_name']}_quality_metric_name"] = assessment_result['quality_metric_name']
+                result[f"{assessment_result['indicator_name']}_quality_metric_value"] = assessment_result['quality_metric_value']
+            
+            # Handle description display
+            if assessment_result['result'] == 'insufficient_data':
+                result[f"{assessment_result['indicator_name']}_description"] = assessment_result['description']
+                insufficient_data_count += 1
+            elif assessment_result['result'] == 'strong_negative':
+                result[f"{assessment_result['indicator_name']}_description"] = assessment_result['description']
+                strong_negatives += 1
+            else:
+                # no_assessment - show as "."
+                result[f"{assessment_result['indicator_name']}_description"] = "."
         
-        results_df = pd.DataFrame(assessment_results)
+        result['num_strong_negative'] = strong_negatives
+        result['num_insufficient_data'] = insufficient_data_count
+        result['has_any_strong_negative'] = strong_negatives > 0
+        result['has_insufficient_data'] = insufficient_data_count > 0
         
-        print(f"Assessment complete: {len(results_df)} FLW/opportunity pairs assessed")
+        # For Excel compatibility, use total_visits instead of visits_in_batch
+        result['total_visits'] = visit_count
         
-        return results_df, population_stats
+        return result
     
     def create_opportunity_summary(self, assessment_results_df, original_df):
         """Create opportunity-level summary"""
@@ -529,7 +594,7 @@ class AssessmentEngine:
         all_flws = original_df.groupby('opportunity_name')['flw_id'].nunique().reset_index()
         all_flws.columns = ['opportunity_name', 'total_flws']
         
-        # Get FLWs with minimum visits
+        # Get FLWs with minimum visits (using Excel results which are most recent batches)
         min_visit_flws = assessment_results_df.groupby('opportunity_name').size().reset_index()
         min_visit_flws.columns = ['opportunity_name', 'flws_with_min_visits']
         
@@ -570,3 +635,57 @@ class AssessmentEngine:
         opp_summary['pct_flws_with_insufficient_data'] = opp_summary['pct_flws_with_insufficient_data'].fillna(0)
         
         return opp_summary.sort_values('pct_flws_with_strong_negative', ascending=False)
+    
+    def transform_to_csv_format(self, all_batch_results):
+        """
+        Transform wide batch results to long format for CSV export
+        
+        Args:
+            all_batch_results: DataFrame with one row per batch
+            
+        Returns:
+            DataFrame with one row per assessment per batch
+        """
+        if len(all_batch_results) == 0:
+            return pd.DataFrame()
+        
+        # Define assessment mappings (from column suffixes to assessment names)
+        assessment_mappings = {
+            'female_child_ratio': 'gender_ratio',
+            'red_muac_percentage': 'low_red_muac', 
+            'under_12_months_percentage': 'low_young_child'
+        }
+        
+        csv_rows = []
+        
+        for _, batch_row in all_batch_results.iterrows():
+            # Base columns that apply to all assessments
+            base_data = {
+                'flw_id': batch_row['flw_id'],
+                'opportunity_name': batch_row['opportunity_name'],
+                'batch_number': batch_row['batch_number'],
+                'batch_start_date': batch_row['batch_start_date'],
+                'batch_end_date': batch_row['batch_end_date'],
+                'total_visits_in_batch': batch_row['visits_in_batch']
+            }
+            
+            # Add flw_name if available
+            if 'flw_name' in batch_row and pd.notna(batch_row['flw_name']):
+                base_data['flw_name'] = batch_row['flw_name']
+            
+            # Extract assessment results for each indicator
+            for indicator_name, assessment_type in assessment_mappings.items():
+                if indicator_name in batch_row:
+                    csv_row = base_data.copy()
+                    csv_row.update({
+                        'analysis_type': 'quality_assessment',
+                        'metric_name': indicator_name,
+                        'metric_value': batch_row.get(indicator_name),
+                        'assessment_result': batch_row.get(f'{indicator_name}_result'),
+                        'quality_score_name': batch_row.get(f'{indicator_name}_quality_metric_name'),
+                        'quality_score_value': batch_row.get(f'{indicator_name}_quality_metric_value')
+                    })
+                    
+                    csv_rows.append(csv_row)
+        
+        return pd.DataFrame(csv_rows)

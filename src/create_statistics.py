@@ -538,7 +538,12 @@ def create_html_report(coverage_data):
     
     # Add table rows with data
     for _, row in du_table_data.iterrows():
-        html_content += "<tr>"
+        # Add data attributes for camping and checked_in_last_7_days
+        camping_attr = 'true' if row.get('Camping', False) else 'false'
+        checked_in_last_7_days_attr = 'true' if row.get('checked_in_last_7_days', False) else 'false'
+        delivery_count_per_buildings = row.get('Delivery Count / Buildings', '')
+        delivery_count = row.get(delivery_count_col, '')
+        html_content += f"<tr data-camping='{camping_attr}' data-checked-in-last-7-days='{checked_in_last_7_days_attr}' data-delivery-count-per-buildings='{delivery_count_per_buildings}' data-delivery-count='{delivery_count}'>"
         for col in reduced_columns:
             value = row[col]
             # Format the value - handle NaN/None values and format others as strings
@@ -546,7 +551,6 @@ def create_html_report(coverage_data):
                 formatted_value = ""
             else:
                 formatted_value = str(value)
-            
             html_content += f"<td>{formatted_value}</td>"
         html_content += "</tr>"
     
@@ -891,7 +895,7 @@ def create_html_report(coverage_data):
                 if ($.fn.DataTable.isDataTable('#delivery-units-table')) {{
                     $('#delivery-units-table').DataTable().destroy();
                 }}
-                $('#delivery-units-table').DataTable({{
+                var duTable = $('#delivery-units-table').DataTable({{
                     paging: true,
                     searching: true,
                     ordering: true,
@@ -905,6 +909,42 @@ def create_html_report(coverage_data):
                     scrollX: true,
                     colReorder: true,
                     pageLength: 25
+                }});
+
+                // Custom filter for Camping threshold, Checked In Last 7 Days, Camping Only
+                $.fn.dataTable.ext.search.push(
+                    function(settings, data, dataIndex) {{
+                        if (settings.nTable.id !== 'delivery-units-table') return true;
+                        var campingThreshold = parseFloat($('#camping-threshold').val()) || 12;
+                        var filterLast7 = $('#filter-last7').prop('checked');
+                        var filterCamping = $('#filter-camping').prop('checked');
+
+                        // Get row node and data attributes
+                        var rowNode = duTable.row(dataIndex).node();
+                        var campingAttr = $(rowNode).attr('data-camping');
+                        var checkedInLast7Attr = $(rowNode).attr('data-checked-in-last-7-days');
+                        var deliveryCountPerBuildings = parseFloat($(rowNode).attr('data-delivery-count-per-buildings'));
+                        var deliveryCount = parseFloat($(rowNode).attr('data-delivery-count'));
+
+                        // Filter by Camping Only
+                        if (filterCamping) {{
+                            var isCamping = false;
+                            if (!isNaN(deliveryCountPerBuildings) && !isNaN(deliveryCount)) {{
+                                isCamping = (deliveryCountPerBuildings >= campingThreshold && deliveryCount > 20);
+                            }}
+                            if (!isCamping) return false;
+                        }}
+                        // Filter by Checked In Last 7 Days
+                        if (filterLast7) {{
+                            if (checkedInLast7Attr !== 'true') return false;
+                        }}
+                        return true;
+                    }}
+                );
+
+                // Redraw table on filter change
+                $('#camping-threshold, #filter-last7, #filter-camping').on('input change', function() {{
+                    duTable.draw();
                 }});
                 
                 // Initialize the Service Areas table

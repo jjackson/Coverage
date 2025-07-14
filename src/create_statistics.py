@@ -195,6 +195,10 @@ def create_html_report(coverage_data):
     reduced_columns = [col for col in reduced_columns if col in du_table_data.columns]
     du_table_data = du_table_data[reduced_columns + ['Camping', 'checked_in_last_7_days', 'camping_true']]
 
+    # Ensure 'Camping' is in reduced_columns for table display
+    if 'Camping' not in reduced_columns:
+        reduced_columns.append('Camping')
+
     # Define columns to exclude from the table
     columns_to_exclude = [
         'caseid', 'centroid', 'BoundingBox', 'Wkt', 'Delivery Target', 'Closed', 'Closed by username',
@@ -224,7 +228,7 @@ def create_html_report(coverage_data):
         'du_status',             # Delivery unit status
         'service_area_id',       # Service area ID
         'Delivery Count / Buildings',  # Ratio of delivery count to buildings
-        'flag_delivery_per_building',  # Flag for DUs with 10 or more deliveries per building
+        'Camping',  # Camping column (was flag_delivery_per_building)
         'checked_in_date',       # Checked in date
         'checked_out_date',       # Checked out date
         'days_in_du',           # Number of days in delivery unit
@@ -520,7 +524,7 @@ def create_html_report(coverage_data):
         buildings_col: 'Buildings',
         delivery_count_col: 'Delivery Count',
         'flag_days_in_du': 'Flag Days In Du',
-        'Camping': 'Camping',
+        'Camping': 'Camping Only',
         'checked_in_date': 'Checked In Date',
         'checked_out_date': 'Checked Out Date',
         'du_name': 'Du Name',
@@ -541,13 +545,19 @@ def create_html_report(coverage_data):
         # Add data attributes for camping and checked_in_last_7_days
         camping_attr = 'true' if row.get('Camping', False) else 'false'
         checked_in_last_7_days_attr = 'true' if row.get('checked_in_last_7_days', False) else 'false'
-        delivery_count_per_buildings = row.get('Delivery Count / Buildings', '')
-        delivery_count = row.get(delivery_count_col, '')
+        delivery_count_per_buildings = (
+            float(row.get('Delivery Count / Buildings')) if pd.notnull(row.get('Delivery Count / Buildings')) else ''
+        )
+        delivery_count = (
+            float(row.get(delivery_count_col)) if pd.notnull(row.get(delivery_count_col)) else ''
+        )
         html_content += f"<tr data-camping='{camping_attr}' data-checked-in-last-7-days='{checked_in_last_7_days_attr}' data-delivery-count-per-buildings='{delivery_count_per_buildings}' data-delivery-count='{delivery_count}'>"
         for col in reduced_columns:
             value = row[col]
-            # Format the value - handle NaN/None values and format others as strings
-            if pd.isna(value):
+            # For Camping column, show 'Yes'/'No' instead of True/False
+            if col == 'Camping':
+                formatted_value = 'Yes' if camping_attr == 'true' else 'No'
+            elif pd.isna(value):
                 formatted_value = ""
             else:
                 formatted_value = str(value)
@@ -915,7 +925,6 @@ def create_html_report(coverage_data):
                 $.fn.dataTable.ext.search.push(
                     function(settings, data, dataIndex) {{
                         if (settings.nTable.id !== 'delivery-units-table') return true;
-                        var campingThreshold = parseFloat($('#camping-threshold').val()) || 12;
                         var filterLast7 = $('#filter-last7').prop('checked');
                         var filterCamping = $('#filter-camping').prop('checked');
 
@@ -923,18 +932,10 @@ def create_html_report(coverage_data):
                         var rowNode = duTable.row(dataIndex).node();
                         var campingAttr = $(rowNode).attr('data-camping');
                         var checkedInLast7Attr = $(rowNode).attr('data-checked-in-last-7-days');
-                        var deliveryCountPerBuildings = parseFloat($(rowNode).attr('data-delivery-count-per-buildings'));
-                        var deliveryCount = parseFloat($(rowNode).attr('data-delivery-count'));
 
-                        // Filter by Camping Only
+                        // Filter by Camping Only (use Camping column directly)
                         if (filterCamping) {{
-                            var isCamping = false;
-                            if (!isNaN(deliveryCountPerBuildings) && !isNaN(deliveryCount)) {{
-                                isCamping = (deliveryCountPerBuildings >= campingThreshold && deliveryCount > 20);
-                            }}
-                            // If the row's data-camping attribute is 'true', also allow it (for debugging)
-                            if (campingAttr === 'true') isCamping = true;
-                            if (!isCamping) return false;
+                            if (campingAttr !== 'true') return false;
                         }}
                         // Filter by Checked In Last 7 Days
                         if (filterLast7) {{

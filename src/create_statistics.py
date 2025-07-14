@@ -932,6 +932,8 @@ def create_html_report(coverage_data):
                             if (!isNaN(deliveryCountPerBuildings) && !isNaN(deliveryCount)) {{
                                 isCamping = (deliveryCountPerBuildings >= campingThreshold && deliveryCount > 20);
                             }}
+                            // If the row's data-camping attribute is 'true', also allow it (for debugging)
+                            if (campingAttr === 'true') isCamping = true;
                             if (!isCamping) return false;
                         }}
                         // Filter by Checked In Last 7 Days

@@ -20,6 +20,9 @@ from geopy.distance import geodesic
 import networkx as nx
 from scipy.spatial.distance import pdist, squareform
 
+# Add this import
+import constants
+
 # Handle imports based on how the module is used
 try:
     # When imported as a module
@@ -155,6 +158,43 @@ def create_html_report(coverage_data):
         lambda x: True if pd.notnull(x) and x >= 10 else None
     )
     
+    # --- (1) Add Camping column with user input threshold and delivery_count > 20 ---
+    # Default camping threshold
+    camping_default = constants.DEFAULT_CAMPING_THRESHOLD
+    # Add a Camping column (formerly flag_delivery_per_building)
+    du_table_data['Camping'] = du_table_data.apply(
+        lambda row: True if pd.notnull(row.get('Delivery Count / Buildings')) and pd.notnull(row.get(delivery_count_col))
+            and float(row.get('Delivery Count / Buildings')) >= camping_default and float(row.get(delivery_count_col)) > constants.DEFAULT_DELIVERY_COUNT_THRESHOLD else False,
+        axis=1
+    )
+
+    # --- (2) Add filter for Checked In Date (last 7 days) ---
+    today = pd.to_datetime('today').normalize()
+    du_table_data['checked_in_date_dt'] = pd.to_datetime(du_table_data['checked_in_date'], errors='coerce')
+    du_table_data['checked_in_last_7_days'] = du_table_data['checked_in_date_dt'].apply(
+        lambda d: (today - d).days <= 7 if pd.notnull(d) else False
+    )
+
+    # --- (3) Add filter for Camping=True ---
+    du_table_data['camping_true'] = du_table_data['Camping'] == True
+
+    # --- (4) Reduce table to only specified columns in order ---
+    reduced_columns = [
+        'flw_name',
+        buildings_col,
+        delivery_count_col,
+        'flag_days_in_du',  # Will rename in header to 'Camping'
+        'checked_in_date',
+        'checked_out_date',
+        'du_name',
+        'du_status',
+        'du_checkout_remark',
+        'service_area_id',
+    ]
+    # Only keep columns that exist
+    reduced_columns = [col for col in reduced_columns if col in du_table_data.columns]
+    du_table_data = du_table_data[reduced_columns + ['Camping', 'checked_in_last_7_days', 'camping_true']]
+
     # Define columns to exclude from the table
     columns_to_exclude = [
         'caseid', 'centroid', 'BoundingBox', 'Wkt', 'Delivery Target', 'Closed', 'Closed by username',
@@ -345,24 +385,24 @@ def create_html_report(coverage_data):
         </style>
         
         <script>
-            $(document).ready(function() {{
-                // Initialize the Delivery Units table with DataTables
-                $('#delivery-units-table').DataTable({{
-                    paging: true,
-                    searching: true,
-                    ordering: true,
-                    info: true,
-                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-                    dom: 'Bfrtip',
-                    buttons: [
-                        'copy', 'csv', 'excel'
-                    ],
-                    order: [[0, 'asc']], // Default sort by first column
-                    scrollX: true,
-                    colReorder: true, // Enable column reordering
-                    pageLength: 25 // Default to showing 25 rows
-                }});
-            }});
+            # $(document).ready(function() {{
+            #     // Initialize the Delivery Units table with DataTables
+            #     $('#delivery-units-table').DataTable({{
+            #         paging: true,
+            #         searching: true,
+            #         ordering: true,
+            #         info: true,
+            #         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            #         dom: 'Bfrtip',
+            #         buttons: [
+            #             'copy', 'csv', 'excel'
+            #         ],
+            #         order: [[0, 'asc']], // Default sort by first column
+            #         scrollX: true,
+            #         colReorder: true, // Enable column reordering
+            #         pageLength: 25 // Default to showing 25 rows
+            #     }});
+            # }});
         </script>
     </head>
     <body>
@@ -460,6 +500,11 @@ def create_html_report(coverage_data):
     html_content += f"""
             <section>
                 <h2>Delivery Units Data</h2>
+                <div id="delivery-units-table-filters" style="margin-bottom: 20px;">
+                    <label>Camping threshold: <input type="number" id="camping-threshold" value="12" min="1" style="width:60px;"></label>
+                    <label style="margin-left:20px;"><input type="checkbox" id="filter-last7"> Checked In Last 7 Days</label>
+                    <label style="margin-left:20px;"><input type="checkbox" id="filter-camping"> Camping Only</label>
+                </div>
                 <div class="table-info">
                     Showing {len(du_table_data):,} delivery units with status other than None and empty strings. Use the search box to filter.
                 </div>
@@ -469,12 +514,22 @@ def create_html_report(coverage_data):
                             <tr>
     """
     
-    # Add table headers based on available columns
-    for col in du_columns:
-        # Format column header (replace underscores with spaces and capitalize)
-        header = col.replace('_', ' ').title()
-        html_content += f"<th>{header}</th>"
-    
+    # Add table headers (renaming as needed)
+    header_map = {
+        'flw_name': 'Flw Name',
+        buildings_col: 'Buildings',
+        delivery_count_col: 'Delivery Count',
+        'flag_days_in_du': 'Flag Days In Du',
+        'Camping': 'Camping',
+        'checked_in_date': 'Checked In Date',
+        'checked_out_date': 'Checked Out Date',
+        'du_name': 'Du Name',
+        'du_status': 'Du Status',
+        'du_checkout_remark': 'Du Checkout Remark',
+        'service_area_id': 'Service Area Id',
+    }
+    for col in reduced_columns:
+        html_content += f"<th>{header_map.get(col, col)}</th>"
     html_content += """
                             </tr>
                         </thead>
@@ -484,7 +539,7 @@ def create_html_report(coverage_data):
     # Add table rows with data
     for _, row in du_table_data.iterrows():
         html_content += "<tr>"
-        for col in du_columns:
+        for col in reduced_columns:
             value = row[col]
             # Format the value - handle NaN/None values and format others as strings
             if pd.isna(value):
@@ -833,6 +888,9 @@ def create_html_report(coverage_data):
         <script>
             $(document).ready(function() {{
                 // Initialize the Delivery Units table
+                if ($.fn.DataTable.isDataTable('#delivery-units-table')) {{
+                    $('#delivery-units-table').DataTable().destroy();
+                }}
                 $('#delivery-units-table').DataTable({{
                     paging: true,
                     searching: true,

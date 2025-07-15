@@ -345,24 +345,24 @@ def create_html_report(coverage_data):
         </style>
         
         <script>
-            $(document).ready(function() {{
-                // Initialize the Delivery Units table with DataTables
-                $('#delivery-units-table').DataTable({{
-                    paging: true,
-                    searching: true,
-                    ordering: true,
-                    info: true,
-                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-                    dom: 'Bfrtip',
-                    buttons: [
-                        'copy', 'csv', 'excel'
-                    ],
-                    order: [[0, 'asc']], // Default sort by first column
-                    scrollX: true,
-                    colReorder: true, // Enable column reordering
-                    pageLength: 25 // Default to showing 25 rows
-                }});
-            }});
+            # $(document).ready(function() {{
+            #     // Initialize the Delivery Units table with DataTables
+            #     $('#delivery-units-table').DataTable({{
+            #         paging: true,
+            #         searching: true,
+            #         ordering: true,
+            #         info: true,
+            #         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            #         dom: 'Bfrtip',
+            #         buttons: [
+            #             'copy', 'csv', 'excel'
+            #         ],
+            #         order: [[0, 'asc']], // Default sort by first column
+            #         scrollX: true,
+            #         colReorder: true, // Enable column reordering
+            #         pageLength: 25 // Default to showing 25 rows
+            #     }});
+            # }});
         </script>
     </head>
     <body>

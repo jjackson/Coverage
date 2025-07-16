@@ -125,7 +125,7 @@ def create_html_report(coverage_data):
             else None, 
             axis=1
         )
-    
+     
     # Calculate days in DU and flag
     def calculate_days_in_du(row):
         try:
@@ -155,7 +155,7 @@ def create_html_report(coverage_data):
     
     # Add flag_delivery_per_building column
     du_table_data['flag_delivery_per_building'] = du_table_data['Delivery Count / Buildings'].apply(
-        lambda x: True if pd.notnull(x) and x >= 10 else None
+        lambda x: True if pd.notnull(x) else None
     )
     
     # --- (1) Add Camping column with user input threshold and delivery_count > 20 ---
@@ -195,9 +195,9 @@ def create_html_report(coverage_data):
     reduced_columns = [col for col in reduced_columns if col in du_table_data.columns]
     du_table_data = du_table_data[reduced_columns + ['Camping', 'checked_in_last_7_days', 'camping_true']]
 
-    # Ensure 'Camping' is in reduced_columns for table display
-    if 'Camping' not in reduced_columns:
-        reduced_columns.append('Camping')
+    # Remove 'Camping' from reduced_columns if present
+    if 'Camping' in reduced_columns:
+        reduced_columns.remove('Camping')
 
     # Define columns to exclude from the table
     columns_to_exclude = [
@@ -507,7 +507,7 @@ def create_html_report(coverage_data):
                 <div id="delivery-units-table-filters" style="margin-bottom: 20px;">
                     <label>Camping threshold: <input type="number" id="camping-threshold" value="12" min="1" style="width:60px;"></label>
                     <label style="margin-left:20px;"><input type="checkbox" id="filter-last7"> Checked In Last 7 Days</label>
-                    <label style="margin-left:20px;"><input type="checkbox" id="filter-camping"> Camping Only</label>
+                    <label style="margin-left:20px;"><input type="checkbox" id="filter-camping"> More than 20 Visits Only</label>
                 </div>
                 <div class="table-info">
                     Showing {len(du_table_data):,} delivery units with status other than None and empty strings. Use the search box to filter.
@@ -524,7 +524,6 @@ def create_html_report(coverage_data):
         buildings_col: 'Buildings',
         delivery_count_col: 'Delivery Count',
         'flag_days_in_du': 'Flag Days In Du',
-        'Camping': 'Camping Only',
         'checked_in_date': 'Checked In Date',
         'checked_out_date': 'Checked Out Date',
         'du_name': 'Du Name',
@@ -545,19 +544,20 @@ def create_html_report(coverage_data):
         # Add data attributes for camping and checked_in_last_7_days
         camping_attr = 'true' if row.get('Camping', False) else 'false'
         checked_in_last_7_days_attr = 'true' if row.get('checked_in_last_7_days', False) else 'false'
+        building_count_attr = (
+            float(row.get('buildings')) if pd.notnull(row.get('buildings')) else ''
+        )
         delivery_count_per_buildings = (
             float(row.get('Delivery Count / Buildings')) if pd.notnull(row.get('Delivery Count / Buildings')) else ''
         )
+    
         delivery_count = (
             float(row.get(delivery_count_col)) if pd.notnull(row.get(delivery_count_col)) else ''
         )
-        html_content += f"<tr data-camping='{camping_attr}' data-checked-in-last-7-days='{checked_in_last_7_days_attr}' data-delivery-count-per-buildings='{delivery_count_per_buildings}' data-delivery-count='{delivery_count}'>"
+        html_content += f"<tr data-camping='{camping_attr}' data-building-count='{building_count_attr}' data-checked-in-last-7-days='{checked_in_last_7_days_attr}' data-delivery-count-per-buildings='{delivery_count_per_buildings}' data-delivery-count='{delivery_count}'>"
         for col in reduced_columns:
             value = row[col]
-            # For Camping column, show 'Yes'/'No' instead of True/False
-            if col == 'Camping':
-                formatted_value = 'Yes' if camping_attr == 'true' else 'No'
-            elif pd.isna(value):
+            if pd.isna(value):
                 formatted_value = ""
             else:
                 formatted_value = str(value)
@@ -925,23 +925,34 @@ def create_html_report(coverage_data):
                 $.fn.dataTable.ext.search.push(
                     function(settings, data, dataIndex) {{
                         if (settings.nTable.id !== 'delivery-units-table') return true;
+                        
+                        
+                        //get all filter values
+                        var campingThreshold = parseFloat($('#camping-threshold').val()) || 12;
                         var filterLast7 = $('#filter-last7').prop('checked');
                         var filterCamping = $('#filter-camping').prop('checked');
 
                         // Get row node and data attributes
                         var rowNode = duTable.row(dataIndex).node();
+                        var deliveryCountBuildings = parseFloat($(rowNode).attr('data-building-count'));
+                        var deliveryCount = parseFloat($(rowNode).attr('data-delivery-count'));
                         var campingAttr = $(rowNode).attr('data-camping');
                         var checkedInLast7Attr = $(rowNode).attr('data-checked-in-last-7-days');
 
-                        // Filter by Camping Only (use Camping column directly)
-                        if (filterCamping) {{
-                            if (campingAttr !== 'true') return false;
-                        }}
                         // Filter by Checked In Last 7 Days
                         if (filterLast7) {{
                             if (checkedInLast7Attr !== 'true') return false;
                         }}
+
+                        if (filterCamping) {{
+                            var isCamping = false;
+                            if ( !isNaN(deliveryCount) && !isNaN(deliveryCountBuildings)) {{
+                                isCamping = ( deliveryCount/deliveryCountBuildings >= campingThreshold && deliveryCount > 20);
+                                }}
+                            if (!isCamping) return false;
+                        }}
                         return true;
+                    
                     }}
                 );
 

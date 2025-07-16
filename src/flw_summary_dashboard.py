@@ -351,6 +351,8 @@ def _generate_pathway_map(coverage_data_objects, target_flw_ids):
                     
                     segments.append(segment)
         
+
+
         if not segments:
             return html.P("No pathway segments found for mapping")
         
@@ -404,7 +406,7 @@ def _generate_pathway_map(coverage_data_objects, target_flw_ids):
         # Add legend
         legend_html = '''
         <div style="position: fixed; 
-                    bottom: 50px; left: 50px; width: 200px; height: 90px; 
+                    top: 50px; right: 50px; width: 200px;  
                     background-color: white; border:2px solid grey; z-index:9999; 
                     font-size:14px; padding: 10px">
         <p><b>Pathway Legend</b></p>
@@ -421,7 +423,7 @@ def _generate_pathway_map(coverage_data_objects, target_flw_ids):
         
         return html.Iframe(
             srcDoc=map_html,
-            style={'width': '100%', 'height': '500px', 'border': 'none'},
+            style={'width': '100%', 'border': 'none', 'min-height': '800px', 'overflow': 'hidden'},
             title="FLW Pathway Map"
         )
         
@@ -1261,8 +1263,14 @@ def create_flw_dashboard(coverage_data_objects):
     def update_recent_unusual_segments(selected_orgs):
         """Update the recent unusual segments table when organization selection changes."""
         try:
+            print(selected_orgs)
+            print(coverage_data_objects.items())
             # Generate recent unusual segments data
-            unusual_segments = _generate_recent_unusual_segments(coverage_data_objects)
+            if(selected_orgs == None):
+                unusual_segments = _generate_recent_unusual_segments(coverage_data_objects)
+            else:
+                filtered_coverage_data_objects = {k: v for k, v in coverage_data_objects.items() if k in selected_orgs}
+                unusual_segments = _generate_recent_unusual_segments(filtered_coverage_data_objects)
             
             if not unusual_segments:
                 return html.P("No unusual segments found in the past 7 days.", style={

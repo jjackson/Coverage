@@ -1255,9 +1255,6 @@ def superset_query_with_pagination_as_df(
                 "tmp_table_name": ""
             }
             
-            # print(execute_url)
-            # print(headers)
-            # print(payload)
             response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
             result = response.json()
 
@@ -1279,9 +1276,8 @@ def superset_query_with_pagination_as_df(
             all_data.extend(chunk_data)
             chunk_rows = len(chunk_data)
             total_rows += chunk_rows
-            
+            print("Total Rows : " + str(total_rows))
             # If we got fewer rows than chunk_size, we've reached the end
-            print("Chunk Rows:" + str(chunk_rows))
             if chunk_rows < chunk_size:
                 break
             

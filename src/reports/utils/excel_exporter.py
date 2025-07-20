@@ -26,7 +26,14 @@ class ExcelExporter:
             wb.remove(wb.active)
             
             for tab_name, df in data_dict.items():
+                self.log(f"Processing tab: {tab_name}")
+                self.log(f"  Type: {type(df)}")
+                if hasattr(df, 'shape'):
+                    self.log(f"  Shape: {df.shape}")
+                else:
+                    self.log(f"  No shape attribute (not a DataFrame?)")
                 if df is None or len(df) == 0:
+                    self.log(f"  Skipping tab '{tab_name}' (empty or None)")
                     continue
                 
                 # Fix timezone issues before processing
@@ -40,7 +47,7 @@ class ExcelExporter:
                     ws.append(r)
                 
                 # Format the sheet
-                self._format_worksheet(ws, df_clean)
+                self._format_worksheet(ws, df_clean, tab_name)
                 
                 self.log(f"Added sheet: {tab_name} ({len(df_clean)} rows)")
             
@@ -51,6 +58,8 @@ class ExcelExporter:
             
         except Exception as e:
             self.log(f"Error creating Excel file: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
             return None
     
     def _fix_timezone_issues(self, df):
@@ -94,9 +103,12 @@ class ExcelExporter:
             clean_name = clean_name.replace(char, '_')
         return clean_name[:31]
     
-    def _format_worksheet(self, ws, df):
+    def _format_worksheet(self, ws, df, tab_name=None):
         """Apply formatting to worksheet"""
+        self.log(f"Formatting worksheet for tab: {tab_name}")
+        self.log(f"  Worksheet max_row: {ws.max_row}, max_column: {ws.max_column}")
         if ws.max_row == 0:
+            self.log(f"  Worksheet is empty, skipping formatting.")
             return
         
         # Format header row
@@ -107,28 +119,49 @@ class ExcelExporter:
             cell.fill = header_fill
             cell.font = header_font
         
-        # Set frozen panes
-        # Freeze header row and first few columns (typically ID columns)
-        freeze_col = 'C'  # Default to column C (first 2 columns frozen)
-        
-        # Adjust freeze column based on content
+        # Set frozen panes safely
+        from openpyxl.utils import get_column_letter
+        num_cols = len(df.columns)
+        self.log(f"  DataFrame columns: {num_cols}")
+        # Default: freeze after first 2 columns (i.e., at column 3, which is 'C')
+        freeze_at_col = 3
         if 'flw_id' in df.columns or any('id' in col.lower() for col in df.columns[:3]):
-            freeze_col = 'D' if len(df.columns) > 3 else 'C'
-        
-        ws.freeze_panes = f'{freeze_col}2'  # Freeze first columns and header row
+            freeze_at_col = 4 if num_cols > 3 else 3
+        # Only freeze if the column exists
+        if num_cols >= freeze_at_col:
+            freeze_col_letter = get_column_letter(freeze_at_col)
+            ws.freeze_panes = f'{freeze_col_letter}2'
+            self.log(f"  Set freeze_panes to {freeze_col_letter}2")
+        else:
+            ws.freeze_panes = 'A2'
+            self.log(f"  Set freeze_panes to A2")
         
         # Auto-adjust column widths (with reasonable limits)
-        for column in ws.columns:
-            max_length = 0
-            column_letter = get_column_letter(column[0].column)
-            
-            for cell in column:
+        if ws.max_column > 0:
+            for column in ws.columns:
+                max_length = 0
+                # Defensive: skip if column is empty
+                if not column or not hasattr(column[0], 'column'):
+                    self.log(f"  Skipping empty or invalid column in tab {tab_name}")
+                    continue
+                if hasattr(column[0], 'column'):
+                    column_index = column[0].column
+                elif hasattr(column[0], 'col_idx'):
+                    column_index = column[0].col_idx
+                else:
+                    # fallback or skip
+                    continue
+                column_letter = column_index
+                #column_letter = get_column_letter(column_index)
+                for cell in column:
+                    try:
+                        if cell.value is not None and len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except Exception as e:
+                        self.log(f"  Error measuring cell value length in column {column_letter}: {e}")
+                # Set width with reasonable bounds
+                adjusted_width = min(max(max_length + 2, 10), 50)
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            
-            # Set width with reasonable bounds
-            adjusted_width = min(max(max_length + 2, 10), 50)
-            ws.column_dimensions[column_letter].width = adjusted_width
+                    ws.column_dimensions[column_letter].width = adjusted_width
+                except Exception as e:
+                    self.log(f"  Error setting column width for {column_letter} in tab {tab_name}: {e}")

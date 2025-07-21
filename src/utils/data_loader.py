@@ -1156,7 +1156,7 @@ def superset_query_with_pagination_as_df(
     chunk_size: int = constants.SQL_CHUNK_SIZE,
     timeout: int = constants.API_TIMEOUT_LIMIT,
     verbose: bool = False
-) -> str:
+) -> pd.DataFrame:
     """
     Export all data from a Superset saved query using pagination to bypass the 10,000 row limit.
     
@@ -1304,7 +1304,7 @@ def superset_query_with_pagination_as_df(
         df = pd.DataFrame(all_data, columns=column_names)
         
             
-        return str(df)
+        return df
         
     except Exception as e:
         raise RuntimeError(f"Error exporting data from Superset: {str(e)}")

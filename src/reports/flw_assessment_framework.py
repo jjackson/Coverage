@@ -243,7 +243,11 @@ class LowYoungChildAssessment(Assessment):
         
         # Get valid age data
         age_data = visits_df['childs_age_in_month'].dropna()
+        
         # Filter reasonable age range (0-120 months = 0-10 years)
+        age_data = pd.to_numeric(age_data, errors='coerce')
+        if not isinstance(age_data, pd.Series):
+            age_data = pd.Series([age_data])
         age_data = age_data[(age_data >= 0) & (age_data <= 120)]
         
         # Check minimum threshold

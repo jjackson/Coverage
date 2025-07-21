@@ -89,6 +89,10 @@ class FLWAgeAnalyzer:
             
             # Get valid age data
             valid_age_data = flw_data[child_age_col].dropna()
+            
+            valid_age_data = pd.to_numeric(valid_age_data, errors='coerce')
+            if not isinstance(valid_age_data, pd.Series):
+                valid_age_data = pd.Series([valid_age_data])
             valid_age_data = valid_age_data[(valid_age_data >= 0) & (valid_age_data <= 120)]  # Reasonable range
             
             result_row = {
@@ -164,6 +168,9 @@ class FLWAgeAnalyzer:
             
             # Get valid age data
             valid_age_data = opp_data[child_age_col].dropna()
+            valid_age_data = pd.to_numeric(valid_age_data, errors='coerce')
+            if not isinstance(valid_age_data, pd.Series):
+                valid_age_data = pd.Series([valid_age_data])
             valid_age_data = valid_age_data[(valid_age_data >= 0) & (valid_age_data <= 120)]  # Reasonable range
             
             result_row = {

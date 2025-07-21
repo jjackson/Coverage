@@ -197,7 +197,7 @@ class FLWDataQualityReport(BaseReport):
         
         # Add aggressive noise (between +2cm and +6cm only - always positive to break patterns)
         noise = np.random.uniform(noise_range_min, noise_range_max, size=tamper_count)
-        df_tampered.loc[tamper_indices, muac_col] += noise
+        df_tampered.loc[tamper_indices, muac_col] += str(noise)
         
         self.log(f"Applied extreme tampering to {tamper_count} MUAC measurements ({tamper_pct}% of {len(valid_muac_indices)} valid measurements)")
         self.log(f"Noise range: +{noise_range_min}cm to +{noise_range_max}cm (always positive), Random seed: {seed}")
@@ -343,8 +343,8 @@ class FLWDataQualityReport(BaseReport):
         excel_data = {}
         
         # Get parameters
-        batch_size = int(self.get_parameter_value('batch_size', '300'))
-        min_size = int(self.get_parameter_value('min_size', '100'))
+        batch_size = int(self.get_parameter_value('batch_size', '300') or '300')
+        min_size = int(self.get_parameter_value('min_size', '100') or '100')
         export_csv = self.get_parameter_value('export_csv', True)
         include_tampering = self.get_parameter_value('include_tampering', True)
         
@@ -685,7 +685,7 @@ class FLWDataQualityReport(BaseReport):
         except Exception as e:
             self.log(f"Error during data quality assessment: {str(e)}")
             raise
-        
+        self.excel_data = excel_data
         return output_files
     
     def _create_assessment_summary(self, assessment_results, population_stats, batch_size, min_size):

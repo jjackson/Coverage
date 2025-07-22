@@ -1,9 +1,12 @@
 from dotenv import load_dotenv, find_dotenv
 import os, constants
+import pickle
 from src.utils import data_loader
 from src.sqlqueries.sql_queries import SQL_QUERIES
 import pandas as pd
 from src.reports.flw_data_quality_report import FLWDataQualityReport
+from src.org_summary import generate_summary
+from src.coverage_master import load_opportunity_domain_mapping
 
 
 def main():
@@ -71,6 +74,49 @@ def main():
     else:
         print("No 'Quality Issues Found' data to export.")
 
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Load coverage data from pickle file
+    pickle_path = os.path.join(script_dir, 'coverage_data.pkl')
+    if not os.path.exists(pickle_path):
+        print("Error: coverage_data.pkl not found. Please run run_coverage.py first.")
+        return
+        
+    try:
+        with open(pickle_path, 'rb') as f:
+            coverage_data_objects = pickle.load(f)
+            
+        # Create the dashboard app
+        summary_df, topline_stats = generate_summary(coverage_data_objects, group_by='flw')
+        opportunity_to_domain_mapping = load_opportunity_domain_mapping()
+        if not isinstance(summary_df, pd.DataFrame):
+            summary_df = pd.DataFrame(summary_df)
+        valid_opportunities = list(opportunity_to_domain_mapping.values())
+        summary_df = summary_df[summary_df['opportunity'].isin(valid_opportunities)]
+        
+        #export to excel
+        if summary_df is not None and not summary_df.empty:
+            output_path = os.path.join(downloads_dir, "summary_df_only.xlsx")
+            with pd.ExcelWriter(output_path) as writer:
+                summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            print(f"Generated file: {output_path}")
+        
+    except Exception as e:
+        print(f"Error : {str(e)}")
+
+    # After loading/creating summary_df and quality_issues_df
+    if quality_issues_df is not None and not quality_issues_df.empty:
+        #making sure that flw_id in both dataframes are of type string
+        summary_df['flw_id'] = summary_df['flw_id'].astype(str)
+        quality_issues_df['flw_id'] = quality_issues_df['flw_id'].astype(str)
+        merged_df = pd.merge(summary_df, quality_issues_df, on='flw_id', how='inner')
+        output_path = os.path.join(downloads_dir, "merged_summary_quality_issues.xlsx")
+        with pd.ExcelWriter(output_path) as writer:
+            merged_df.to_excel(writer, sheet_name="Merged", index=False)
+        print(f"Generated file: {output_path}")
+    else:
+        print("No 'Quality Issues Found' data to merge with summary_df.")
 
 if __name__ == "__main__":
     main()

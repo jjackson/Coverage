@@ -29,7 +29,7 @@ def main():
 
 
     # Output directory (string path)
-    output_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
 
     # Simple logging function
     def log_func(msg):
@@ -56,22 +56,20 @@ def main():
     params_frame = ParamsFrame()
 
     # Create the report object
-    report = FLWDataQualityReport(df, output_dir, log_func, params_frame)
+    report = FLWDataQualityReport(df, downloads_dir, log_func, params_frame)
 
     # Call the generate method
     output_files = report.generate()
-
-    quality_issues_df = None
+    
+    # Export "Quality Issues Found"
     quality_issues_df = report.excel_data.get('Quality Issues Found')
-
     if quality_issues_df is not None and not quality_issues_df.empty:
-        output_path = output_path = os.path.join(os.path.expanduser("~"), "Downloads", "quality_issues_found_only.xlsx")
+        output_path = os.path.join(downloads_dir, "quality_issues_found_only.xlsx")
         with pd.ExcelWriter(output_path) as writer:
             quality_issues_df.to_excel(writer, sheet_name="Quality Issues Found", index=False)
-            print(f"Generated file with only 'Quality Issues Found' tab: {output_path}")
+        print(f"Generated file: {output_path}")
     else:
         print("No 'Quality Issues Found' data to export.")
-
 
 
 if __name__ == "__main__":

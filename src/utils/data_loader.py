@@ -769,6 +769,18 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
 
     return data
 
+def get_coverage_data_service_only(service_df: pd.DataFrame) -> 'CoverageData':
+    """
+    Load coverage data from service delivery points only (no delivery units)
+    
+    Args:
+        service_df: DataFrame containing service delivery GPS coordinates
+        
+    Returns:
+        CoverageData object with only service delivery points and FLWs
+    """
+    return CoverageData.load_service_delivery_only(service_df)
+
 def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None, 
                                      file_prefix: str = "export", 
                                      file_id: str = None,

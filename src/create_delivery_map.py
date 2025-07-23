@@ -106,21 +106,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     flws = coverage_data.unique_flw_names
     status_values = coverage_data.unique_status_values
     
-    # Create a mapping between FLW CommCare IDs and FLW names
-    flw_id_to_name_map = {}
-    flw_name_to_id_map = {}
-    
-    # Try to get existing mapping from coverage_data if available
-    if hasattr(coverage_data, 'flw_commcare_id_to_name_map') and coverage_data.flw_commcare_id_to_name_map:
-        flw_id_to_name_map = coverage_data.flw_commcare_id_to_name_map
-        # Create the reverse mapping
-        flw_name_to_id_map = {name: id for id, name in flw_id_to_name_map.items()}
-    # Fallback to using flws objects if available
-    elif hasattr(coverage_data, 'flws'):
-        for flw_name, flw_obj in coverage_data.flws.items():
-            if hasattr(flw_obj, 'id') and flw_obj.id:
-                flw_id_to_name_map[flw_obj.id] = flw_name
-                flw_name_to_id_map[flw_name] = flw_obj.id
+    # Get FLW ID/name mappings using the clean methods
+    flw_id_to_name_map = coverage_data.get_flw_id_to_name_map()
+    flw_name_to_id_map = coverage_data.get_flw_name_to_id_map()
     
     # Debug print
     # print(f"Unique status values: {status_values}")
@@ -168,6 +156,24 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             for key, value in list(feature['properties'].items()):
                 feature['properties'][key] = convert_to_serializable(value)
     
+    # Debug: Print FLW colors mapping
+    # print("FLW Colors Mapping:")
+    # for flw, color in flw_colors.items():
+    #     print(f"  {flw}: {color}")
+
+    # # Debug: Print a sample of service points with their assigned colors
+    # if service_points_geojson is not None:
+    #     print("\nSample Service Points with Colors:")
+    #     features = service_points_geojson.get('features', [])
+    #     for i, feature in enumerate(features[:10]):  # Print up to 10 service points
+    #         flw_name = feature['properties'].get('flw_name')
+    #         flw_commcare_id = feature['properties'].get('flw_commcare_id')
+    #         color = feature['properties'].get('color')
+    #         print(f"  Service Point {i+1}: FLW Name: {flw_name}, FLW CommCare ID: {flw_commcare_id}, Color: {color}")
+    #     if len(features) > 10:
+    #         print(f"  ... ({len(features) - 10} more service points not shown)")
+    # else:
+    #     print("No service points geojson available for debugging.")
     
     # Create HTML with embedded Leaflet map
     html_content = f"""
@@ -992,7 +998,29 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             }}
             
             // Fit map to all features
-            map.fitBounds(L.geoJSON(geojsonData).getBounds());
+            // Check if we have delivery units (geojsonData) or need to use service points
+            if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {{
+                // Use delivery units for bounds if available
+                map.fitBounds(L.geoJSON(geojsonData).getBounds());
+            }} else if (servicePointsData && servicePointsData.features && servicePointsData.features.length > 0) {{
+                // For service-only maps, zoom to first valid service delivery point
+                let firstValidPoint = null;
+                for (let feature of servicePointsData.features) {{
+                    const coords = feature.geometry.coordinates;
+                    if (coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {{
+                        firstValidPoint = [coords[1], coords[0]]; // [lat, lng] for Leaflet
+                        break;
+                    }}
+                }}
+                if (firstValidPoint) {{
+                    map.setView(firstValidPoint, 10); // Zoom level 10 for local area view
+                }} else {{
+                    map.setView([9.0820, 8.6753], 6); // Fallback to Nigeria center
+                }}
+            }} else {{
+                // Fallback to Nigeria center if no data available
+                map.setView([9.0820, 8.6753], 6);
+            }}
             
             // Add FLW toggle controls
             const flwTogglesContainer = document.getElementById('flw-toggles');
@@ -1080,6 +1108,10 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     }}
                 }});
             }}
+            
+            // Debug: Check what FLW data is available in JavaScript
+            console.log("JavaScript Debug - flwIdToNameMap:", flwIdToNameMap);
+            console.log("JavaScript Debug - Object.entries count:", Object.entries(flwIdToNameMap).length);
             
             // Organize by FLW names but store IDs for filtering
             Object.entries(flwIdToNameMap).forEach(([flwId, flwName]) => {{
@@ -1785,7 +1817,29 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     }});
                     
                     // If showing all, fit to all features
-                    map.fitBounds(L.geoJSON(geojsonData).getBounds());
+                    // Check if we have delivery units (geojsonData) or need to use service points
+                    if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {{
+                        // Use delivery units for bounds if available
+                        map.fitBounds(L.geoJSON(geojsonData).getBounds());
+                    }} else if (servicePointsData && servicePointsData.features && servicePointsData.features.length > 0) {{
+                        // For service-only maps, zoom to first valid service delivery point
+                        let firstValidPoint = null;
+                        for (let feature of servicePointsData.features) {{
+                            const coords = feature.geometry.coordinates;
+                            if (coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {{
+                                firstValidPoint = [coords[1], coords[0]]; // [lat, lng] for Leaflet
+                                break;
+                            }}
+                        }}
+                        if (firstValidPoint) {{
+                            map.setView(firstValidPoint, 10); // Zoom level 10 for local area view
+                        }} else {{
+                            map.setView([9.0820, 8.6753], 6); // Fallback to Nigeria center
+                        }}
+                    }} else {{
+                        // Fallback to Nigeria center if no data available
+                        map.setView([9.0820, 8.6753], 6);
+                    }}
                 }} else {{
                     // Create a bounds object to calculate the extent of the selected service area
                     const bounds = L.latLngBounds();

@@ -65,5 +65,31 @@ LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_us
 LEFT JOIN users_user ON opportunity_uservisit.user_id = users_user.id
 LEFT JOIN opportunity_deliverunit ON opportunity_uservisit.deliver_unit_id = opportunity_deliverunit.id
 WHERE opportunity_opportunity.name IN ('ZEGCAWIS | CHC Givewell Scale Up')
-ORDER BY opportunity_uservisit.visit_date;"""
+ORDER BY opportunity_uservisit.visit_date;""", 
+
+
+"sql_fetch_average_time_form_submission_last_7_days" :"""SELECT
+  oo.name AS opportunity_name,
+  uv.user_id AS flw_id,
+  u.name AS flw_name,
+  uv.form_json -> 'metadata'->>'userID' AS cchq_user_id,
+  ROUND(AVG(
+    EXTRACT(EPOCH FROM (
+      (uv.form_json -> 'metadata' ->> 'timeEnd')::timestamp - 
+      (uv.form_json -> 'metadata' ->> 'timeStart')::timestamp
+    )) / 60
+  ), 2) AS avg_duration_minutes
+FROM opportunity_uservisit uv
+LEFT JOIN opportunity_opportunity oo 
+    ON oo.id = uv.opportunity_id
+LEFT JOIN users_user u 
+    ON uv.user_id = u.id
+WHERE 
+  oo.name LIKE '%Scale Up%'
+  AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY uv.user_id, u.name, oo.name, cchq_user_id
+ORDER BY opportunity_name, flw_name;""", 
+
+
+"sql_fetch_userid_flwid_mapping" : """Select id as flw_id ,name, lower(username) as hq_username from users_user;"""
 }

@@ -8,6 +8,25 @@ from src.reports.flw_data_quality_report import FLWDataQualityReport
 from src.org_summary import generate_summary
 from src.coverage_master import load_opportunity_domain_mapping
 
+def merging_df(df1,df2,on_str):
+    if df1 is not None and not df1.empty and df2 is not None and not df2.empty :
+        #making sure that flw_id in both dataframes are of type string
+        df1[on_str] = df1[on_str].astype(str)
+        df2[on_str] = df2[on_str].astype(str)
+        merged_df = pd.merge(df1, df2, on=on_str, how='inner')
+    else:
+        print("Either DF1 or DF2 is empty. Cannot generate the report")
+    return merged_df
+
+def output_as_excel_in_downloads(df, file_name):
+    # Output directory (string path)
+    downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+
+    output_path = os.path.join(downloads_dir, file_name +".xlsx")
+    with pd.ExcelWriter(output_path) as writer:
+        df.to_excel(writer, sheet_name="Merged", index=False)
+    print(f"Generated file: {output_path}")
+
 def get_superset_data(sql):
     
     dotenv_path=find_dotenv("./src/.env")
@@ -68,9 +87,6 @@ def main():
     # Example DataFrame (replace with your actual data)
     data_quality_df = get_superset_data(data_quality_sql)  
 
-    # Output directory (string path)
-    downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-
     # Simple logging function
     def log_func(msg):
         print(msg)
@@ -96,6 +112,7 @@ def main():
     params_frame = ParamsFrame()
 
     # Create the report object
+    downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
     report = FLWDataQualityReport(data_quality_df, downloads_dir, log_func, params_frame)
 
     # Call the generate method
@@ -109,12 +126,22 @@ def main():
         summary_df['flw_id'] = summary_df['flw_id'].astype(str)
         quality_issues_df['flw_id'] = quality_issues_df['flw_id'].astype(str)
         merged_df = pd.merge(summary_df, quality_issues_df, on='flw_id', how='inner')
-        output_path = os.path.join(downloads_dir, "merged_summary_quality_issues_new.xlsx")
-        with pd.ExcelWriter(output_path) as writer:
-            merged_df.to_excel(writer, sheet_name="Merged", index=False)
-        print(f"Generated file: {output_path}")
     else:
-        print("No 'Quality Issues Found' data to merge with summary_df.")
+        print("No 'Quality Issues Found OR Summary Data Found'. Try running coverage first")
+    
+    #Last 7 days average Form Submission Time
+    average_form_sbmission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
+    average_form_submission_last_7_days_df = get_superset_data(average_form_sbmission_sql)
+    #output_as_excel_in_downloads(average_form_submission_last_7_days_df, "average_form_submission_last_7_days_df")
+    merged_df=merging_df(merged_df, average_form_submission_last_7_days_df,"flw_id")
+    
+    #Mapping flw_id on CCC with user_id on cchq
+    flwid_hquser_id_mapping_sql = SQL_QUERIES["sql_fetch_userid_flwid_mapping"]
+    flwid_hquser_id_mapping_df = get_superset_data(flwid_hquser_id_mapping_sql)
+    #output_as_excel_in_downloads(flwid_hquser_id_mapping_df,"flwid_hquser_id_mapping_df")
+    merged_df=merging_df(merged_df, flwid_hquser_id_mapping_df,"flw_id")
+    output_as_excel_in_downloads(merged_df,"final_output_debug")
+
 
 if __name__ == "__main__":
     main()

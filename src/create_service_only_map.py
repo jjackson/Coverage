@@ -3,19 +3,20 @@ import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 from typing import Optional
+import pandas as pd
 
 # Handle imports based on how the module is used
 try:
     # When imported as a module
     from .utils import data_loader
-    from .sqlqueries import sql_queries
+    from .sqlqueries.sql_queries import SQL_QUERIES
     from .create_delivery_map import create_leaflet_map
 except ImportError:
     # When run as a script
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from src.utils import data_loader
-    from src.sqlqueries import sql_queries
+    from src.sqlqueries.sql_queries import SQL_QUERIES
     from src.create_delivery_map import create_leaflet_map
 
 def create_service_only_map(output_filename: Optional[str] = None) -> str:
@@ -58,28 +59,23 @@ def create_service_only_map(output_filename: Optional[str] = None) -> str:
         raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
     
     print("Loading service delivery data from Superset...")
+
+    # Export data from Superset using the services_only_sql query
+    export_filename = f"service_only_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    csv_path = data_loader.export_superset_query_with_pagination(
+        superset_url=superset_url,
+        sql_query=SQL_QUERIES["services_only_sql"],
+        username=superset_username,
+        password=superset_password,
+        output_filename=export_filename,
+        verbose=True
+    )
+        
+    # Load the exported CSV data
+    service_df = pd.read_csv(csv_path)
     
-    # Export data from Superset using the solina_100k_uservisit query
-    try:
-        export_filename = f"service_only_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        csv_path = data_loader.export_superset_query_with_pagination(
-            superset_url=superset_url,
-            sql_query=sql_queries.SQL_QUERIES["solina_100k_uservisit"],
-            username=superset_username,
-            password=superset_password,
-            output_filename=export_filename,
-            verbose=True
-        )
-        
-        # Load the exported CSV data
-        import pandas as pd
-        service_df = pd.read_csv(csv_path)
-        
-        print(f"Loaded {len(service_df)} service delivery points from Superset")
-        
-    except Exception as e:
-        raise RuntimeError(f"Failed to load service delivery data from Superset: {str(e)}")
-    
+    print(f"Loaded {len(service_df)} service delivery points from Superset")
+
     # Create coverage data object with only service delivery data
     print("Creating coverage data object...")
 
@@ -120,21 +116,26 @@ def main():
     to test the functionality.
     """
     
-    print("🚀 Starting service-only map generation...")
+    print("Starting service-only map generation...")
     print("=" * 50)
     
     # Generate automatic filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"service_only_map_{timestamp}"
+    
+    # Create output directory with timestamp
+    output_dir = f"service_map_output_{timestamp}"
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Created output directory: {output_dir}")
+    
+    # Set output filename with directory path
+    output_filename = os.path.join(output_dir, f"service_only_map_{timestamp}")
     
     # Create the service-only map with automatic naming
     map_file = create_service_only_map(output_filename=output_filename)
     
     print("=" * 50)
-    print("🎉 Success! Map generation completed.")
-    print(f"📍 Map file: {map_file}")
-    print(f"🌐 Open the file in a web browser to view the interactive map.")
-    
+    print("Success: Map generation completed.")
+
     # Optionally open in browser
     import webbrowser
     webbrowser.open(f"file://{os.path.abspath(map_file)}")

@@ -22,7 +22,7 @@ SQL_QUERIES = {
         "WHERE opportunity_opportunity.id IN (516, 517);"
     ),
 
-    "solina_100k_uservisit": (
+    "services_only_sql": (
         "SELECT "
         "opportunity_uservisit.id as visit_id, "
         "opportunity_opportunity.name as opportunity_name, "
@@ -42,7 +42,7 @@ SQL_QUERIES = {
         "FROM public.opportunity_uservisit "
         "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
         "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (411);"
+        "WHERE opportunity_opportunity.id IN (595);"
     ),
 
     "kmc_visit_query": (

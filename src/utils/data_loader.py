@@ -1039,7 +1039,7 @@ def export_superset_query_with_pagination(
         if 'session' in locals():
             session.close()
 
-def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password, sql_query) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from Superset and group by unique opportunity_name values.
     
@@ -1058,7 +1058,7 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         # Use the new export function to get the data
         csv_path = export_superset_query_with_pagination(
             superset_url=superset_url,
-            sql_query=sql_queries.SQL_QUERIES["opportunity_uservisit"],
+            sql_query=sql_query,
             username=superset_username,
             password=superset_password
         )

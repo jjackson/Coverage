@@ -34,6 +34,8 @@ def convert_to_serializable(obj):
         return obj
 
 def generate_contrasting_colors(n):
+    import colorsys
+    
     # Predefined high-contrast color palette
     base_colors = [
         "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF",  # Primary and secondary
@@ -46,33 +48,28 @@ def generate_contrasting_colors(n):
     
     # If we need more colors than we have predefined
     if n > len(base_colors):
-        # Generate random distinct colors for the remaining ones
-        existing_colors = set(base_colors)
-        while len(existing_colors) < n:
-            # Generate random RGB with sufficient distance from existing colors
-            r = random.randint(0, 255)
-            g = random.randint(0, 255)
-            b = random.randint(0, 255)
-            # Convert to hex
-            color = "#{:02x}{:02x}{:02x}".format(r, g, b)
-            
-            # Check if the color is sufficiently different from existing ones
-            # by measuring Euclidean distance in RGB space
-            min_distance = float('inf')
-            for existing in existing_colors:
-                # Convert hex to RGB
-                er = int(existing[1:3], 16)
-                eg = int(existing[3:5], 16)
-                eb = int(existing[5:7], 16)
-                # Calculate distance
-                distance = ((r - er) ** 2 + (g - eg) ** 2 + (b - eb) ** 2) ** 0.5
-                min_distance = min(min_distance, distance)
-            
-            # Add if sufficiently different
-            if min_distance > 100:  # Threshold for difference
-                existing_colors.add(color)
+        colors = list(base_colors)
+        needed = n - len(base_colors)
         
-        colors = list(existing_colors)
+        # Generate additional colors systematically using HSV space for better distribution
+        for i in range(needed):
+            # Use golden ratio to distribute hues evenly
+            hue = (i * 0.618033988749895) % 1.0  # Golden ratio for good distribution
+            
+            # Vary saturation and value to create more distinct colors
+            if i < needed // 2:
+                saturation = 0.8 + (i % 3) * 0.1  # 0.8, 0.9, 1.0
+                value = 0.7 + (i % 4) * 0.1       # 0.7, 0.8, 0.9, 1.0
+            else:
+                saturation = 0.5 + ((i - needed // 2) % 3) * 0.15  # 0.5, 0.65, 0.8
+                value = 0.4 + ((i - needed // 2) % 4) * 0.15       # 0.4, 0.55, 0.7, 0.85
+            
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+            
+            # Convert to hex
+            color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+            colors.append(color)
     else:
         colors = base_colors[:n]
     

@@ -5,12 +5,10 @@ import geopandas as gpd
 from geopy.distance import geodesic
 import numpy as np
 import time
-
-if TYPE_CHECKING:
-    from .service_area import ServiceArea
-    from .delivery_unit import DeliveryUnit
-    from .service_delivery_point import ServiceDeliveryPoint
-    from .flw import FLW
+from .service_delivery_point import ServiceDeliveryPoint
+from .flw import FLW
+from .service_area import ServiceArea
+from .delivery_unit import DeliveryUnit
 
 
 class CoverageData:
@@ -132,6 +130,44 @@ class CoverageData:
     def _compute_metadata_from_service_delivery_data(self):
         """Precompute metadata to avoid redundant processing, must be called after service delivery data is loaded"""
         self._compute_du_completion_dates()
+
+    def _compute_service_only_metadata(self):
+        """Precompute metadata for service-only projects (no delivery units)"""
+        # No service areas for service-only projects
+        self.unique_service_area_ids = []
+        
+        # Create FLW list from service points
+        self.unique_flw_names = sorted(list(self.flws.keys()))
+        
+        # Create status list from service points
+        status_values = set()
+        for point in self.service_points:
+            if point.status:
+                status_values.add(point.status)
+        self.unique_status_values = sorted(list(status_values))
+        
+        # Count service points by status
+        self.delivery_status_counts = {}
+        for status in self.unique_status_values:
+            self.delivery_status_counts[status] = sum(1 for point in self.service_points if point.status == status)
+            
+        # Pre-compute FLW status counts based on service points
+        for flw in self.flws.values():
+            flw.status_counts = {}
+            for status in self.unique_status_values:
+                flw.status_counts[status] = 0
+        
+        # Calculate status counts per FLW from service points
+        for point in self.service_points:
+            flw_id = point.flw_commcare_id or point.flw_id
+            if flw_id in self.flws and point.status:
+                self.flws[flw_id].status_counts[point.status] = self.flws[flw_id].status_counts.get(point.status, 0) + 1
+        
+        # Initialize empty containers for DU-related data (not applicable for service-only)
+        self.service_area_progress = {}
+        self.service_area_building_density = {}
+        self.flw_service_area_stats = {}
+        self.travel_distances = {}
 
     def _compute_service_area_progress(self):
         """Pre-compute service area progress statistics"""
@@ -452,11 +488,6 @@ class CoverageData:
         Args:
             delivery_units_df: DataFrame containing delivery units data from CommCare
         """
-        # Import here to avoid circular imports
-        from .delivery_unit import DeliveryUnit
-        from .service_area import ServiceArea
-        from .flw import FLW
-        
         data = cls()
         
         # Store the processed dataframe
@@ -510,6 +541,102 @@ class CoverageData:
         data._compute_metadata_from_delivery_unit_data()
         
         return data
+
+    @classmethod
+    def load_service_delivery_only(cls, service_df: pd.DataFrame) -> 'CoverageData':
+        """
+        Load coverage data from service delivery points only (no delivery units required)
+        
+        Args:
+            service_df: DataFrame containing service delivery GPS coordinates
+        """
+        data = cls()
+        
+        print(f"Loading service delivery only data: {len(service_df)} points in DataFrame")
+        
+        # Track skipped points
+        skipped_points = 0
+        
+        # Create service delivery points and FLWs directly from service data
+        for _, row in service_df.iterrows():
+            row_dict = row.to_dict()
+            
+            try:
+                point = ServiceDeliveryPoint.from_dict(row_dict)
+                data.service_points.append(point)
+                
+                # Create or update FLW
+                flw_id = point.flw_commcare_id or point.flw_id
+                if flw_id and flw_id not in data.flws:
+                    data.flws[flw_id] = FLW(id=flw_id, name=point.flw_name or flw_id)
+                
+                # Update FLW information and add service point
+                if flw_id and flw_id in data.flws:
+                    flw = data.flws[flw_id]
+                    if point.flw_name:
+                        flw.name = point.flw_name
+                    if point.flw_cc_username:
+                        flw.cc_username = point.flw_cc_username
+                    flw.service_points.append(point)
+                    
+                    # Update FLW's active dates if visit_date is present
+                    if point.visit_date:
+                        visit_date = pd.to_datetime(point.visit_date).date()
+                        if visit_date not in flw.dates_active:
+                            flw.dates_active.append(visit_date)
+                        
+                        # Update first and last service delivery dates
+                        if (flw.first_service_delivery_date is None or 
+                            visit_date < flw.first_service_delivery_date):
+                            flw.first_service_delivery_date = visit_date
+                            
+                        if (flw.last_service_delivery_date is None or 
+                            visit_date > flw.last_service_delivery_date):
+                            flw.last_service_delivery_date = visit_date
+                
+                # Add to the FLW CommCare ID to Name mapping if both values are present
+                if point.flw_commcare_id and point.flw_name:
+                    data.flw_commcare_id_to_name_map[point.flw_commcare_id] = point.flw_name
+                    
+            except Exception as e:
+                skipped_points += 1
+                if skipped_points <= 5:  # Only print first 5 skipped points
+                    print(f"Warning: Could not create service point from row: {e}")
+                elif skipped_points == 6:
+                    print("... and more skipped points")
+        
+        if skipped_points > 0:
+            print(f"Total skipped service points: {skipped_points}")
+        
+        # Set the opportunity name from the first row if available
+        if len(service_df) > 0 and 'opportunity_name' in service_df.columns:
+            data.opportunity_name = service_df.iloc[0]['opportunity_name']
+        
+        # Precompute service-only metadata
+        data._compute_service_only_metadata()
+        
+        print(f"Successfully created service-only coverage data with {len(data.service_points)} service points and {len(data.flws)} FLWs")
+        
+        # Debug: Print FLW objects details
+        # print("\n=== FLW Objects Debug Information ===")
+        # for i, (flw_id, flw) in enumerate(data.flws.items()):
+        #     print(f"FLW {i+1}:")
+        #     print(f"  ID: {flw.id}")
+        #     print(f"  Name: {flw.name}")
+        #     print(f"  Service Areas: {flw.get_service_areas_str()}")
+        #     print(f"  Assigned Units: {flw.assigned_units}")
+        #     print(f"  Completed Units: {flw.completed_units}")
+        #     print(f"  Completion Rate: {flw.completion_rate:.1f}%")
+        #     print(f"  First Service Date: {flw.first_service_delivery_date}")
+        #     print(f"  Last Service Date: {flw.last_service_delivery_date}")
+        #     print(f"  Service Points Count: {len(flw.service_points)}")
+        #     print(f"  Delivery Units Count: {len(flw.delivery_units)}")
+        #     print(f"  Days Active: {flw.days_active}")
+        #     print(f"  Status Counts: {flw.status_counts}")
+        #     print()
+        # print("=== End FLW Debug Information ===\n")
+        
+        return data
     
     def load_service_delivery_from_datafame(self, service_df: pd.DataFrame) -> None:
         """
@@ -518,9 +645,6 @@ class CoverageData:
         Args:
             service_df: DataFrame containing service delivery GPS coordinates
         """
-        # Import here to avoid circular imports
-        from .service_delivery_point import ServiceDeliveryPoint
-        
         print(f"Loading service delivery data: {len(service_df)} points in DataFrame")
         
         # Track skipped points
@@ -910,6 +1034,75 @@ class CoverageData:
         
         return active_flws
     
+    def get_flw_name_by_id(self, flw_id: str) -> str:
+        """
+        Get FLW display name by CommCare ID
+        
+        Args:
+            flw_id: FLW CommCare ID
+        
+        Returns:
+            FLW display name, or the ID itself if no name is found
+        """
+        # First try the direct mapping (fastest)
+        if flw_id in self.flw_commcare_id_to_name_map:
+            return self.flw_commcare_id_to_name_map[flw_id]
+        
+        # Fallback: search through FLW objects
+        for flw in self.flws.values():
+            if flw.id == flw_id:
+                return flw.name
+        
+        # Final fallback: return the ID itself
+        return flw_id
+    
+    def get_flw_id_by_name(self, flw_name: str) -> Optional[str]:
+        """
+        Get FLW CommCare ID by display name
+        
+        Args:
+            flw_name: FLW display name
+        
+        Returns:
+            FLW CommCare ID, or None if not found
+        """
+        # First try reverse lookup in mapping
+        for flw_id, name in self.flw_commcare_id_to_name_map.items():
+            if name == flw_name:
+                return flw_id
+        
+        # Fallback: check if name exists as key in flws dict and get its ID
+        if flw_name in self.flws:
+            return self.flws[flw_name].id
+        
+        return None
+    
+    def get_flw_id_to_name_map(self) -> Dict[str, str]:
+        """
+        Get a complete mapping of FLW CommCare IDs to display names
+        
+        Returns:
+            Dictionary mapping FLW IDs to names
+        """
+        # Start with the existing mapping
+        mapping = self.flw_commcare_id_to_name_map.copy()
+        
+        # Add any FLWs that might not be in the mapping
+        for flw in self.flws.values():
+            if flw.id and flw.id not in mapping:
+                mapping[flw.id] = flw.name
+        
+        return mapping
+    
+    def get_flw_name_to_id_map(self) -> Dict[str, str]:
+        """
+        Get a complete mapping of FLW display names to CommCare IDs
+        
+        Returns:
+            Dictionary mapping FLW names to IDs
+        """
+        return {name: flw_id for flw_id, name in self.get_flw_id_to_name_map().items()}
+
     def get_average_visits_data(self):
         """Calculate average visits and delivery units visited per day over the last 7 days."""
         

@@ -769,6 +769,18 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
 
     return data
 
+def get_coverage_data_service_only(service_df: pd.DataFrame) -> 'CoverageData':
+    """
+    Load coverage data from service delivery points only (no delivery units)
+    
+    Args:
+        service_df: DataFrame containing service delivery GPS coordinates
+        
+    Returns:
+        CoverageData object with only service delivery points and FLWs
+    """
+    return CoverageData.load_service_delivery_only(service_df)
+
 def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None, 
                                      file_prefix: str = "export", 
                                      file_id: str = None,
@@ -1027,7 +1039,7 @@ def export_superset_query_with_pagination(
         if 'session' in locals():
             session.close()
 
-def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password, sql_query) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from Superset and group by unique opportunity_name values.
     
@@ -1046,7 +1058,7 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         # Use the new export function to get the data
         csv_path = export_superset_query_with_pagination(
             superset_url=superset_url,
-            sql_query=sql_queries.SQL_QUERIES["opportunity_uservisit"],
+            sql_query=sql_query,
             username=superset_username,
             password=superset_password
         )

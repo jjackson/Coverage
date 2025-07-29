@@ -19,7 +19,7 @@ def merging_df(df1,df2,on_str):
         #making sure that flw_id in both dataframes are of type string
         df1[on_str] = df1[on_str].astype(str)
         df2[on_str] = df2[on_str].astype(str)
-        merged_df = pd.merge(df1, df2, on=on_str, how='inner')
+        merged_df = pd.merge(df1, df2, on=on_str, how='left')
     else:
         print("Either DF1 or DF2 is empty. Cannot generate the report")
     return merged_df
@@ -56,9 +56,13 @@ def get_superset_data(sql):
 def load_pickel_data_for_summary():
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+    print("script_dir = ")
+    print(script_dir)
     # Load coverage data from pickle file
     pickle_path = os.path.join(script_dir, 'coverage_data.pkl')
+    print("pickle_path = ")
+    print(pickle_path)
+    
     if not os.path.exists(pickle_path):
         print("Error: coverage_data.pkl not found. Please run run_coverage.py first.")
         return
@@ -157,13 +161,16 @@ def main():
     average_form_sbmission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
     average_form_submission_last_7_days_df = get_superset_data(average_form_sbmission_sql)
     final_df=merging_df(final_df, average_form_submission_last_7_days_df,"flw_id")
+    #output_as_excel_in_downloads(final_df, "1_final_df_just_before_any_merge")
 
     #Read pickel file for each of the domain on .env file 
     #and append the datasource with each project specific dataframe
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
     valid_opportunities = list(opportunity_to_domain_mapping.values())
 
+    overall_domain_df = pd.DataFrame()
     for domain in valid_opportunities:
+        domain_df = pd.DataFrame()
          # Get the directory of the current script
         _dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),"data")
         # Load coverage data from pickle file for each domain
@@ -182,37 +189,90 @@ def main():
             print(f"Error : {str(e)}")
 
         if service_df is not None and not service_df.empty :
-
+            
+            #output_as_excel_in_downloads(service_df, domain +"1.1_service_df_at_start")
             #attach flw_id based on owner_id for ease on joining on flw_id later
             service_df.rename(columns={'owner_id': 'cchq_user_id'}, inplace=True)
             user_id_df = opps_username_df[['flw_id','cchq_user_id']]
-            
-            output_as_excel_in_downloads(final_df, "1_final_df_just_before_any_merge")
+
             #forced closure merging
             forced_du_closure_df = set_forced_du_closure (service_df)
             forced_du_closure_df = pd.merge(forced_du_closure_df, user_id_df, on='cchq_user_id', how='left')
             forced_du_closure_df = forced_du_closure_df[["flw_id","forced_du_closure_count"]]
-            final_df = merging_df(final_df,forced_du_closure_df, "flw_id" )
-            output_as_excel_in_downloads(final_df, "2_final_df_forced_close")
+            domain_df = forced_du_closure_df
 
             #DU's with Camping
             camping_du = set_camping(service_df)
             camping_du = pd.merge(camping_du, user_id_df, on='cchq_user_id', how='left')
             camping_du = camping_du[["flw_id","camping"]]
-            output_as_excel_in_downloads(camping_du, "3.1_camping_du")
-            final_df = merging_df(final_df,camping_du, "flw_id" )
-            output_as_excel_in_downloads(final_df, "3.2_final_df_camping")
+            domain_df = merging_df(domain_df,camping_du, "flw_id" )
             
-
             #DU's with No Children merging
             dus_with_no_children_df = dus_with_no_children(service_df)
             dus_with_no_children_df = pd.merge(dus_with_no_children_df, user_id_df, on='cchq_user_id', how='left')
             dus_with_no_children_df = dus_with_no_children_df[["flw_id","dus_with_no_children_count"]]
-            final_df = merging_df(final_df,dus_with_no_children_df, "flw_id" )
-            output_as_excel_in_downloads(final_df, "4_final_df_du_no_children_merging")
-           
+            domain_df = merging_df(domain_df,dus_with_no_children_df, "flw_id" )
+
+            #Singleton assigned
+            singleton_df = set_singleton(service_df)
+            singleton_df = pd.merge(singleton_df, user_id_df, on='cchq_user_id', how='left')
+            singleton_df = singleton_df[["flw_id","has_singleton"]]
+            domain_df = merging_df(domain_df,singleton_df, "flw_id" )
+
+            #DU's to be watched
+            #output_as_excel_in_downloads(service_df, "service_df")
+            set_dus_tobe_watched_df = set_dus_tobe_watched(service_df)
+            set_dus_tobe_watched_df = pd.merge(set_dus_tobe_watched_df, user_id_df, on='cchq_user_id', how='left')
+            output_as_excel_in_downloads(set_dus_tobe_watched_df, "5.1_set_dus_tobe_watched_df")
+            set_dus_tobe_watched_df = set_dus_tobe_watched_df[["flw_id","dus_to_be_watched"]]
+            domain_df = merging_df(domain_df,set_dus_tobe_watched_df, "flw_id" )
+            output_as_excel_in_downloads(domain_df, "5.2_set_dus_tobe_watched_df")
+
+            overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
+        output_as_excel_in_downloads(overall_domain_df, "overall_domain_df")
+
+
+def set_dus_tobe_watched(df):
+    df = df.copy()
+    df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
+    today_utc = datetime.now(pytz.UTC)
+    seven_days_ago = today_utc - timedelta(days=7)
+    filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
+    filtered_df['ratio'] = filtered_df['buildings'] / filtered_df['delivery_count']
+
+    # Only keep rows with ratio > 0.1
+    watched = filtered_df[filtered_df['ratio'] > 0.1]
+
+    def format_ratio(r):
+        if r == 0:
+            return '1:0'
+        return f"1:{int(round(1/r))}" if r > 0 else ''
+
+    def format_date(dt):
+        return dt.strftime('%d %B %Y')
+
+    def concat_watched(group):
+        entries = [f"{format_date(row['last_modified'])}: {row['case_name']} ({format_ratio(row['ratio'])})" for _, row in group.iterrows()]
+        return ", ".join(entries) if entries else None
+
+    result = watched.groupby('cchq_user_id').apply(concat_watched).reset_index()
+    result.columns = ['cchq_user_id', 'dus_to_be_watched']
+    # Remove rows where dus_to_be_watched is None or empty
+    result = result[result['dus_to_be_watched'].notnull() & (result['dus_to_be_watched'] != '')]
+    return result
+
+
+def set_singleton(df):
+    # For each cchq_user_id, check if any row has buildings == 1
+    def singleton_status(group):
+        return 'yes' if (group['buildings'] == 1).any() else 'no'
+
+    singleton_df = df.groupby('cchq_user_id').apply(singleton_status).reset_index()
+    singleton_df.columns = ['cchq_user_id', 'has_singleton']
+    return singleton_df[['cchq_user_id', 'has_singleton']]
+
 
 def set_camping(df):
     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)

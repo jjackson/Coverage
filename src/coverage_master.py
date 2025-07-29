@@ -416,7 +416,7 @@ def main():
                 print(f"Successfully loaded coverage data for {key}")
                         
         print(f"\nTotal coverage data objects created: {len(coverage_data_objects)}")
-        
+
     else:     
         print("Loading from Local Files")
         

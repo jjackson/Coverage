@@ -17,6 +17,7 @@ import json
 from dotenv import load_dotenv
 from functools import lru_cache
 from src.sqlqueries import sql_queries
+import pickle
 try:
     # When imported as a module
     from models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
@@ -496,7 +497,19 @@ def get_du_dataframe_from_commcare_api(domain: str,
     
     df.to_excel(excel_path, index=False)
     print(f"Delivery units data saved to: {excel_path}")
+
+    # Save coverage data to a pickel file on project root folder for future references
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    file_name = domain+".pkl"
+    data_dir = os.path.join(project_root, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    pickle_path = os.path.join(data_dir,file_name)
     
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(df, f)
+    print(f"Pickle file saved at: {pickle_path}")
+    
+
     return df
 
 def load_delivery_units_from_commcare_api(domain: str, 

@@ -69,9 +69,7 @@ ORDER BY opportunity_uservisit.visit_date;""",
 
 
 "sql_fetch_average_time_form_submission_last_7_days" :"""SELECT
-  oo.name AS opportunity_name,
   uv.user_id AS flw_id,
-  u.name AS flw_name,
   uv.form_json -> 'metadata'->>'userID' AS cchq_user_id,
   ROUND(AVG(
     EXTRACT(EPOCH FROM (
@@ -87,9 +85,22 @@ LEFT JOIN users_user u
 WHERE 
   oo.name LIKE '%Scale Up%'
   AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY uv.user_id, u.name, oo.name, cchq_user_id
-ORDER BY opportunity_name, flw_name;""", 
+GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
 
 
-"sql_fetch_userid_flwid_mapping" : """Select id as flw_id ,name, lower(username) as hq_username from users_user;"""
+"opp_user_details_mapping" : """SELECT
+  oo.name AS opportunity_name,
+  uv.user_id AS flw_id,
+  u.name AS flw_name,
+  u.username,
+  uv.form_json -> 'metadata'->>'userID' AS cchq_user_id
+FROM opportunity_uservisit uv
+LEFT JOIN opportunity_opportunity oo 
+    ON oo.id = uv.opportunity_id
+LEFT JOIN users_user u 
+    ON uv.user_id = u.id
+WHERE 
+  oo.name LIKE '%Scale Up%'
+GROUP BY uv.user_id, u.name, oo.name, cchq_user_id,u.username
+ORDER BY opportunity_name, flw_name;"""
 }

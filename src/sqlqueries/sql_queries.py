@@ -19,7 +19,7 @@ SQL_QUERIES = {
         "FROM public.opportunity_uservisit "
         "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
         "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (516, 517);"
+        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603);"
     ),
 
     "services_only_sql": (

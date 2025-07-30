@@ -223,10 +223,9 @@ def main():
             #output_as_excel_in_downloads(service_df, "service_df")
             set_dus_tobe_watched_df = set_dus_tobe_watched(service_df)
             set_dus_tobe_watched_df = pd.merge(set_dus_tobe_watched_df, user_id_df, on='cchq_user_id', how='left')
-            output_as_excel_in_downloads(set_dus_tobe_watched_df, "5.1_set_dus_tobe_watched_df")
             set_dus_tobe_watched_df = set_dus_tobe_watched_df[["flw_id","dus_to_be_watched"]]
             domain_df = merging_df(domain_df,set_dus_tobe_watched_df, "flw_id" )
-            output_as_excel_in_downloads(domain_df, "5.2_set_dus_tobe_watched_df")
+            output_as_excel_in_downloads(domain_df, "5.2_" + domain + "_set_dus_tobe_watched_df")
 
             overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
         else:
@@ -347,11 +346,23 @@ def set_forced_du_closure(df):
 
     # Filter rows modified in the last 7 days
     filtered_df = df[df['last_modified'] >= seven_days_ago]
+    print("Filtered_df Columns ==>")
+    print(filtered_df.columns)
 
-    # Set 'forced_du_closure' column based on 'force_closed_status'
+    # Check for the correct column name
+    if 'force_close_status' not in filtered_df.columns:
+        # Return a DataFrame with cchq_user_id and forced_du_closure_count = 0
+        if 'cchq_user_id' in filtered_df.columns:
+            result = filtered_df[['cchq_user_id']].drop_duplicates().copy()
+            result['forced_du_closure_count'] = 0
+            return result[['cchq_user_id', 'forced_du_closure_count']]
+        else:
+            return pd.DataFrame(columns=['cchq_user_id', 'forced_du_closure_count'])
+
+    # Set 'forced_du_closure' column based on 'force_close_status'
     filtered_df['forced_du_closure'] = filtered_df['force_close_status'].apply(
         lambda x: True if str(x).lower() == 'yes' else False
-)
+    )
     #Remove timezone specific metadata on last_modified from filtered_df 
     filtered_df['last_modified'] = filtered_df['last_modified'].dt.tz_localize(None)
 

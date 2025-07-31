@@ -64,7 +64,7 @@ FROM opportunity_uservisit
 LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id
 LEFT JOIN users_user ON opportunity_uservisit.user_id = users_user.id
 LEFT JOIN opportunity_deliverunit ON opportunity_uservisit.deliver_unit_id = opportunity_deliverunit.id
-WHERE opportunity_opportunity.name LIKE '%Scale Up%'
+WHERE opportunity_opportunity.name LIKE 'EHA Clinics | CHC GiveWell Scale Up'
 ORDER BY opportunity_uservisit.visit_date;""", 
 
 
@@ -88,19 +88,20 @@ WHERE
 GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
 
 
-"opp_user_details_mapping" : """SELECT
-  oo.name AS opportunity_name,
+"opp_user_details_mapping" : """SELECT 
+  MAX(oo.name) AS opportunity_name,
   uv.user_id AS flw_id,
-  u.name AS flw_name,
-  u.username,
+  MAX(u.name) AS flw_name,
+  MAX(u.username),
   uv.form_json -> 'metadata'->>'userID' AS cchq_user_id
-FROM opportunity_uservisit uv
-LEFT JOIN opportunity_opportunity oo 
-    ON oo.id = uv.opportunity_id
-LEFT JOIN users_user u 
-    ON uv.user_id = u.id
-WHERE 
-  oo.name LIKE '%Scale Up%'
-GROUP BY uv.user_id, u.name, oo.name, cchq_user_id,u.username
+FROM opportunity_opportunityaccess oa
+LEFT JOIN opportunity_opportunity oo
+    ON oo.id = oa.opportunity_id
+LEFT JOIN users_user u
+    ON oa.user_id = u.id
+LEFT JOIN opportunity_uservisit uv
+  ON oa.opportunity_id = uv.opportunity_id
+WHERE oo.name LIKE '%Scale Up%'
+GROUP BY uv.user_id, cchq_user_id
 ORDER BY opportunity_name, flw_name;"""
 }

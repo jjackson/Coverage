@@ -1,3 +1,4 @@
+from math import nan
 from dotenv import load_dotenv, find_dotenv
 import os, constants
 
@@ -194,44 +195,60 @@ def main():
             #attach flw_id based on owner_id for ease on joining on flw_id later
             service_df.rename(columns={'owner_id': 'cchq_user_id'}, inplace=True)
             user_id_df = opps_username_df[['flw_id','cchq_user_id']]
+            output_as_excel_in_downloads(user_id_df, "1_" + domain + "_user_id_df")
 
             #forced closure merging
             forced_du_closure_df = set_forced_du_closure (service_df)
+            output_as_excel_in_downloads(forced_du_closure_df, "2_" + domain + "_forced_du_closure_df")
             forced_du_closure_df = pd.merge(forced_du_closure_df, user_id_df, on='cchq_user_id', how='left')
             forced_du_closure_df = forced_du_closure_df[["flw_id","forced_du_closure_count"]]
+            forced_du_closure_df = remove_empty_flws(forced_du_closure_df)
             domain_df = forced_du_closure_df
+            output_as_excel_in_downloads(forced_du_closure_df, "21_" + domain + "_forced_du_closure_df")
 
             #DU's with Camping
             camping_du = set_camping(service_df)
             camping_du = pd.merge(camping_du, user_id_df, on='cchq_user_id', how='left')
             camping_du = camping_du[["flw_id","camping"]]
+            camping_du = remove_empty_flws(camping_du)
             domain_df = merging_df(domain_df,camping_du, "flw_id" )
+            output_as_excel_in_downloads(camping_du, "3_" + domain + "_camping_df")
             
             #DU's with No Children merging
             dus_with_no_children_df = dus_with_no_children(service_df)
             dus_with_no_children_df = pd.merge(dus_with_no_children_df, user_id_df, on='cchq_user_id', how='left')
             dus_with_no_children_df = dus_with_no_children_df[["flw_id","dus_with_no_children_count"]]
+            dus_with_no_children_df = remove_empty_flws(dus_with_no_children_df)
             domain_df = merging_df(domain_df,dus_with_no_children_df, "flw_id" )
+            output_as_excel_in_downloads(dus_with_no_children_df, "4_" + domain + "_dus_with_no_children_df")
 
             #Singleton assigned
             singleton_df = set_singleton(service_df)
             singleton_df = pd.merge(singleton_df, user_id_df, on='cchq_user_id', how='left')
             singleton_df = singleton_df[["flw_id","has_singleton"]]
+            camping_du = remove_empty_flws(singleton_df)
             domain_df = merging_df(domain_df,singleton_df, "flw_id" )
+            output_as_excel_in_downloads(singleton_df, "5_" + domain + "_singleton_df")
 
             #DU's to be watched
             #output_as_excel_in_downloads(service_df, "service_df")
             set_dus_tobe_watched_df = set_dus_tobe_watched(service_df)
             set_dus_tobe_watched_df = pd.merge(set_dus_tobe_watched_df, user_id_df, on='cchq_user_id', how='left')
             set_dus_tobe_watched_df = set_dus_tobe_watched_df[["flw_id","dus_to_be_watched"]]
+            set_dus_tobe_watched_df = remove_empty_flws(set_dus_tobe_watched_df)
             domain_df = merging_df(domain_df,set_dus_tobe_watched_df, "flw_id" )
-            output_as_excel_in_downloads(domain_df, "5.2_" + domain + "_set_dus_tobe_watched_df")
+            output_as_excel_in_downloads(set_dus_tobe_watched_df, "6_" + domain + "_set_dus_tobe_watched_df")
 
             overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
         output_as_excel_in_downloads(overall_domain_df, "overall_domain_df")
 
+def remove_empty_flws(df):
+    df = df[df["flw_id"].notnull() & (df["flw_id"].astype(str).str.strip() != "")]
+    df = df.dropna(subset=['flw_id'])
+    return df
 
 def set_dus_tobe_watched(df):
     df = df.copy()
@@ -270,6 +287,7 @@ def set_singleton(df):
 
     singleton_df = df.groupby('cchq_user_id').apply(singleton_status).reset_index()
     singleton_df.columns = ['cchq_user_id', 'has_singleton']
+    output_as_excel_in_downloads(singleton_df, "51_singleton_df")
     return singleton_df[['cchq_user_id', 'has_singleton']]
 
 
@@ -346,8 +364,6 @@ def set_forced_du_closure(df):
 
     # Filter rows modified in the last 7 days
     filtered_df = df[df['last_modified'] >= seven_days_ago]
-    print("Filtered_df Columns ==>")
-    print(filtered_df.columns)
 
     # Check for the correct column name
     if 'force_close_status' not in filtered_df.columns:

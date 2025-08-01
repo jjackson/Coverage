@@ -64,7 +64,7 @@ FROM opportunity_uservisit
 LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id
 LEFT JOIN users_user ON opportunity_uservisit.user_id = users_user.id
 LEFT JOIN opportunity_deliverunit ON opportunity_uservisit.deliver_unit_id = opportunity_deliverunit.id
-WHERE opportunity_opportunity.name LIKE 'EHA Clinics | CHC GiveWell Scale Up'
+WHERE opportunity_opportunity.name LIKE '%Scale Up%'
 ORDER BY opportunity_uservisit.visit_date;""", 
 
 

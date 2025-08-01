@@ -1,7 +1,7 @@
 from math import nan
 from dotenv import load_dotenv, find_dotenv
 import os, constants
-
+from datetime import date
 import numpy
 import pickle
 from src.utils import data_loader
@@ -57,12 +57,8 @@ def get_superset_data(sql):
 def load_pickel_data_for_summary():
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    print("script_dir = ")
-    print(script_dir)
     # Load coverage data from pickle file
     pickle_path = os.path.join(script_dir, 'coverage_data.pkl')
-    print("pickle_path = ")
-    print(pickle_path)
     
     if not os.path.exists(pickle_path):
         print("Error: coverage_data.pkl not found. Please run run_coverage.py first.")
@@ -96,13 +92,12 @@ def load_pickel_data_for_summary():
 def main():
 
     #fetching opps username details from superset
+    print("Starting the process...")
     opps_username_details_sql =  SQL_QUERIES["opp_user_details_mapping"]
     final_df = get_superset_data(opps_username_details_sql) 
     opps_username_df = final_df.copy(deep=True)
 
     final_df['flw_id'] = final_df['flw_id'].astype(str)  # converting flw_id column values as string
-    #output_as_excel_in_downloads(opps_username_details_df, "opps_username_details_df")
-    
 
     #fetching data quality details from superset
     data_quality_sql = SQL_QUERIES["flw_data_quality_analysis_query"]
@@ -141,34 +136,34 @@ def main():
     # Call the generate method
     output_files = report.generate()
     quality_issues_df = report.excel_data.get('Quality Issues Found')
-    #merge quality_issue_df_with final_df
+
     if quality_issues_df is not None and not quality_issues_df.empty:
         quality_issues_df['flw_id'] = quality_issues_df['flw_id'].astype(str)
-        final_df = merging_df(final_df,quality_issues_df,"flw_id" )
+    else:
+        print("No 'Quality Issues Found  Try running coverage first")
 
     summary_df = load_pickel_data_for_summary()
-
-
-    #After loading/creating summary_df and quality_issues_df, join the two DF's based on flw_id
     if summary_df is not None and not summary_df.empty :
         #making sure that flw_id in both dataframes are of type string
-        summary_df['flw_id'] = summary_df['flw_id'].astype(str)
-        final_df = merging_df(final_df, summary_df,"flw_id")
-        
+        summary_df['flw_id'] = summary_df['flw_id'].astype(str)  
     else:
-        print("No 'Quality Issues Found OR Summary Data Found'. Try running coverage first")
+        print("No 'Summary Data Found'. Try running coverage first")
     
-    #Last 7 days average Form Submission Time
-    average_form_sbmission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
-    average_form_submission_last_7_days_df = get_superset_data(average_form_sbmission_sql)
-    final_df=merging_df(final_df, average_form_submission_last_7_days_df,"flw_id")
-    #output_as_excel_in_downloads(final_df, "1_final_df_just_before_any_merge")
+    #After loading/creating summary_df and quality_issues_df, join the two DF's based on flw_id
+    final_df = pd.merge(summary_df, quality_issues_df, on="flw_id",how="outer")
+    
+
+    #merge user_id_df with final_df to get cchq_user_id
+    user_id_df = opps_username_df[['flw_id','cchq_user_id']]
+    #making sure that flw_id in both user_id_df is of type string
+    user_id_df['flw_id'] = user_id_df['flw_id'].astype(str)
+    final_df = pd.merge(final_df,user_id_df,on="flw_id", how="left")
 
     #Read pickel file for each of the domain on .env file 
     #and append the datasource with each project specific dataframe
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
     valid_opportunities = list(opportunity_to_domain_mapping.values())
-    user_id_df = opps_username_df[['flw_id','cchq_user_id']]
+    
     overall_domain_df = pd.DataFrame()
     for domain in valid_opportunities:
         domain_df = pd.DataFrame()
@@ -184,55 +179,61 @@ def main():
         try:
             with open(pickle_path, 'rb') as f:
                 service_df = pickle.load(f)
-                #output_as_excel_in_downloads(service_df, "test")
-                
         except Exception as e:
             print(f"Error : {str(e)}")
 
         if service_df is not None and not service_df.empty :
             
-            unique_values = service_df['owner_id'].unique()
-            print(f"Unique values {unique_values}")
-            print(f"Number of onwer_ids  : {len(unique_values)}")
-            #output_as_excel_in_downloads(service_df, domain +"1.1_service_df_at_start")
             #attach flw_id based on owner_id for ease on joining on flw_id later
             service_df.rename(columns={'owner_id': 'cchq_user_id'}, inplace=True)
             
-
             #forced closure merging
             forced_du_closure_df = set_forced_du_closure (service_df)
             domain_df = forced_du_closure_df
-            output_as_excel_in_downloads(domain_df, "2_" + domain + "_forced_du_closure_df")
 
             #DU's with Camping
             camping_df = set_camping(service_df)
             domain_df = pd.merge(domain_df, camping_df, how='outer')
-            output_as_excel_in_downloads(domain_df, "3_" + domain + "_camping_df")
             
             #DU's with No Children merging
             dus_with_no_children_df = dus_with_no_children(service_df)
             domain_df = pd.merge(domain_df, dus_with_no_children_df, how='outer')
-            output_as_excel_in_downloads(domain_df, "4_" + domain + "_dus_with_no_children_df")
 
             #Singleton assigned
             singleton_df = set_singleton(service_df)
             domain_df = pd.merge(domain_df, singleton_df, how='outer')
-            output_as_excel_in_downloads(domain_df, "5_" + domain + "_singleton_df")
 
             #DU's to be watched
-            #output_as_excel_in_downloads(service_df, "service_df")
             set_dus_tobe_watched_df = set_dus_tobe_watched(service_df)
             domain_df = pd.merge(domain_df, set_dus_tobe_watched_df, how='outer')
-            output_as_excel_in_downloads(domain_df, "6_" + domain + "_set_dus_tobe_watched_df")
 
-            overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+            #Last 7 days average Form Submission Time
+            average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
+            average_form_submission_last_7_days_df = get_superset_data(average_form_submission_sql)
+            domain_df = pd.merge(domain_df, average_form_submission_last_7_days_df, how='outer')
 
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
-        output_as_excel_in_downloads(overall_domain_df, "7_overall_domain_df")
-        final_df = merging_df(overall_domain_df,user_id_df,"cchq_user_id")
-        output_as_excel_in_downloads(final_df, "8_final_df")
-        
+
+    overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+    #join the two dataframes : overall_domain_df from case-data and 
+    #final_df: from summary and data quality utility
+    ultimate_df=pd.merge(overall_domain_df, final_df,on="cchq_user_id",how="outer" )
+
+    #adding required additional fields
+    ultimate_df['date']=date.today().strftime('%Y-%m-%d')
+    ultimate_df['flagged_suspended'] = ''
+    ultimate_df['action_last_weeks_fb'] = ''
+    ultimate_df['email_preview'] = ''
+    
+    #rename appropriate columns
+    ultimate_df.rename(columns={'total_visits_x': 'total_forms_submitted'})
+    ultimate_df.rename(columns={'total_visits_y': 'total_forms_submitted_last7days'})
+
+    ultimate_df['score']=0
+
+    print("The Final output will be downloaded into your Downloads folder with name report_flw_data_quality_analysis.xlsx...")
+    output_as_excel_in_downloads(ultimate_df, "report_flw_data_quality_analysis")
 
 def remove_empty_flws(df):
     df = df[df["flw_id"].notnull() & (df["flw_id"].astype(str).str.strip() != "")]
@@ -276,7 +277,6 @@ def set_singleton(df):
 
     singleton_df = df.groupby('cchq_user_id').apply(singleton_status).reset_index()
     singleton_df.columns = ['cchq_user_id', 'has_singleton']
-    output_as_excel_in_downloads(singleton_df, "51_singleton_df")
     return singleton_df[['cchq_user_id', 'has_singleton']]
 
 

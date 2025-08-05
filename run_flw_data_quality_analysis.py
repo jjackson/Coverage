@@ -1,4 +1,3 @@
-from math import nan
 from dotenv import load_dotenv, find_dotenv
 import os, constants
 from datetime import date
@@ -12,25 +11,19 @@ from src.org_summary import generate_summary
 from src.coverage_master import load_opportunity_domain_mapping
 from datetime import datetime, timedelta
 import pytz
+from types import SimpleNamespace
+from functools import reduce
 
+# --- Constants ---
+FLW_ID = 'flw_id'
+CCHQ_USER_ID = 'cchq_user_id'
+LAST_MODIFIED = 'last_modified'
+DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
-def merging_df(df1,df2,on_str):
-    merged_df = pd.DataFrame()
-    if df1 is not None and not df1.empty and df2 is not None and not df2.empty :
-        #making sure that flw_id in both dataframes are of type string
-        df1[on_str] = df1[on_str].astype(str)
-        df2[on_str] = df2[on_str].astype(str)
-        merged_df = pd.merge(df1, df2, on=on_str, how='left')
-    else:
-        print("Either DF1 or DF2 is empty. Cannot generate the report")
-    return merged_df
 
 def output_as_excel_in_downloads(df, file_name):
     if(df is not None and not df.empty):
-        # Output directory (string path)
-        downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-
-        output_path = os.path.join(downloads_dir, file_name +".xlsx")
+        output_path = os.path.join(DOWNLOADS_DIR, file_name +".xlsx")
         with pd.ExcelWriter(output_path) as writer:
             df.to_excel(writer, sheet_name="Merged", index=False)
         print(f"Generated file: {output_path}")
@@ -63,11 +56,11 @@ def load_pickel_data_for_summary():
     if not os.path.exists(pickle_path):
         print("Error: coverage_data.pkl not found. Please run run_coverage.py first.")
         return
-        
+
     try:
         with open(pickle_path, 'rb') as f:
             coverage_data_objects = pickle.load(f)
-            
+
         # Create the dashboard app
         summary_df, topline_stats = generate_summary(coverage_data_objects, group_by='flw')
 
@@ -227,8 +220,11 @@ def main():
     ultimate_df['email_preview'] = ''
     
     #rename appropriate columns
-    ultimate_df.rename(columns={'total_visits_x': 'total_forms_submitted'})
-    ultimate_df.rename(columns={'total_visits_y': 'total_forms_submitted_last7days'})
+    ultimate_df.rename(columns={
+        'total_visits_x': 'total_forms_submitted',
+        'total_visits_y': 'total_forms_submitted_last7days',
+    }, inplace=True)
+
 
     ultimate_df['score']=0
 
@@ -246,15 +242,13 @@ def set_dus_tobe_watched(df):
     today_utc = datetime.now(pytz.UTC)
     seven_days_ago = today_utc - timedelta(days=7)
     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
-    filtered_df['ratio'] = filtered_df['buildings'] / filtered_df['delivery_count']
+    filtered_df['ratio'] = filtered_df['delivery_count'] / filtered_df['buildings']
 
-    # Only keep rows with ratio > 0.1
-    watched = filtered_df[filtered_df['ratio'] > 0.1]
+    # Keep only those with ratio > 10 (i.e. more than 10 deliveries per building)
+    watched = filtered_df[filtered_df['ratio'] > 10]
 
     def format_ratio(r):
-        if r == 0:
-            return '1:0'
-        return f"1:{int(round(1/r))}" if r > 0 else ''
+        return f"1:{int(round(r))}" if r > 0 else '1:0'
 
     def format_date(dt):
         return dt.strftime('%d %B %Y')
@@ -277,29 +271,46 @@ def set_singleton(df):
 
     singleton_df = df.groupby('cchq_user_id').apply(singleton_status).reset_index()
     singleton_df.columns = ['cchq_user_id', 'has_singleton']
-    return singleton_df[['cchq_user_id', 'has_singleton']]
+
+    # Add count of buildings for each cchq_user_id
+    filtered_df = df[df['buildings'] == 1]
+    buildings_count_df = filtered_df.groupby('cchq_user_id')['buildings'].count().reset_index()
+    buildings_count_df.columns = ['cchq_user_id', 'singleton_count']
+
+    # Merge the two DataFrames
+    result = pd.merge(singleton_df, buildings_count_df, on='cchq_user_id', how='left')
+    # Fill NaN singleton_count with 0 for users with no singleton buildings
+    result['singleton_count'] = result['singleton_count'].fillna(0).astype(int)
+
+    return result[['cchq_user_id', 'has_singleton', 'singleton_count']]
 
 
 def set_camping(df):
+    df = df.copy()
     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
 
-    # Current UTC time and 7-day window
+    # Define analysis window
     today_utc = datetime.now(pytz.UTC)
     seven_days_ago = today_utc - timedelta(days=7)
 
     # Filter rows modified in the last 7 days
     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
 
-    # Calculate the ratio for each row
-    filtered_df['ratio'] = filtered_df['buildings'] / filtered_df['delivery_count']
+    # Calculate delivery-to-building ratio
+    filtered_df['ratio'] = filtered_df['delivery_count'] / filtered_df['buildings']
 
     # Assign camping status for each row
-    filtered_df['camping'] = numpy.where(
-        filtered_df['ratio'] <= 0.05, 'Camping ++',
-        numpy.where((filtered_df['ratio'] > 0.05) & (filtered_df['ratio'] <= 0.1), 'Camping +', '')
-    )
+    def camping_status(r):
+        if r > 20:
+            return 'Camping ++'
+        elif 10 < r <= 20:
+            return 'Camping +'
+        else:
+            return ''
 
-    # For each FLW, set 'Camping ++' if any row is 'Camping ++', else 'Camping +' if any row is 'Camping +', else ''
+    filtered_df['camping'] = filtered_df['ratio'].apply(camping_status)
+
+    # Aggregate per FLW: prioritize Camping ++ > Camping + > none
     def camping_priority(group):
         if (group['camping'] == 'Camping ++').any():
             return 'Camping ++'
@@ -308,14 +319,61 @@ def set_camping(df):
         else:
             return ''
 
-    camping_status = filtered_df.groupby('cchq_user_id').apply(camping_priority).reset_index()
-    camping_status.columns = ['cchq_user_id', 'camping']
+    camping_status = (
+    filtered_df.groupby('cchq_user_id')
+    .apply(camping_priority)
+    .rename('camping')
+    .reset_index()
+    )
 
-    # Remove timezone from all datetime columns (shouldn't be any, but for safety)
+
+    # Clean any timezone fields just in case
     for col in camping_status.select_dtypes(include=['datetimetz']).columns:
         camping_status[col] = camping_status[col].dt.tz_localize(None)
 
     return camping_status[['cchq_user_id', 'camping']]
+
+
+# def set_camping(df):
+#     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
+
+#     # Current UTC time and 7-day window
+#     today_utc = datetime.now(pytz.UTC)
+#     seven_days_ago = today_utc - timedelta(days=7)
+
+#     # Filter rows modified in the last 7 days
+#     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
+
+#     # Calculate the ratio as buildings / delivery_count
+#     filtered_df['ratio'] = filtered_df['buildings'] / filtered_df['delivery_count']
+
+#     # Assign camping status for each row
+#     def camping_status(r):
+#         if r > 0.1:
+#             return 'Camping ++'
+#         elif 0.05 < r <= 0.1:
+#             return 'Camping +'
+#         else:
+#             return ''
+#     filtered_df['camping'] = filtered_df['ratio'].apply(camping_status)
+
+#     # For each FLW, set 'Camping ++' if any row is 'Camping ++', else 'Camping +' if any row is 'Camping +', else ''
+#     def camping_priority(group):
+#         if (group['camping'] == 'Camping ++').any():
+#             return 'Camping ++'
+#         elif (group['camping'] == 'Camping +').any():
+#             return 'Camping +'
+#         else:
+#             return ''
+
+#     camping_status = filtered_df.groupby('cchq_user_id').apply(camping_priority).reset_index(name='camping_status')
+#     camping_status.columns = ['cchq_user_id', 'camping_status']
+
+#     # Remove timezone from all datetime columns (shouldn't be any, but for safety)
+#     for col in camping_status.select_dtypes(include=['datetimetz']).columns:
+#         camping_status[col] = camping_status[col].dt.tz_localize(None)
+
+#     return camping_status[['cchq_user_id', 'camping']]
 
 
 def dus_with_no_children(df):

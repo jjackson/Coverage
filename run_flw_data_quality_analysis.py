@@ -163,10 +163,10 @@ def main():
          # Get the directory of the current script
         _dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),"data")
         # Load coverage data from pickle file for each domain
-        pickle_file_name = domain + ".pkl"
+        pickle_file_name = domain.replace('"', '')+ ".pkl"
         pickle_path = os.path.join(_dir, pickle_file_name)
         if not os.path.exists(pickle_path):
-            print("Error: coverage_data.pkl not found. Please run run_coverage.py first.")
+            print(f"Error: {pickle_file_name} not found. Please run run_coverage.py first.")
             return
         
         try:
@@ -197,7 +197,7 @@ def main():
             domain_df = pd.merge(domain_df, singleton_df, how='outer')
 
             #DU's to be watched
-            set_dus_tobe_watched_df = set_dus_tobe_watched(service_df)
+            set_dus_tobe_watched_df = dus_tobe_watched_summary(service_df)
             domain_df = pd.merge(domain_df, set_dus_tobe_watched_df, how='outer')
 
             #Last 7 days average Form Submission Time
@@ -236,32 +236,41 @@ def remove_empty_flws(df):
     df = df.dropna(subset=['flw_id'])
     return df
 
-def set_dus_tobe_watched(df):
+def dus_tobe_watched_summary(df):
+    """
+    For each cchq_user_id, returns a DataFrame with a column 'dus_tobe_watched'
+    which is a comma-separated string of entries for DUs with delivery/buildings > 10
+    in the last 7 days, formatted as 'last_modified: case_name (1:ratio)'.
+    """
     df = df.copy()
     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
+
+    # Define analysis window
     today_utc = datetime.now(pytz.UTC)
     seven_days_ago = today_utc - timedelta(days=7)
+
+    # Filter rows modified in the last 7 days
     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
+
+    # b) Calculate the ratio of delivery_count to building
     filtered_df['ratio'] = filtered_df['delivery_count'] / filtered_df['buildings']
 
-    # Keep only those with ratio > 10 (i.e. more than 10 deliveries per building)
-    watched = filtered_df[filtered_df['ratio'] > 10]
+    # c) Create 'individual_dus_tobe_watched' column based on ratio > 10
+    mask = filtered_df['ratio'] > 10
+    filtered_df['individual_dus_tobe_watched'] = ''
+    filtered_df.loc[mask, 'individual_dus_tobe_watched'] = (
+        filtered_df.loc[mask, 'last_modified'].dt.strftime('%d-%m-%Y') + " : " +
+        filtered_df.loc[mask, 'case_name'] + " : " +
+        filtered_df.loc[mask, 'ratio'].astype(int).astype(str)
+    )
 
-    def format_ratio(r):
-        return f"1:{int(round(r))}" if r > 0 else '1:0'
+    # d) Group by 'cchq_user_id' and concatenate
+    result = filtered_df.groupby('cchq_user_id')['individual_dus_tobe_watched'].apply(lambda x: ','.join(x.dropna().loc[x != '']
+)).reset_index()
 
-    def format_date(dt):
-        return dt.strftime('%d %B %Y')
-
-    def concat_watched(group):
-        entries = [f"{format_date(row['last_modified'])}: {row['case_name']} ({format_ratio(row['ratio'])})" for _, row in group.iterrows()]
-        return ", ".join(entries) if entries else None
-
-    result = watched.groupby('cchq_user_id').apply(concat_watched).reset_index()
-    result.columns = ['cchq_user_id', 'dus_to_be_watched']
-    # Remove rows where dus_to_be_watched is None or empty
-    result = result[result['dus_to_be_watched'].notnull() & (result['dus_to_be_watched'] != '')]
     return result
+
+
 
 
 def set_singleton(df):
@@ -298,7 +307,6 @@ def set_camping(df):
 
     # Calculate delivery-to-building ratio
     filtered_df['ratio'] = filtered_df['delivery_count'] / filtered_df['buildings']
-
     # Assign camping status for each row
     def camping_status(r):
         if r > 20:
@@ -312,21 +320,21 @@ def set_camping(df):
 
     # Aggregate per FLW: prioritize Camping ++ > Camping + > none
     def camping_priority(group):
+        result = ''
         if (group['camping'] == 'Camping ++').any():
-            return 'Camping ++'
+            result = 'Camping ++'
         elif (group['camping'] == 'Camping +').any():
-            return 'Camping +'
+            result = 'Camping +'
         else:
-            return ''
+            result = ''
+        return pd.Series({'camping': result})
 
     camping_status = (
-    filtered_df.groupby('cchq_user_id')
+    filtered_df.groupby('cchq_user_id')[['cchq_user_id', 'camping']]
     .apply(camping_priority)
-    .rename('camping')
-    .reset_index()
-    )
-
-
+)
+    # camping_status.index.name = None
+    camping_status = camping_status.reset_index()
     # Clean any timezone fields just in case
     for col in camping_status.select_dtypes(include=['datetimetz']).columns:
         camping_status[col] = camping_status[col].dt.tz_localize(None)
@@ -334,107 +342,95 @@ def set_camping(df):
     return camping_status[['cchq_user_id', 'camping']]
 
 
-# def set_camping(df):
-#     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
-
-#     # Current UTC time and 7-day window
-#     today_utc = datetime.now(pytz.UTC)
-#     seven_days_ago = today_utc - timedelta(days=7)
-
-#     # Filter rows modified in the last 7 days
-#     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
-
-#     # Calculate the ratio as buildings / delivery_count
-#     filtered_df['ratio'] = filtered_df['buildings'] / filtered_df['delivery_count']
-
-#     # Assign camping status for each row
-#     def camping_status(r):
-#         if r > 0.1:
-#             return 'Camping ++'
-#         elif 0.05 < r <= 0.1:
-#             return 'Camping +'
-#         else:
-#             return ''
-#     filtered_df['camping'] = filtered_df['ratio'].apply(camping_status)
-
-#     # For each FLW, set 'Camping ++' if any row is 'Camping ++', else 'Camping +' if any row is 'Camping +', else ''
-#     def camping_priority(group):
-#         if (group['camping'] == 'Camping ++').any():
-#             return 'Camping ++'
-#         elif (group['camping'] == 'Camping +').any():
-#             return 'Camping +'
-#         else:
-#             return ''
-
-#     camping_status = filtered_df.groupby('cchq_user_id').apply(camping_priority).reset_index(name='camping_status')
-#     camping_status.columns = ['cchq_user_id', 'camping_status']
-
-#     # Remove timezone from all datetime columns (shouldn't be any, but for safety)
-#     for col in camping_status.select_dtypes(include=['datetimetz']).columns:
-#         camping_status[col] = camping_status[col].dt.tz_localize(None)
-
-#     return camping_status[['cchq_user_id', 'camping']]
-
-
 def dus_with_no_children(df):
-    # Convert 'modified_date' to datetime with UTC
+    df = df.copy()
     df['checked_out_date'] = pd.to_datetime(df['checked_out_date'], utc=True)
+
+    # Compute total count across all data (no date filtering)
+    df['dus_with_no_children'] = (
+        (df['delivery_count'] == 0) &
+        (df['du_checkout_remark'] != 'Completed - Found Children') &
+        (df['du_status'].str.lower() == 'completed')
+    )
+    total_df = df.groupby('cchq_user_id')['dus_with_no_children'].sum().reset_index()
+    total_df.rename(columns={'dus_with_no_children': 'dus_with_no_children_count_total'}, inplace=True)
 
     # Filter for last 7 days
     today_utc = datetime.now(pytz.UTC)
     seven_days_ago = today_utc - timedelta(days=7)
     filtered_df = df[df['checked_out_date'] >= seven_days_ago].copy()
 
-    # Calculate 'dus_with_no_children' column
+    # Recalculate the column in the filtered DataFrame
     filtered_df['dus_with_no_children'] = (
         (filtered_df['delivery_count'] == 0) &
         (filtered_df['du_checkout_remark'] != 'Completed - Found Children') &
-        (filtered_df['du_status'].str.lower() == 'completed'))
+        (filtered_df['du_status'].str.lower() == 'completed')
+    )
 
-        #Remove timezone specific metadata on last_modified from filtered_df 
+    # Remove timezone from the date column
     filtered_df['checked_out_date'] = filtered_df['checked_out_date'].dt.tz_localize(None)
-    
-    #Grouped together by owner_id/user_id and sum of forced_du_closure to be true
-    filtered_df = filtered_df.groupby('cchq_user_id')['dus_with_no_children'].sum().reset_index()
-    #Rename the column for clarity
-    filtered_df.rename(columns={'dus_with_no_children': 'dus_with_no_children_count'}, inplace=True)
 
-    return filtered_df
+    # Aggregate the recent 7-day count
+    recent_df = filtered_df.groupby('cchq_user_id')['dus_with_no_children'].sum().reset_index()
+    recent_df.rename(columns={'dus_with_no_children': 'dus_with_no_children_count'}, inplace=True)
+
+    # Merge the two counts
+    result = pd.merge(recent_df, total_df, on='cchq_user_id', how='outer').fillna(0)
+    result['dus_with_no_children_count'] = result['dus_with_no_children_count'].astype(int)
+    result['dus_with_no_children_count_total'] = result['dus_with_no_children_count_total'].astype(int)
+
+    return result[['cchq_user_id', 'dus_with_no_children_count', 'dus_with_no_children_count_total']]
+
 
 
 def set_forced_du_closure(df):
+    df = df.copy()
     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
 
-    # Current UTC time and 7-day window
-    today_utc = datetime.now(pytz.UTC)
-    seven_days_ago = today_utc - timedelta(days=7)
+    # Calculate total forced DU closure count (without date filter)
+    if 'force_close_status' in df.columns:
+    # Use vectorized string operations on the Series only if the column exists
+        df['forced_du_closure'] = df['force_close_status'].astype(str).str.lower() == 'yes'
+    else:
+    # If the column doesn't exist, create a placeholder column with False values
+        df['forced_du_closure'] = False
+
+
+    forced_total_df = df.groupby('cchq_user_id')['forced_du_closure'].sum().reset_index()
+    forced_total_df.rename(columns={'forced_du_closure': 'forced_du_closure_count_total'}, inplace=True)
 
     # Filter rows modified in the last 7 days
-    filtered_df = df[df['last_modified'] >= seven_days_ago]
+    today_utc = datetime.now(pytz.UTC)
+    seven_days_ago = today_utc - timedelta(days=7)
+    filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
 
-    # Check for the correct column name
+    # Check if 'force_close_status' exists
     if 'force_close_status' not in filtered_df.columns:
-        # Return a DataFrame with cchq_user_id and forced_du_closure_count = 0
-        if 'cchq_user_id' in filtered_df.columns:
-            result = filtered_df[['cchq_user_id']].drop_duplicates().copy()
-            result['forced_du_closure_count'] = 0
-            return result[['cchq_user_id', 'forced_du_closure_count']]
-        else:
-            return pd.DataFrame(columns=['cchq_user_id', 'forced_du_closure_count'])
+        result = df[['cchq_user_id']].drop_duplicates().copy()
+        result['forced_du_closure_count'] = 0
+        result = pd.merge(result, forced_total_df, on='cchq_user_id', how='left')
+        result['forced_du_closure_count_total'] = result['forced_du_closure_count_total'].fillna(0).astype(int)
+        return result[['cchq_user_id', 'forced_du_closure_count', 'forced_du_closure_count_total']]
 
-    # Set 'forced_du_closure' column based on 'force_close_status'
+    # Recalculate closure status for the 7-day filtered data
     filtered_df['forced_du_closure'] = filtered_df['force_close_status'].apply(
-        lambda x: True if str(x).lower() == 'yes' else False
+        lambda x: str(x).lower() == 'yes'
     )
-    #Remove timezone specific metadata on last_modified from filtered_df 
     filtered_df['last_modified'] = filtered_df['last_modified'].dt.tz_localize(None)
 
-    #Grouped together by owner_id/user_id and sum of forced_du_closure to be true
-    filtered_df = filtered_df.groupby('cchq_user_id')['forced_du_closure'].sum().reset_index()
-    #Rename the column for clarity
-    filtered_df.rename(columns={'forced_du_closure': 'forced_du_closure_count'}, inplace=True)
-    return filtered_df
+    closure_last7_df = filtered_df.groupby('cchq_user_id')['forced_du_closure'].sum().reset_index()
+    closure_last7_df.rename(columns={'forced_du_closure': 'forced_du_closure_count'}, inplace=True)
 
+    # Merge both counts together
+    result = pd.merge(closure_last7_df, forced_total_df, on='cchq_user_id', how='outer').fillna(0)
+    result['forced_du_closure_count'] = result['forced_du_closure_count'].astype(int)
+    result['forced_du_closure_count_total'] = result['forced_du_closure_count_total'].astype(int)
+
+    return result[['cchq_user_id', 'forced_du_closure_count', 'forced_du_closure_count_total']]
+
+def print_df(df):
+    with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
+        print(df)  # Replace df with your actual DataFrame variable
 
 if __name__ == "__main__":
     main()

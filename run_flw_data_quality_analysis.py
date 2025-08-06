@@ -226,10 +226,57 @@ def main():
     }, inplace=True)
 
 
-    ultimate_df['score']=0
+    ultimate_df = calculate_score(ultimate_df)
 
     print("The Final output will be downloaded into your Downloads folder with name report_flw_data_quality_analysis.xlsx...")
     output_as_excel_in_downloads(ultimate_df, "report_flw_data_quality_analysis")
+
+
+def calculate_score(df):
+    df = df.copy()
+    
+    def score_row(row):
+        score = 0
+        
+        # Rule 1 : If days_since_active is less than 7 or non existing , score increases by 10
+        if pd.isna(row.get('days_since_active')) or row['days_since_active'] < 7:
+            score += 10
+        
+        # Rule 2 : avrg_forms_per_day_mavrg is greater than 10 or non existing, increase the score by 10
+        if pd.isna(row.get('avrg_forms_per_day_mavrg')) or row['avrg_forms_per_day_mavrg'] > 10:
+            score += 10
+        
+        # Rule 3 : dus_per_day_mavrg is more than 1 or empty, increase the score by 10
+
+        if pd.isna(row.get('dus_per_day_mavrg')) or row['dus_per_day_mavrg'] > 1:
+            score += 10
+        
+        # Rule 4 : - avg_duration_minutes is more than 3 or non existing, increase score by 10
+        if pd.isna(row.get('avg_duration_minutes')) or row['avg_duration_minutes'] > 3:
+            score += 10
+        
+        # Rule 5 : female_child_ratio_result is not equal to 'strong_negative' , increase the score by 15
+        if row.get('female_child_ratio_result') != 'strong_negative':
+            score += 15
+        
+        # Rule 6 : red_muac_percentage_result is not equal to 'strong_negative', increase the score by 15
+        if row.get('red_muac_percentage_result') != 'strong_negative':
+            score += 15
+        
+        # Rule 7 : under_12_months_percentage_result is not equal to 'strong_negative' , increase the score by 15
+        if row.get('under_12_months_percentage_result') != 'strong_negative':
+            score += 15
+        
+        # Rule 8 : camping  column is less than 10 , increase the score by 15
+        if pd.isna(row.get('camping')) or row['camping'] == '' or row['camping'] != 'Camping +' or row['camping'] != 'Camping ++':
+            score += 15
+        
+        return score
+    
+    df['score'] = df.apply(score_row, axis=1)
+    return df
+
+
 
 def remove_empty_flws(df):
     df = df[df["flw_id"].notnull() & (df["flw_id"].astype(str).str.strip() != "")]

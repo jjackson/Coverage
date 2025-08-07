@@ -107,7 +107,7 @@ FROM opportunity_uservisit
 LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id
 LEFT JOIN users_user ON opportunity_uservisit.user_id = users_user.id
 LEFT JOIN opportunity_deliverunit ON opportunity_uservisit.deliver_unit_id = opportunity_deliverunit.id
-WHERE opportunity_opportunity.name LIKE '%Scale Up%'
+WHERE opportunity_opportunity.name like '%Scale Up%'
 and opportunity_opportunity.is_test = 'false'
 ORDER BY opportunity_uservisit.visit_date;""", 
 
@@ -127,7 +127,7 @@ LEFT JOIN opportunity_opportunity oo
 LEFT JOIN users_user u 
     ON uv.user_id = u.id
 WHERE 
-  oo.name LIKE '%Scale Up%'
+  oo.name like '%Scale Up%'
   AND  oo.is_test = 'false'
   AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
 GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
@@ -146,7 +146,7 @@ LEFT JOIN users_user u
     ON oa.user_id = u.id
 LEFT JOIN opportunity_uservisit uv
   ON oa.opportunity_id = uv.opportunity_id
-WHERE oo.name LIKE '%Scale Up%'
+WHERE oo.name like '%Scale Up%'
 AND oo.is_test = 'false'
 GROUP BY uv.user_id, cchq_user_id
 ORDER BY opportunity_name, flw_name;"""

@@ -227,6 +227,11 @@ def main():
 
 
     ultimate_df = calculate_score(ultimate_df)
+    # Replace blank strings and whitespace-only strings with NaN
+    ultimate_df.replace(r'^\s*$', numpy.nan, regex=True, inplace=True)
+    # Fill all NaN values with '.'
+    ultimate_df.fillna('.', inplace=True)
+
 
     print("The Final output will be downloaded into your Downloads folder with name report_flw_data_quality_analysis.xlsx...")
     output_as_excel_in_downloads(ultimate_df, "report_flw_data_quality_analysis")

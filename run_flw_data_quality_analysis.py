@@ -159,6 +159,7 @@ def main():
     valid_opportunities = list(opportunity_to_domain_mapping.values())
     
     overall_domain_df = pd.DataFrame()
+    domain_dfs = []
     for domain in valid_opportunities:
         domain_df = pd.DataFrame()
          # Get the directory of the current script
@@ -182,13 +183,13 @@ def main():
             service_df.rename(columns={'owner_id': 'cchq_user_id'}, inplace=True)
             
             #forced closure merging
-            forced_du_closure_df = set_forced_du_closure (service_df)
+            forced_du_closure_df = set_forced_du_closure (service_df, domain)
             domain_df = forced_du_closure_df
 
             #DU's with Camping
             camping_df = set_camping(service_df)
             domain_df = pd.merge(domain_df, camping_df, how='outer')
-            
+
             #DU's with No Children merging
             dus_with_no_children_df = dus_with_no_children(service_df)
             domain_df = pd.merge(domain_df, dus_with_no_children_df, how='outer')
@@ -200,19 +201,19 @@ def main():
             #DU's to be watched
             set_dus_tobe_watched_df = dus_tobe_watched_summary(service_df)
             domain_df = pd.merge(domain_df, set_dus_tobe_watched_df, how='outer')
-
+            domain_dfs.append(domain_df)
 
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
 
-
-    overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+    
+    overall_domain_df = pd.concat(domain_dfs, ignore_index=True)
+    
 
     #Last 7 days average Form Submission Time
     average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
     average_form_submission_last_7_days_df = get_superset_data(average_form_submission_sql)
     overall_domain_df = pd.merge(overall_domain_df, average_form_submission_last_7_days_df, how='outer')
-
     #join the two dataframes : overall_domain_df from case-data and 
     #final_df: from summary and data quality utility
     ultimate_df=pd.merge(overall_domain_df, final_df,on="cchq_user_id",how="outer" )
@@ -439,7 +440,7 @@ def dus_with_no_children(df):
 
 
 
-def set_forced_du_closure(df):
+def set_forced_du_closure(df, domain):
     df = df.copy()
     df['last_modified'] = pd.to_datetime(df['last_modified'], utc=True)
 
@@ -451,14 +452,16 @@ def set_forced_du_closure(df):
     # If the column doesn't exist, create a placeholder column with False values
         df['forced_du_closure'] = False
 
-
+    
     forced_total_df = df.groupby('cchq_user_id')['forced_du_closure'].sum().reset_index()
     forced_total_df.rename(columns={'forced_du_closure': 'forced_du_closure_count_total'}, inplace=True)
+    
 
     # Filter rows modified in the last 7 days
     today_utc = datetime.now(pytz.UTC)
     seven_days_ago = today_utc - timedelta(days=7)
     filtered_df = df[df['last_modified'] >= seven_days_ago].copy()
+    
 
     # Check if 'force_close_status' exists
     if 'force_close_status' not in filtered_df.columns:

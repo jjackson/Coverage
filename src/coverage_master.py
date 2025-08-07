@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict
 from dotenv import load_dotenv, find_dotenv
 from .utils import data_loader
+from .sqlqueries.sql_queries import SQL_QUERIES
 import pickle  # Add this import at the top
 
 
@@ -383,7 +384,7 @@ def main():
         print("Loading Service Delivery Points from Superset API")
         
         service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
-            superset_url, superset_username, superset_password
+            superset_url, superset_username, superset_password, SQL_QUERIES["opportunity_uservisit"]
         )
         
 

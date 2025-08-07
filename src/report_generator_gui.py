@@ -53,7 +53,7 @@ class ReportGeneratorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Coverage Analysis - Report Generator")
-        self.root.geometry("600x500")
+        self.root.geometry("600x700")  # Increased height for larger output window
         
         # Variables
         self.input_file_path = tk.StringVar()
@@ -69,16 +69,16 @@ class ReportGeneratorGUI:
     def setup_ui(self):
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.grid(row=0, column=0, sticky="nsew")
         
         # Input file selection
         ttk.Label(main_frame, text="Input File:").grid(row=0, column=0, sticky=tk.W, pady=5)
         
         file_frame = ttk.Frame(main_frame)
-        file_frame.grid(row=0, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        file_frame.grid(row=0, column=1, columnspan=2, sticky="we", pady=5)
         
         self.file_entry = ttk.Entry(file_frame, textvariable=self.input_file_path, width=40)
-        self.file_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        self.file_entry.grid(row=0, column=0, sticky="we")
         ttk.Button(file_frame, text="Browse...", command=self.browse_input_file).grid(row=0, column=1, padx=(5, 0))
         
         file_frame.columnconfigure(0, weight=1)
@@ -93,15 +93,15 @@ class ReportGeneratorGUI:
         
         # Parameters frame (dynamic)
         self.params_frame = ttk.LabelFrame(main_frame, text="Parameters", padding="10")
-        self.params_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        self.params_frame.grid(row=2, column=0, columnspan=3, sticky="we", pady=10)
         
         # Output directory
         ttk.Label(main_frame, text="Output Directory:").grid(row=3, column=0, sticky=tk.W, pady=5)
         
         output_frame = ttk.Frame(main_frame)
-        output_frame.grid(row=3, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        output_frame.grid(row=3, column=1, columnspan=2, sticky="we", pady=5)
         
-        ttk.Entry(output_frame, textvariable=self.output_directory, width=40).grid(row=0, column=0, sticky=(tk.W, tk.E))
+        ttk.Entry(output_frame, textvariable=self.output_directory, width=40).grid(row=0, column=0, sticky="we")
         ttk.Button(output_frame, text="Browse...", command=self.browse_output_directory).grid(row=0, column=1, padx=(5, 0))
         
         output_frame.columnconfigure(0, weight=1)
@@ -112,10 +112,10 @@ class ReportGeneratorGUI:
         
         # Progress area
         progress_frame = ttk.LabelFrame(main_frame, text="Progress", padding="10")
-        progress_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        progress_frame.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=5)
         
-        self.progress_text = scrolledtext.ScrolledText(progress_frame, height=8, width=70)
-        self.progress_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.progress_text = scrolledtext.ScrolledText(progress_frame, height=30, width=70)  # Adjusted height for better fit
+        self.progress_text.grid(row=0, column=0, sticky="nsew")
         
         progress_frame.columnconfigure(0, weight=1)
         progress_frame.rowconfigure(0, weight=1)

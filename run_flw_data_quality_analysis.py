@@ -128,8 +128,9 @@ def main():
 
     # Call the generate method
     output_files = report.generate()
-    quality_issues_df = report.excel_data.get('Quality Issues Found')
-
+    #quality_issues_df = report.excel_data.get('Quality Issues Found')
+    quality_issues_df = report.excel_data.get('FLW Results')
+    
     if quality_issues_df is not None and not quality_issues_df.empty:
         quality_issues_df['flw_id'] = quality_issues_df['flw_id'].astype(str)
     else:
@@ -200,15 +201,18 @@ def main():
             set_dus_tobe_watched_df = dus_tobe_watched_summary(service_df)
             domain_df = pd.merge(domain_df, set_dus_tobe_watched_df, how='outer')
 
-            #Last 7 days average Form Submission Time
-            average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
-            average_form_submission_last_7_days_df = get_superset_data(average_form_submission_sql)
-            domain_df = pd.merge(domain_df, average_form_submission_last_7_days_df, how='outer')
 
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
 
+
     overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+
+    #Last 7 days average Form Submission Time
+    average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]
+    average_form_submission_last_7_days_df = get_superset_data(average_form_submission_sql)
+    overall_domain_df = pd.merge(overall_domain_df, average_form_submission_last_7_days_df, how='outer')
+
     #join the two dataframes : overall_domain_df from case-data and 
     #final_df: from summary and data quality utility
     ultimate_df=pd.merge(overall_domain_df, final_df,on="cchq_user_id",how="outer" )

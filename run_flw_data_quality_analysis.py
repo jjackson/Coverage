@@ -159,6 +159,7 @@ def main():
     valid_opportunities = list(opportunity_to_domain_mapping.values())
     
     overall_domain_df = pd.DataFrame()
+    domain_dfs = []
     for domain in valid_opportunities:
         domain_df = pd.DataFrame()
          # Get the directory of the current script
@@ -200,13 +201,13 @@ def main():
             #DU's to be watched
             set_dus_tobe_watched_df = dus_tobe_watched_summary(service_df)
             domain_df = pd.merge(domain_df, set_dus_tobe_watched_df, how='outer')
-
+            domain_dfs.append(domain_df)
 
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
 
 
-    overall_domain_df = pd.concat([overall_domain_df, domain_df], ignore_index=True)
+    overall_domain_df = pd.concat(domain_dfs, ignore_index=True)
 
     #Last 7 days average Form Submission Time
     average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]

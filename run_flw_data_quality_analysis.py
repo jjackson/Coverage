@@ -206,9 +206,7 @@ def main():
         else:
             print("Error: Coverage data not found. Please run run_coverage.py first.")
 
-    
     overall_domain_df = pd.concat(domain_dfs, ignore_index=True)
-    
 
     #Last 7 days average Form Submission Time
     average_form_submission_sql = SQL_QUERIES["sql_fetch_average_time_form_submission_last_7_days"]

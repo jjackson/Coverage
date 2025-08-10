@@ -149,5 +149,17 @@ LEFT JOIN opportunity_uservisit uv
 WHERE oo.name like '%Scale Up%'
 AND oo.is_test = 'false'
 GROUP BY uv.user_id, cchq_user_id
-ORDER BY opportunity_name, flw_name;"""
+ORDER BY opportunity_name, flw_name;""",
+
+"opp_user_visit_du_case_id_mapping" : """SELECT oo.name,
+uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' AS du_case_id,
+(uv.form_json -> 'form' -> 'meta' ->> 'timeEnd')::timestamp AS time_end
+FROM opportunity_uservisit uv
+LEFT JOIN opportunity_opportunity oo 
+    ON oo.id = uv.opportunity_id
+WHERE 
+  oo.name like '%Scale Up%'
+  AND  oo.is_test = 'false'
+  AND oo.id IN (516,517,531,539,566,575,601,603)
+  AND uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' != '';"""
 }

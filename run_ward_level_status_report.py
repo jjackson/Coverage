@@ -1,4 +1,4 @@
-import os
+import os,constants
 from pprint import pprint
 import pickle
 import pandas as pd
@@ -8,8 +8,28 @@ import src.utils.data_loader as data_loader
 from sqlqueries.sql_queries import SQL_QUERIES
 from typing import Dict
 from pathlib import Path
+from datetime import datetime, timedelta
+import pytz
+from src.sqlqueries.sql_queries import SQL_QUERIES
 
 DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+
+def get_superset_data(sql):
+    
+    dotenv_path=find_dotenv("./src/.env")
+    load_dotenv(dotenv_path,override=True)
+    superset_url = os.environ.get('SUPERSET_URL')
+    superset_username = os.environ.get('SUPERSET_USERNAME')
+    superset_password = os.environ.get('SUPERSET_PASSWORD')
+    chunk_size: int = constants.SQL_CHUNK_SIZE
+    timeout: int = constants.API_TIMEOUT_LIMIT
+    verbose: bool = True
+    if superset_username is None or superset_password is None or superset_url is None:
+        raise ValueError("USERNAME, PASSWORD or SUPERSET_URL must be set in the environment or .env file")
+
+    output_df = data_loader.superset_query_with_pagination_as_df(superset_url, sql, superset_username, superset_password, chunk_size, timeout, verbose
+    )
+    return output_df
 
 def load_opportunity_domain_mapping() -> Dict[str, str]:
     """Load opportunity to domain mapping from environment variable."""
@@ -70,20 +90,72 @@ def init_microplanning():
 
     # Create DataFrame
     df = pd.DataFrame(rows)
+    df['visits_completed'] = 0
+    df['visits_completed_last_week'] = 0
+    df['pct_visits_completed'] = 0.0
+    df['pct_visits_completed_last_week'] = 0.0
+    df['buildings_completed'] = 0
+    df['buildings_completed_last_week'] = 0
+    df['pct_buildings_completed'] = 0.0
+    df['pct_buildings_completed_last_week'] = 0.0
+    df['du_completed'] = 0
+    df['du_completed_last_week'] = 0
+    df['pct_du_completed'] = 0.0
+    df['pct_du_completed_last_week'] = 0.0
 
     # Display the DataFrame
-    print(df)
     return df
+
+def find_ward_column_name(domain):
+    match domain:
+        case 'ccc-chc-ahti-2024-25':
+            return "ward_name"
+        case 'ccc-chc-ruwoyd-2024-25':
+            return "ward"
+        case 'ccc-chc-jhf-2024-25':
+            return "ward"
+        case 'ccc-chc-rwyd-2024-25':
+            return "ward_name"
+        case 'ccc-chc-eha-c-2024-25':
+            return "ward_name"
+        case 'ccc-chc-isodaf-2024-25':
+            return "ward_name"
+        case _:
+            return ""
+
 
 def main():
     final_df = init_microplanning()
-    # Load environment variables from .env file
+    #Load environment variables from .env file
     dotenv_path=find_dotenv("./src/.env")
     load_dotenv(dotenv_path,override=True)
-
+    
+    # Load opportunity to domain mapping from environment variable
     opportunity_to_domain_mapping = load_opportunity_domain_mapping()
     valid_opportunities = list(opportunity_to_domain_mapping.values())
+
+    # update visit related columns
+    #get details of visits from visit SQL query with delivery-unit case_ids for using it later
+    print("Fetching data from SQL for visit related columns...")
+
+    #####prepping visit data######
+    visit_sql = SQL_QUERIES['opp_user_visit_du_case_id_mapping']
+    visit_data_df = get_superset_data(visit_sql)
+    visit_data_df.rename(columns={'du_case_id': 'case_id'}, inplace=True)
+    visit_data_df.rename(columns={'time_end': 'visit_date'}, inplace=True)
+    visit_data_df.rename(columns={'name': 'domain'}, inplace=True)
+
+    # Convert visit_date to datetime
+    visit_data_df['visit_date'] = pd.to_datetime(visit_data_df['visit_date'],format='mixed', utc=True, errors='coerce')
+    # Extract only the date component from visit_date
+    visit_data_df['visit_date'] = visit_data_df['visit_date'].dt.date
+
+    #conver domain name values from actual name to cchq domain names
+    visit_data_df['domain'] = visit_data_df['domain'].map(opportunity_to_domain_mapping)
+    print("Visit data fetched successfully.")
+
     
+    #####Get all the required metrics##### 
     for domain in valid_opportunities:
         domain_df = pd.DataFrame()
          # Get the directory of the current script
@@ -107,11 +179,51 @@ def main():
                 service_df = service_df
             else:
                 service_df = pd.DataFrame(service_df)
+            #output_as_excel_in_downloads(service_df, "domain_"+ domain+"_pickel_data")
+            domain_df = service_df.copy()
+            domain_df_last_week = service_df.copy()
+            # Filter the DataFrame for the current domain
+            domain_df_last_week['last_modified'] = pd.to_datetime(domain_df_last_week['last_modified'], utc=True)
+             # Define analysis window
+            today_utc = datetime.now(pytz.UTC)
+            seven_days_ago = today_utc - timedelta(days=7)
 
-            # Output the DataFrame to Excel in Downloads folder
-            output_as_excel_in_downloads(service_df, f"{domain}_coverage_data")
+            # Filter rows modified in the last 7 days
+            domain_df_last_week = domain_df_last_week[domain_df_last_week['last_modified'] >= seven_days_ago]
 
- 
+            ward_column = find_ward_column_name(domain)
+            if(ward_column != ""):
+                wards = final_df.loc[final_df['domain'] == domain, 'ward'].unique()   
+                for ward in wards:
+                    print(f"Processing domain: {domain}, ward: {ward}")
+
+                    #Update DU relateed columns
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed'] = domain_df[(domain_df[ward_column] == ward) & (domain_df['du_status'] == 'completed')].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] = domain_df_last_week[(domain_df_last_week[ward_column] == ward) & (domain_df_last_week['du_status'] == 'completed')].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_target']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_target']
+                    
+                    #Update building related columns
+                    buildings_completed = domain_df[(domain_df[ward_column] == ward) & (domain_df['du_status'] == 'completed')]['buildings'].sum()
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward),'buildings_completed'] = buildings_completed
+                    buildings_completed_last_week = domain_df_last_week[(domain_df_last_week[ward_column] == ward) & (domain_df_last_week['du_status'] == 'completed')]['buildings'].sum()
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward),'buildings_completed_last_week'] = buildings_completed_last_week
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_buildings_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'building_target']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_buildings_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'building_target']
+                    
+                    #Update visit related columns
+                    subset_visit_data_df = visit_data_df[visit_data_df['domain'] == domain]
+                    subset_visit_data_df = pd.merge(subset_visit_data_df, domain_df, on="case_id",how="left")
+                    subset_visit_data_df = subset_visit_data_df[['case_id','visit_date','domain',ward_column]]
+                    
+            else:
+                print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
+                # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
+            
+        else:
+            print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
+    output_as_excel_in_downloads(final_df, "final_report_")
+
 
 if __name__ == "__main__":
     main()

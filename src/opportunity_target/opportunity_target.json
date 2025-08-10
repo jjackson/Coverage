@@ -3,81 +3,86 @@
     "ccc-chc-zegcawis-2024-25": {
       "wards": {
         "Auno": {
-          "visit_target": 50,
-          "building_target": 120,
-          "du_target": 300
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Damboa": {
-          "visit_target": 50,
-          "building_target": 120,
-          "du_target": 300
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Kasugula": {
-          "visit_target": 50,
-          "building_target": 120,
-          "du_target": 300
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Mafa": {
-          "visit_target": 50,
-          "building_target": 120,
-          "du_target": 300
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
       }
     },
     "ccc-chc-cowacdi-2024-25": {
       "wards": {
         "Bolori 1": {
-          "visit_target": 60,
-          "building_target": 150,
-          "du_target": 350
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
       }
     },
     "ccc-chc-ahti-2024-25": {
       "wards": {
         "Unguwa Uku Chikin Gari": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Darmanawa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Unguwa Uku Kauyan Alu": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
       }
     },
-    "ccc-chc-ruwoyd-2024-25": {
+    "ccc-chc-rwyd-2024-25": {
       "wards": {
         "Futuless": {
-          "visit_target": 70,
-          "building_target": 160,
-          "du_target": 55
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "kirchiga": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Michika I": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
+        },
+        "Michika II": {
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Pallam": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Sukur": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
 
       }
@@ -85,69 +90,69 @@
     "ccc-chc-jhf-2024-25": {
       "wards": {
         "Jagali North": {
-          "visit_target": 70,
-          "building_target": 160,
-          "du_target": 55
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Jagali South": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Lano/ Kuri/ Lambam": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Lubo/ Difa/ Kinafa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Nono/ Kunuwal/ Wuro Birdeka": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
 
       }
     },
-    "ccc-chc-rwyd-2024-25": {
+    "ccc-chc-ruwoyd-2024-25": {
       "wards": {
         "Kware": {
-          "visit_target": 70,
-          "building_target": 160,
-          "du_target": 55
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Tsaki Walakae": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Basansan": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Durbawa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Gandu": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Gidan Rugga More": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Hamma Ali Marabawa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
 
       }
@@ -155,79 +160,79 @@
     "ccc-chc-eha-c-2024-25": {
       "wards": {
         "Dindere": {
-          "visit_target": 70,
-          "building_target": 160,
-          "du_target": 55
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Doka": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Gajida": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Ginsawa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Janguza": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Jauben Kudu": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Kwami": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Lambu": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Langel": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Tofa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Unguwar rimi": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Wangara": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Yalwa Karama": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Yanoko": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Yarimawa": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+         "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
 
       }
@@ -235,24 +240,24 @@
     "ccc-chc-isodaf-2024-25": {
       "wards": {
         "Farin Dutse": {
-          "visit_target": 70,
-          "building_target": 160,
-          "du_target": 55
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Gwaram": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Kudai": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         },
         "Maruta": {
-          "visit_target": 55,
-          "building_target": 130,
-          "du_target": 320
+          "visit_target": 4000,
+          "building_target": 1000,
+          "du_target": 2000
         }
       }
     }

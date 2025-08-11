@@ -1,5 +1,7 @@
-import os,constants
-from pprint import pprint
+import os,sys
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(project_root)
+
 import pickle
 import pandas as pd
 import json
@@ -11,6 +13,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import pytz
 from src.sqlqueries.sql_queries import SQL_QUERIES
+import constants
 
 DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
@@ -70,7 +73,7 @@ def output_as_excel_in_downloads(df, file_name):
 def init_microplanning():
     # Load JSON from a file or string
     current_dir = Path(__file__).parent
-    json_path = current_dir /'src' / 'opportunity_target' / 'opportunity_target.json'
+    json_path = current_dir / 'opportunity_target' / 'opportunity_target.json'
     if not json_path.exists():
         print(f"Error: {json_path} not found. Please ensure the file exists.")
         return
@@ -160,10 +163,11 @@ def main():
     for domain in valid_opportunities:
         domain_df = pd.DataFrame()
          # Get the directory of the current script
-        _dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),"data")
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        data_path = os.path.join(project_root, 'data')
         # Load coverage data from pickle file for each domain
         pickle_file_name = domain.replace('"', '')+ ".pkl"
-        pickle_path = os.path.join(_dir, pickle_file_name)
+        pickle_path = os.path.join(data_path, pickle_file_name)
         if not os.path.exists(pickle_path):
             print(f"Error: {pickle_file_name} not found. Please run run_coverage.py first.")
             return
@@ -241,8 +245,7 @@ def main():
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
     output_as_excel_in_downloads(final_df, "final_report")
-    
 
-
+  
 if __name__ == "__main__":
     main()

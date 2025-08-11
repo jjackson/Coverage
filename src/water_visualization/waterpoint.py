@@ -84,9 +84,12 @@ class WaterPoint:
         type_map = {
             'piped_water': 'Piped Water',
             'borehole_hand_pump': 'Borehole Hand Pump',
+            'borehole_motorized_pump': 'Borehole Motorized Pump',
             'protected_wells': 'Protected Well',
-            'unprotected_wells': 'Unprotected Well',
-            'surface_water': 'Surface Water'
+            'well': 'Well',
+            'surface_water': 'Surface Water',
+            'storage_tank_tap_stand': 'Storage Tank/Tap Stand',
+            'other': 'Other'
         }
         return type_map.get(self.water_point_type, self.water_point_type.replace('_', ' ').title())
     

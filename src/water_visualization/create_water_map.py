@@ -191,9 +191,6 @@ def generate_popup_html(water_point: WaterPoint, output_dir: str) -> str:
             functional = "Yes" if water_point.chlorine_dispenser_functional else "No"
             characteristics.append(f"<strong>Dispenser Functional:</strong> {functional}")
     
-    if water_point.household_estimate:
-        characteristics.append(f"<strong>Households Served:</strong> {water_point.household_estimate:,}")
-    
     if water_point.other_treatment:
         characteristics.append(f"<strong>Other Treatment:</strong> {water_point.other_treatment}")
     
@@ -236,11 +233,14 @@ def generate_popup_html(water_point: WaterPoint, output_dir: str) -> str:
 def get_marker_color(water_point: WaterPoint) -> str:
     """Get marker color based on water point type."""
     color_map = {
-        'piped_water': '#2E86AB',           # Blue
-        'borehole_hand_pump': '#A23B72',   # Purple
-        'protected_wells': '#F18F01',       # Orange
-        'unprotected_wells': '#C73E1D',     # Red
-        'surface_water': '#8B4513'          # Brown
+        'piped_water': '#2E86AB',               # Blue
+        'borehole_hand_pump': '#A23B72',       # Purple
+        'borehole_motorized_pump': '#8E44AD',   # Dark Purple
+        'protected_wells': '#F18F01',           # Orange
+        'well': '#E67E22',                      # Light Orange
+        'surface_water': '#8B4513',             # Brown
+        'storage_tank_tap_stand': '#27AE60',    # Green
+        'other': '#95A5A6'                      # Gray
     }
     return color_map.get(water_point.water_point_type, '#666666')
 
@@ -266,6 +266,22 @@ def generate_html_map(water_points: List[WaterPoint], output_dir: str, title: st
     # Generate statistics
     total_points = len(water_points)
     projects = list(set(wp.project_name for wp in water_points))
+    
+    # Generate dynamic legend based on actual data
+    unique_types = list(set(wp.water_point_type for wp in water_points))
+    legend_items = []
+    for water_type in sorted(unique_types):  # Sort for consistent ordering
+        # Get a sample water point of this type to get display name and color
+        sample_wp = next(wp for wp in water_points if wp.water_point_type == water_type)
+        color = get_marker_color(sample_wp)
+        display_name = sample_wp.water_point_type_display
+        legend_items.append(f'''
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: {color};"></div>
+            <span>{display_name}</span>
+        </div>''')
+    
+    legend_html = "".join(legend_items)
     
     html_template = f'''<!DOCTYPE html>
 <html lang="en">
@@ -548,26 +564,7 @@ def generate_html_map(water_points: List[WaterPoint], output_dir: str, title: st
     
     <div class="legend">
         <h4>Water Point Types</h4>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #2E86AB;"></div>
-            <span>Piped Water</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #A23B72;"></div>
-            <span>Borehole Hand Pump</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #F18F01;"></div>
-            <span>Protected Well</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #C73E1D;"></div>
-            <span>Unprotected Well</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #8B4513;"></div>
-            <span>Surface Water</span>
-        </div>
+        {legend_html}
     </div>
     
     <!-- Lightbox -->
@@ -765,7 +762,10 @@ def create_water_points_map(
     # Set up output directory
     if output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"../../water_map_output_{timestamp}"
+        # Create output directory at project root level (same level as src/)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(script_dir))  # Go up from water_visualization -> src -> project_root
+        output_dir = os.path.join(project_root, f"water_map_output_{timestamp}")
     
     os.makedirs(output_dir, exist_ok=True)
     

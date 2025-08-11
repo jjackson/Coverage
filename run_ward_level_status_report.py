@@ -14,6 +14,7 @@ from src.sqlqueries.sql_queries import SQL_QUERIES
 
 DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
+
 def get_superset_data(sql):
     
     dotenv_path=find_dotenv("./src/.env")
@@ -215,14 +216,32 @@ def main():
                     subset_visit_data_df = visit_data_df[visit_data_df['domain'] == domain]
                     subset_visit_data_df = pd.merge(subset_visit_data_df, domain_df, on="case_id",how="left")
                     subset_visit_data_df = subset_visit_data_df[['case_id','visit_date','domain',ward_column]]
+
+                    subset_visit_data_df_last_week = subset_visit_data_df.copy()
+                    today_utc = datetime.now(pytz.UTC)
+                    seven_days_ago = (today_utc - timedelta(days=7)).date()
+                    # Filter rows modified in the last 7 days
+                    subset_visit_data_df_last_week = subset_visit_data_df_last_week[subset_visit_data_df_last_week['visit_date'] >= seven_days_ago]
                     
+                    # Count visits completed total
+                    visits_completed = subset_visit_data_df[subset_visit_data_df[ward_column] == ward].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed'] = visits_completed
+                    # Count visits completed last week  
+                    visits_completed_last_week = subset_visit_data_df_last_week[subset_visit_data_df_last_week[ward_column] == ward].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed_last_week'] = visits_completed_last_week
+                    # Calculate percentage of visits completed
+
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visit_target']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visit_target']
+
             else:
                 print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
                 # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
-    output_as_excel_in_downloads(final_df, "final_report_")
+    output_as_excel_in_downloads(final_df, "final_report")
+    
 
 
 if __name__ == "__main__":

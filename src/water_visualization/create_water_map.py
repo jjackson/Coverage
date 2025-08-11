@@ -23,13 +23,31 @@ def find_projects(water_data_path: str = "../../water_data") -> Dict[str, Dict[s
     
     # Look for Excel files and matching image directories
     for excel_file in water_data_dir.glob("*.xlsx"):
-        # Extract project name from filename pattern: "{PROJECT} CCC Waterbody Survey - August 7.xlsx"
         filename = excel_file.stem
-        if "CCC Waterbody Survey" in filename:
+        project_name = None
+        
+        # Handle new filename patterns: "{PROJECT} Final Waterbody Data.xlsx" or "{PROJECT} Final Waterbody data.xlsx"
+        if "Final Waterbody" in filename:
+            if "Final Waterbody Data" in filename:
+                project_name = filename.split(" Final Waterbody Data")[0]
+            elif "Final Waterbody data" in filename:
+                project_name = filename.split(" Final Waterbody data")[0]
+        # Handle old filename pattern: "{PROJECT} CCC Waterbody Survey - August 7.xlsx"
+        elif "CCC Waterbody Survey" in filename:
             project_name = filename.split(" CCC Waterbody Survey")[0]
+        
+        if project_name:
+            # Find matching image directory - try multiple patterns
+            image_dirs = []
             
-            # Find matching image directory
-            image_dirs = list(water_data_dir.glob(f"{project_name} Pics*"))
+            # Try new pattern: "{PROJECT} Waterbody Survey/" or "{PROJECT} Waterbody survey/"
+            image_dirs.extend(water_data_dir.glob(f"{project_name} Waterbody Survey*"))
+            image_dirs.extend(water_data_dir.glob(f"{project_name} Waterbody survey*"))
+            
+            # Try old pattern: "{PROJECT} Pics*"
+            if not image_dirs:
+                image_dirs.extend(water_data_dir.glob(f"{project_name} Pics*"))
+            
             if image_dirs:
                 projects[project_name] = {
                     "excel_path": str(excel_file),

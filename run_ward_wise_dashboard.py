@@ -5,25 +5,37 @@ import plotly.graph_objs as go
 import os
 from dash import dash_table
 
-# Load or generate your final_df here
-# final_df = pd.read_pickle("your_final_df.pkl")  # Or however you have it
-# For demonstration, let's assume final_df is already available
 
-# Load final_df from Excel in Downloads
+# Load dataframes from Excel in Downloads
 downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-excel_path = os.path.join(downloads_dir, "ward_level_status_report.xlsx")  # Change filename if needed
-if not os.path.exists(excel_path):
-    raise FileNotFoundError(f"Excel file not found at {excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
-final_df = pd.read_excel(excel_path)
+ward_level_excel_path = os.path.join(downloads_dir, "ward_level_status_report.xlsx")  # Change filename if needed
+if not os.path.exists(ward_level_excel_path):
+    raise FileNotFoundError(f"Excel file not found at {ward_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
+ward_level_final_df = pd.read_excel(ward_level_excel_path)
+
+opp_level_excel_path = os.path.join(downloads_dir, "opp_level_status_report.xlsx")  # Change filename if needed
+if not os.path.exists(opp_level_excel_path):
+    raise FileNotFoundError(f"Excel file not found at {opp_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
+opp_level_final_df = pd.read_excel(opp_level_excel_path)
 
 app = dash.Dash(__name__)
 
 # Prepare dropdown options
-domain_options = [{'label': d, 'value': d} for d in final_df['domain'].unique()]
+domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
-# ...existing code...
+# Prepare columns for the opportunity-level table
+opp_level_table = dash_table.DataTable(
+    columns=[{"name": i, "id": i} for i in opp_level_final_df.columns],
+    data=opp_level_final_df.to_dict('records'),
+    style_table={'overflowX': 'auto', 'marginBottom': '32px'},
+    style_cell={'textAlign': 'left', 'padding': '6px'},
+    style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
+    page_size=10  # Show 10 rows per page, adjust as needed
+)
 
 app.layout = html.Div([
+    html.H2("Opportunity Level Summary"),
+    opp_level_table,
     html.H2("Ward Status Dashboard"),
     html.Div([
         html.Div([
@@ -70,7 +82,7 @@ app.layout = html.Div([
     Input('domain-dropdown', 'value')
 )
 def update_ward_dropdown(selected_domain):
-    wards = final_df[final_df['domain'] == selected_domain]['ward'].unique()
+    wards = ward_level_final_df[ward_level_final_df['domain'] == selected_domain]['ward'].unique()
     options = [{'label': w, 'value': w} for w in wards]
     value = options[0]['value'] if options else None
     return options, value
@@ -84,7 +96,7 @@ def update_charts(selected_domain, selected_ward):
     if not selected_domain or not selected_ward:
         return html.Div("Please select a domain and ward.")
 
-    row = final_df[(final_df['domain'] == selected_domain) & (final_df['ward'] == selected_ward)]
+    row = ward_level_final_df[(ward_level_final_df['domain'] == selected_domain) & (ward_level_final_df['ward'] == selected_ward)]
     if row.empty:
         return html.Div("No data for this selection.")
 

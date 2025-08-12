@@ -1,13 +1,48 @@
 import pandas as pd
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State
 import plotly.graph_objs as go
 import os
 from dash import dash_table
 from dash_ag_grid import AgGrid
 from dash.dependencies import ClientsideFunction
+import base64
+import io
 
+# CSS styles for red highlighting
+app = dash.Dash(__name__)
 
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .cell-red-bg {
+                background-color: #ffebee !important;
+                color: #c62828 !important;
+                font-weight: bold !important;
+            }
+            .ag-cell.cell-red-bg {
+                background-color: #ffebee !important;
+                color: #c62828 !important;
+                font-weight: bold !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
 
 # Load dataframes from Excel in Downloads
@@ -22,10 +57,6 @@ if not os.path.exists(opp_level_excel_path):
     raise FileNotFoundError(f"Excel file not found at {opp_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
 opp_level_final_df = pd.read_excel(opp_level_excel_path)
 
-
-
-app = dash.Dash(__name__)
-
 # Prepare dropdown options
 domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
@@ -35,9 +66,19 @@ for i, col in enumerate(opp_level_final_df.columns):
     col_def = {"headerName": col, "field": col}
     if i < 4:
         col_def["pinned"] = "left"  # Freeze the first four columns
-    col_def["cellClassRules"] = {
-    "cell-red-bg": "value === 0 || value >= 100"
-}
+    
+    # Different highlighting rules based on column type
+    if str(col).startswith('pct_'):
+        # For pct_ columns: highlight 0 values and values > 100
+        col_def["cellClassRules"] = {
+            "cell-red-bg": "x == 0 || (typeof x === 'number' && x > 100)"
+        }
+    else:
+        # For other columns: highlight 0 values and values >= 100
+        col_def["cellClassRules"] = {
+            "cell-red-bg": "x == 0 || (typeof x === 'number' && x >= 100)"
+        }
+    
     # Set width for numeric columns to 15px
     if pd.api.types.is_numeric_dtype(opp_level_final_df[col]):
         col_def["width"] = 150
@@ -63,7 +104,23 @@ opp_level_table = AgGrid(
 
 app.layout = html.Div([
     html.H2("Opportunity Level Summary"),
-    opp_level_table,
+    html.Div([
+        html.Button(
+            "Download Opportunity Level Data",
+            id="download-opp-btn",
+            style={
+                'marginBottom': '10px',
+                'padding': '10px 20px',
+                'backgroundColor': '#007bff',
+                'color': 'white',
+                'border': 'none',
+                'borderRadius': '5px',
+                'cursor': 'pointer'
+            }
+        ),
+        dcc.Download(id="download-opp-csv"),
+        opp_level_table
+    ]),
     html.H2("Ward Status Dashboard"),
     html.Div([
         html.Div([
@@ -98,8 +155,24 @@ app.layout = html.Div([
             'verticalAlign': 'top'
         }),
     ]),
-    html.Br(),
+    html.Div([
+        html.Button(
+            "Download Ward Level Data",
+            id="download-ward-btn",
+            style={
+                'marginTop': '10px',
+                'padding': '10px 20px',
+                'backgroundColor': '#28a745',
+                'color': 'white',
+                'border': 'none',
+                'borderRadius': '5px',
+                'cursor': 'pointer'
+            }
+        ),
+        dcc.Download(id="download-ward-csv")
+    ], id='ward-download-container', style={'display': 'none'}),
     html.Div(id='charts-container')
+    
 ])
 
 
@@ -115,13 +188,14 @@ def update_ward_dropdown(selected_domain):
     return options, value
 
 @app.callback(
-    Output('charts-container', 'children'),
+    [Output('charts-container', 'children'),
+     Output('ward-download-container', 'style')],
     Input('domain-dropdown', 'value'),
     Input('ward-dropdown', 'value')
 )
 def update_charts(selected_domain, selected_wards):
     if not selected_domain or not selected_wards:
-        return html.Div("Please select a domain and at least one ward.")
+        return html.Div("Please select a domain and at least one ward."), {'display': 'none'}
 
     # Ensure selected_wards is a list
     if isinstance(selected_wards, str):
@@ -133,7 +207,7 @@ def update_charts(selected_domain, selected_wards):
     ]
 
     if filtered_rows.empty:
-        return html.Div("No data for this selection.")
+        return html.Div("No data for this selection."), {'display': 'none'}
 
     # Round all pct_ columns to two decimal places
     pct_cols = [col for col in filtered_rows.columns if str(col).startswith('pct_')]
@@ -145,9 +219,19 @@ def update_charts(selected_domain, selected_wards):
         col_def = {"headerName": col, "field": col}
         if i < 5:
             col_def["pinned"] = "left"
-        col_def["cellClassRules"] = {
-            "cell-red-bg": "value === 0 || value >= 100"
-        }
+        
+        # Different highlighting rules based on column type
+        if str(col).startswith('pct_'):
+            # For pct_ columns: highlight 0 values and values > 100
+            col_def["cellClassRules"] = {
+                "cell-red-bg": "x == 0 || (typeof x === 'number' && x > 100)"
+            }
+        else:
+            # For other columns: highlight 0 values and values >= 100
+            col_def["cellClassRules"] = {
+                "cell-red-bg": "x == 0 || (typeof x === 'number' && x >= 100)"
+            }
+        
         if pd.api.types.is_numeric_dtype(filtered_rows[col]):
             col_def["width"] = 150
             col_def["minWidth"] = 150
@@ -226,7 +310,48 @@ def update_charts(selected_domain, selected_wards):
                 'margin': '8px'}),
         ]))
 
-    return [table] + pie_charts
+    return [table] + pie_charts, {'display': 'block'}
+
+@app.callback(
+    Output("download-opp-csv", "data"),
+    Input("download-opp-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_opp_csv(n_clicks):
+    if n_clicks is None:
+        return None
+    
+    return dcc.send_data_frame(opp_level_final_df.to_csv, "opportunity_level_data.csv", index=False)
+
+@app.callback(
+    Output("download-ward-csv", "data"),
+    Input("download-ward-btn", "n_clicks"),
+    State('domain-dropdown', 'value'),
+    State('ward-dropdown', 'value'),
+    prevent_initial_call=True,
+)
+def download_ward_csv(n_clicks, selected_domain, selected_wards):
+    if n_clicks is None or not selected_domain or not selected_wards:
+        return None
+    
+    # Ensure selected_wards is a list
+    if isinstance(selected_wards, str):
+        selected_wards = [selected_wards]
+    
+    filtered_rows = ward_level_final_df[
+        (ward_level_final_df['domain'] == selected_domain) &
+        (ward_level_final_df['ward'].isin(selected_wards))
+    ]
+    
+    if filtered_rows.empty:
+        return None
+    
+    # Round all pct_ columns to two decimal places
+    pct_cols = [col for col in filtered_rows.columns if str(col).startswith('pct_')]
+    filtered_rows.loc[:, pct_cols] = filtered_rows[pct_cols].round(2)
+    
+    filename = f"ward_level_data_{selected_domain}_{'_'.join(selected_wards)}.csv"
+    return dcc.send_data_frame(filtered_rows.to_csv, filename, index=False)
 
 if __name__ == "__main__":
     app.run(debug=True)

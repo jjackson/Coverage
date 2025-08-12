@@ -11,7 +11,7 @@ from dash import dash_table
 
 # Load final_df from Excel in Downloads
 downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-excel_path = os.path.join(downloads_dir, "final_report.xlsx")  # Change filename if needed
+excel_path = os.path.join(downloads_dir, "ward_level_status_report.xlsx")  # Change filename if needed
 if not os.path.exists(excel_path):
     raise FileNotFoundError(f"Excel file not found at {excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
 final_df = pd.read_excel(excel_path)

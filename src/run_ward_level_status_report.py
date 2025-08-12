@@ -244,7 +244,7 @@ def main():
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
-    output_as_excel_in_downloads(final_df, "final_report")
+    output_as_excel_in_downloads(final_df, "ward_level_status_report")
 
   
 if __name__ == "__main__":

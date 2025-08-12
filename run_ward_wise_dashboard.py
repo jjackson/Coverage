@@ -4,6 +4,7 @@ from dash import dcc, html, Input, Output
 import plotly.graph_objs as go
 import os
 from dash import dash_table
+from dash_ag_grid import AgGrid
 
 
 # Load dataframes from Excel in Downloads
@@ -24,13 +25,18 @@ app = dash.Dash(__name__)
 domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
 # Prepare columns for the opportunity-level table
-opp_level_table = dash_table.DataTable(
-    columns=[{"name": i, "id": i} for i in opp_level_final_df.columns],
-    data=opp_level_final_df.to_dict('records'),
-    style_table={'overflowX': 'auto', 'marginBottom': '32px'},
-    style_cell={'textAlign': 'left', 'padding': '6px'},
-    style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-    page_size=10  # Show 10 rows per page, adjust as needed
+column_defs = []
+for i, col in enumerate(opp_level_final_df.columns):
+    col_def = {"headerName": col, "field": col}
+    if i < 4:
+        col_def["pinned"] = "left"  # Freeze the first four columns
+    column_defs.append(col_def)
+
+opp_level_table = AgGrid(
+    rowData=opp_level_final_df.to_dict('records'),
+    columnDefs=column_defs,
+    style={'height': '450px', 'width': '100%', 'marginBottom': '32px'},
+    dashGridOptions={"pagination": True, "paginationPageSize": 10}
 )
 
 app.layout = html.Div([
@@ -58,7 +64,7 @@ app.layout = html.Div([
         }),
         html.Div([
             html.Label("Select Ward:"),
-            dcc.Dropdown(id='ward-dropdown'),
+            dcc.Dropdown(id='ward-dropdown', multi=True)
         ], style={
             'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
             'borderRadius': '8px',
@@ -74,7 +80,6 @@ app.layout = html.Div([
     html.Div(id='charts-container')
 ])
 
-# ...existing code...
 
 @app.callback(
     Output('ward-dropdown', 'options'),
@@ -92,100 +97,97 @@ def update_ward_dropdown(selected_domain):
     Input('domain-dropdown', 'value'),
     Input('ward-dropdown', 'value')
 )
-def update_charts(selected_domain, selected_ward):
-    if not selected_domain or not selected_ward:
-        return html.Div("Please select a domain and ward.")
+def update_charts(selected_domain, selected_wards):
+    if not selected_domain or not selected_wards:
+        return html.Div("Please select a domain and at least one ward.")
 
-    row = ward_level_final_df[(ward_level_final_df['domain'] == selected_domain) & (ward_level_final_df['ward'] == selected_ward)]
-    if row.empty:
+    # Ensure selected_wards is a list
+    if isinstance(selected_wards, str):
+        selected_wards = [selected_wards]
+
+    filtered_rows = ward_level_final_df[
+        (ward_level_final_df['domain'] == selected_domain) &
+        (ward_level_final_df['ward'].isin(selected_wards))
+    ]
+
+    if filtered_rows.empty:
         return html.Div("No data for this selection.")
 
-    row = row.iloc[0]
-    # Prepare a DataTable for the selected row
-    pct_cols = [col for col in row.index if str(col).startswith('pct_')]
+    # For each selected ward, show charts and table
+    children = []
+    for _, row in filtered_rows.iterrows():
+        pct_cols = [col for col in row.index if str(col).startswith('pct_')]
+        # (Optional) Round pct_ columns
+        for col in pct_cols:
+            if col in row.index:
+                row[col] = round(float(row[col]), 2)
 
-# Build conditional formatting for those columns
-    style_data_conditional = [
-    {
-        'if': {
-            'column_id': col,
-            'filter_query': f'{{{col}}} = 0 || {{{col}}} > 100'
-        },
-        'backgroundColor': '#ffcccc',
-        'color': 'black'
-    }
-    for col in pct_cols
-    ]
-    table = dash_table.DataTable(
-        columns=[{"name": i, "id": i} for i in row.index],
-        data=[row.to_dict()],
-        style_table={'overflowX': 'auto', 'marginTop': '32px'},
-        style_cell={'textAlign': 'left', 'padding': '6px'},
-        style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-        style_data_conditional=style_data_conditional
-    )
-    # Pie 1: visits_completed vs visit_target
-    pie1 = dcc.Graph(
-        figure=go.Figure(
-            data=[go.Pie(
-                labels=['Visits Completed', 'Remaining'],
-                values=[row['visits_completed'], max(row['visit_target'] - row['visits_completed'], 0)],
-                hole=0.4,
-                marker=dict(colors=['#28a745', '#e0e0e0'])  # Green for completed, gray for remaining
-            )],
-            layout=go.Layout(title="Visits Completed vs Target")
+        table = AgGrid(
+            rowData=[row.to_dict()],
+            columnDefs=[{"headerName": col, "field": col} for col in row.index],
+            style={'height': '100px', 'width': '100%', 'marginTop': '32px'},
+            dashGridOptions={"pagination": False}
         )
-    )
 
-    # Pie 2: buildings_completed vs building_target
-    pie2 = dcc.Graph(
-        figure=go.Figure(
-            data=[go.Pie(
-                labels=['Buildings Completed', 'Remaining'],
-                values=[row['buildings_completed'], max(row['building_target'] - row['buildings_completed'], 0)],
-                hole=0.4,
-                marker=dict(colors=['#28a745', '#e0e0e0'])  # Green for completed, gray for remaining
-            )],
-            layout=go.Layout(title="Buildings Completed vs Target")
+        pie1 = dcc.Graph(
+            figure=go.Figure(
+                data=[go.Pie(
+                    labels=['Visits Completed', 'Remaining'],
+                    values=[row['visits_completed'], max(row['visit_target'] - row['visits_completed'], 0)],
+                    hole=0.4,
+                    marker=dict(colors=['#28a745', '#e0e0e0'])
+                )],
+                layout=go.Layout(title=f"Visits Completed vs Target ({row['ward']})")
+            )
         )
-    )
-
-    # Pie 3: du_completed vs du_target
-    pie3 = dcc.Graph(
-        figure=go.Figure(
-            data=[go.Pie(
-                labels=['DUs Completed', 'Remaining'],
-                values=[row['du_completed'], max(row['du_target'] - row['du_completed'], 0)],
-                hole=0.4,
-                marker=dict(colors=['#28a745', '#e0e0e0'])  # Green for completed, gray for remaining
-            )],
-            layout=go.Layout(title="DUs Completed vs Target")
+        pie2 = dcc.Graph(
+            figure=go.Figure(
+                data=[go.Pie(
+                    labels=['Buildings Completed', 'Remaining'],
+                    values=[row['buildings_completed'], max(row['building_target'] - row['buildings_completed'], 0)],
+                    hole=0.4,
+                    marker=dict(colors=['#28a745', '#e0e0e0'])
+                )],
+                layout=go.Layout(title=f"Buildings Completed vs Target ({row['ward']})")
+            )
         )
-    )
+        pie3 = dcc.Graph(
+            figure=go.Figure(
+                data=[go.Pie(
+                    labels=['DUs Completed', 'Remaining'],
+                    values=[row['du_completed'], max(row['du_target'] - row['du_completed'], 0)],
+                    hole=0.4,
+                    marker=dict(colors=['#28a745', '#e0e0e0'])
+                )],
+                layout=go.Layout(title=f"DUs Completed vs Target ({row['ward']})")
+            )
+        )
 
-    return html.Div([
-        html.Div([pie1], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
-            'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
-            'borderRadius': '12px',
-            'padding': '10px',
-            'background': '#fff',
-            'margin': '8px'}),
-        html.Div([pie2], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
-            'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
-            'borderRadius': '12px',
-            'padding': '10px',
-            'background': '#fff',
-            'margin': '8px'}),
-        html.Div([pie3], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
-            'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
-            'borderRadius': '12px',
-            'padding': '10px',
-            'background': '#fff',
-            'margin': '8px'}),
-        html.Hr(),
-        html.H4("Actual Data for Selected Ward"),
-        table
-    ])
+        children.append(html.Div([
+            html.Hr(),
+            html.H4(f"Actual Data for Ward: {row['ward']}"),
+            html.Div([pie1], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
+                'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                'borderRadius': '12px',
+                'padding': '10px',
+                'background': '#fff',
+                'margin': '8px'}),
+            html.Div([pie2], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
+                'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                'borderRadius': '12px',
+                'padding': '10px',
+                'background': '#fff',
+                'margin': '8px'}),
+            html.Div([pie3], style={'width': '30%', 'display': 'inline-block','verticalAlign': 'top',
+                'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                'borderRadius': '12px',
+                'padding': '10px',
+                'background': '#fff',
+                'margin': '8px'}),
+            table
+        ]))
+
+    return children
 
 if __name__ == "__main__":
     app.run(debug=True)

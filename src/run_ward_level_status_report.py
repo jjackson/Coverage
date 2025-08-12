@@ -281,7 +281,7 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
     
     # Round all pct_ columns to two decimal places
     pct_cols = [col for col in final_df.columns if col.startswith('pct_')]
-    final_df[pct_cols] = final_df[pct_cols].round(2)
+    final_df.loc[:, pct_cols] = final_df[pct_cols].round(2)
     
     output_as_excel_in_downloads(final_df, "opp_level_status_report")
     return final_df
@@ -374,7 +374,7 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
      # Round all pct_ columns to two decimal places
     pct_cols = [col for col in final_df.columns if col.startswith('pct_')]
-    final_df[pct_cols] = final_df[pct_cols].round(2)
+    final_df.loc[:, pct_cols] = final_df[pct_cols].round(2)
     output_as_excel_in_downloads(final_df, "ward_level_status_report")
     return final_df
   

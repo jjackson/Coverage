@@ -126,7 +126,9 @@ def init_microplannin_opp_level_data_frame():
             'domain': domain,
             'visit_target': targets['visit_target'],
             'building_target': targets['building_target'],
-            'du_target': targets['du_target']
+            'du_target': targets['du_target'],
+            'start_date': targets['start_date'],
+            'end_date': targets['end_date']
         }
         rows.append(row)
     # Create DataFrame
@@ -275,7 +277,21 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             final_df.loc[(final_df['domain'] == domain), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
             final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
+            
+            #Update percentage completion for the domain
+            start_date_to_date = datetime.strptime(final_df.loc[(final_df['domain'] == domain) , 'start_date'].iloc[0], '%Y-%m-%d').date()
+            end_date_to_date = datetime.strptime(final_df.loc[(final_df['domain'] == domain) , 'end_date'].iloc[0], '%Y-%m-%d').date()
+            total_days = (end_date_to_date - start_date_to_date).days
+            total_days_till_now = (today_utc - pd.to_datetime(final_df['start_date'].min(), utc=True)).days
+            final_df.loc[(final_df['domain'] == domain), 'pct_completion'] = 100*total_days_till_now/total_days
 
+            final_df.loc[(final_df['domain'] == domain), 'pct_building_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed']
+            final_df.loc[(final_df['domain'] == domain), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week']
+
+            final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed']
+            final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week']
+
+            
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
     

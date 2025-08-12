@@ -31,6 +31,30 @@ app.index_string = '''
                 color: #c62828 !important;
                 font-weight: bold !important;
             }
+            
+            /* Header text wrapping styles */
+            .ag-header-cell-wrap .ag-header-cell-text {
+                white-space: normal !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                line-height: 1.2 !important;
+                padding: 4px !important;
+            }
+            
+            .ag-header-cell-wrap {
+                height: auto !important;
+                min-height: 40px !important;
+                display: flex !important;
+                align-items: center !important;
+            }
+            
+            .ag-header-cell-label {
+                height: auto !important;
+                min-height: 40px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
         </style>
     </head>
     <body>
@@ -79,11 +103,33 @@ for i, col in enumerate(opp_level_final_df.columns):
             "cell-red-bg": "x == 0 || (typeof x === 'number' && x >= 100)"
         }
     
-    # Set width for numeric columns to 15px
+    # Set width for numeric columns
     if pd.api.types.is_numeric_dtype(opp_level_final_df[col]):
         col_def["width"] = 150
         col_def["minWidth"] = 150
-        col_def["maxWidth"] = 150
+        col_def["maxWidth"] = 200
+    else:
+        # For text columns, set minimum width to accommodate full text
+        col_def["minWidth"] = 120
+        col_def["maxWidth"] = 300
+        col_def["autoHeight"] = True
+        col_def["wrapText"] = True
+    
+    # Enable header text wrapping for all columns
+    col_def["headerClass"] = "ag-header-cell-wrap"
+    col_def["headerComponentParams"] = {
+        "template": '<div class="ag-cell-label-container" role="presentation">' +
+                   '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
+                   '<div ref="eLabel" class="ag-header-cell-label" role="presentation">' +
+                   '<span ref="eText" class="ag-header-cell-text" role="columnheader"></span>' +
+                   '<span ref="eSortOrder" class="ag-header-icon ag-sort-order"></span>' +
+                   '<span ref="eSortAsc" class="ag-header-icon ag-sort-ascending-icon"></span>' +
+                   '<span ref="eSortDesc" class="ag-header-icon ag-sort-descending-icon"></span>' +
+                   '<span ref="eSortNone" class="ag-header-icon ag-sort-none-icon"></span>' +
+                   '<span ref="eFilter" class="ag-header-icon ag-filter-icon"></span>' +
+                   '</div>' +
+                   '</div>'
+    }
 
     column_defs.append(col_def)
 
@@ -95,7 +141,9 @@ opp_level_table = AgGrid(
     dashGridOptions={"pagination": True, 
                      "paginationPageSize": 10, 
                      "enableExport": True, 
-                     "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"]},
+                     "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
+                     "suppressColumnVirtualisation": True,
+                     "autoGroupColumnDef": {"minWidth": 200}},
     csvExportParams={
         "fileName": "opp_level_status_report.csv",
         "allColumns": True
@@ -235,7 +283,29 @@ def update_charts(selected_domain, selected_wards):
         if pd.api.types.is_numeric_dtype(filtered_rows[col]):
             col_def["width"] = 150
             col_def["minWidth"] = 150
-            col_def["maxWidth"] = 150
+            col_def["maxWidth"] = 200
+        else:
+            # For text columns, set minimum width to accommodate full text
+            col_def["minWidth"] = 120
+            col_def["maxWidth"] = 300
+            col_def["autoHeight"] = True
+            col_def["wrapText"] = True
+        
+        # Enable header text wrapping for all columns
+        col_def["headerClass"] = "ag-header-cell-wrap"
+        col_def["headerComponentParams"] = {
+            "template": '<div class="ag-cell-label-container" role="presentation">' +
+                       '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
+                       '<div ref="eLabel" class="ag-header-cell-label" role="presentation">' +
+                       '<span ref="eText" class="ag-header-cell-text" role="columnheader"></span>' +
+                       '<span ref="eSortOrder" class="ag-header-icon ag-sort-order"></span>' +
+                       '<span ref="eSortAsc" class="ag-header-icon ag-sort-ascending-icon"></span>' +
+                       '<span ref="eSortDesc" class="ag-header-icon ag-sort-descending-icon"></span>' +
+                       '<span ref="eSortNone" class="ag-header-icon ag-sort-none-icon"></span>' +
+                       '<span ref="eFilter" class="ag-header-icon ag-filter-icon"></span>' +
+                       '</div>' +
+                       '</div>'
+        }
         column_defs.append(col_def)
 
     table = AgGrid(
@@ -244,7 +314,9 @@ def update_charts(selected_domain, selected_wards):
         columnDefs=column_defs,
         style={'height': '250px', 'width': '100%', 'marginTop': '32px'},
         dashGridOptions={"pagination": True, "paginationPageSize": 10, "enableExport": True,
-                         "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"]},
+                         "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
+                         "suppressColumnVirtualisation": True,
+                         "autoGroupColumnDef": {"minWidth": 200}},
         csvExportParams={
         "fileName": "ward_level_status_report.csv",
         "allColumns": True

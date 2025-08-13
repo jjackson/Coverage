@@ -81,6 +81,16 @@ if not os.path.exists(opp_level_excel_path):
     raise FileNotFoundError(f"Excel file not found at {opp_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
 opp_level_final_df = pd.read_excel(opp_level_excel_path)
 
+# Load timeline data
+timeline_excel_path = os.path.join(downloads_dir, "timeline_based_status_report.xlsx")
+if not os.path.exists(timeline_excel_path):
+    print(f"Warning: Timeline Excel file not found at {timeline_excel_path}. Line charts will not be available.")
+    timeline_df = pd.DataFrame()
+else:
+    timeline_df = pd.read_excel(timeline_excel_path)
+    # Convert visit_date to datetime for proper plotting
+    timeline_df['visit_date'] = pd.to_datetime(timeline_df['visit_date'])
+
 # Prepare dropdown options
 domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
@@ -382,7 +392,188 @@ def update_charts(selected_domain, selected_wards):
                 'margin': '8px'}),
         ]))
 
-    return [table] + pie_charts, {'display': 'block'}
+    # Create line charts for microplanning completion rates
+    line_charts = []
+    
+    if not timeline_df.empty:
+        # Filter timeline data for selected domain and wards
+        timeline_filtered = timeline_df[
+            (timeline_df['domain'] == selected_domain) &
+            (timeline_df['ward'].isin(selected_wards))
+        ]
+        
+        if not timeline_filtered.empty:
+            # Sort by visit_date for proper line plotting
+            timeline_filtered = timeline_filtered.sort_values('visit_date')
+            
+            # Debug: Print available columns and sample data
+            print(f"Available columns in timeline_df: {list(timeline_df.columns)}")
+            print(f"Sample timeline data for {selected_domain}:")
+            print(timeline_filtered.head())
+            
+            # Check if microplanning columns exist, if not calculate them
+            if 'building_microplanning_completion_rate' not in timeline_filtered.columns:
+                print("Microplanning columns not found, calculating them...")
+                # Calculate microplanning completion rates
+                timeline_filtered['building_microplanning_completion_rate'] = timeline_filtered.apply(
+                    lambda row: (row['pct_buildings_completed'] / row['pct_visits_completed'] * 100) 
+                    if row['pct_visits_completed'] > 0 else 0, axis=1
+                )
+                timeline_filtered['du_microplanning_completion_rate'] = timeline_filtered.apply(
+                    lambda row: (row['pct_dus_completed'] / row['pct_visits_completed'] * 100) 
+                    if row['pct_visits_completed'] > 0 else 0, axis=1
+                )
+                timeline_filtered['building_microplanning_completion_rate_last7days'] = timeline_filtered.apply(
+                    lambda row: (row['pct_buildings_completed_last7days'] / row['pct_visits_completed_last7days'] * 100) 
+                    if row['pct_visits_completed_last7days'] > 0 else 0, axis=1
+                )
+                timeline_filtered['du_microplanning_completion_rate_last7days'] = timeline_filtered.apply(
+                    lambda row: (row['pct_dus_completed_last7days'] / row['pct_visits_completed_last7days'] * 100) 
+                    if row['pct_visits_completed_last7days'] > 0 else 0, axis=1
+                )
+            
+            # Debug: Print sample microplanning values
+            print(f"Sample microplanning values:")
+            print(f"Building rate: {timeline_filtered['building_microplanning_completion_rate'].head()}")
+            print(f"DU rate: {timeline_filtered['du_microplanning_completion_rate'].head()}")
+            
+            # Chart a) building_microplanning_completion_rate vs visit_date
+            building_rate_chart = dcc.Graph(
+                figure=go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=timeline_filtered[timeline_filtered['ward'] == ward]['visit_date'],
+                            y=timeline_filtered[timeline_filtered['ward'] == ward]['building_microplanning_completion_rate'],
+                            mode='lines+markers',
+                            name=f'{ward}',
+                            line=dict(width=2)
+                        ) for ward in selected_wards
+                    ],
+                    layout=go.Layout(
+                        title="Building Microplanning Completion Rate Over Time",
+                        xaxis=dict(title="Visit Date"),
+                        yaxis=dict(title="Building Microplanning Completion Rate (%)"),
+                        hovermode='x unified',
+                        height=400
+                    )
+                ),
+                style={
+                    'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                    'borderRadius': '12px',
+                    'padding': '10px',
+                    'background': '#fff',
+                    'margin': '8px'
+                }
+            )
+            
+            # Chart b) du_microplanning_completion_rate vs visit_date
+            du_rate_chart = dcc.Graph(
+                figure=go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=timeline_filtered[timeline_filtered['ward'] == ward]['visit_date'],
+                            y=timeline_filtered[timeline_filtered['ward'] == ward]['du_microplanning_completion_rate'],
+                            mode='lines+markers',
+                            name=f'{ward}',
+                            line=dict(width=2)
+                        ) for ward in selected_wards
+                    ],
+                    layout=go.Layout(
+                        title="DU Microplanning Completion Rate Over Time",
+                        xaxis=dict(title="Visit Date"),
+                        yaxis=dict(title="DU Microplanning Completion Rate (%)"),
+                        hovermode='x unified',
+                        height=400
+                    )
+                ),
+                style={
+                    'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                    'borderRadius': '12px',
+                    'padding': '10px',
+                    'background': '#fff',
+                    'margin': '8px'
+                }
+            )
+            
+            # Chart c) building_microplanning_completion_rate_last7days vs visit_date
+            building_rate_last7_chart = dcc.Graph(
+                figure=go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=timeline_filtered[timeline_filtered['ward'] == ward]['visit_date'],
+                            y=timeline_filtered[timeline_filtered['ward'] == ward]['building_microplanning_completion_rate_last7days'],
+                            mode='lines+markers',
+                            name=f'{ward}',
+                            line=dict(width=2)
+                        ) for ward in selected_wards
+                    ],
+                    layout=go.Layout(
+                        title="Building Microplanning Completion Rate (Last 7 Days) Over Time",
+                        xaxis=dict(title="Visit Date"),
+                        yaxis=dict(title="Building Microplanning Completion Rate Last 7 Days (%)"),
+                        hovermode='x unified',
+                        height=400
+                    )
+                ),
+                style={
+                    'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                    'borderRadius': '12px',
+                    'padding': '10px',
+                    'background': '#fff',
+                    'margin': '8px'
+                }
+            )
+            
+            # Chart d) du_microplanning_completion_rate_last7days vs visit_date
+            du_rate_last7_chart = dcc.Graph(
+                figure=go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=timeline_filtered[timeline_filtered['ward'] == ward]['visit_date'],
+                            y=timeline_filtered[timeline_filtered['ward'] == ward]['du_microplanning_completion_rate_last7days'],
+                            mode='lines+markers',
+                            name=f'{ward}',
+                            line=dict(width=2)
+                        ) for ward in selected_wards
+                    ],
+                    layout=go.Layout(
+                        title="DU Microplanning Completion Rate (Last 7 Days) Over Time",
+                        xaxis=dict(title="Visit Date"),
+                        yaxis=dict(title="DU Microplanning Completion Rate Last 7 Days (%)"),
+                        hovermode='x unified',
+                        height=400
+                    )
+                ),
+                style={
+                    'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
+                    'borderRadius': '12px',
+                    'padding': '10px',
+                    'background': '#fff',
+                    'margin': '8px'
+                }
+            )
+            
+            # Create a container for line charts with 2x2 grid layout
+            line_charts_container = html.Div([
+                html.Hr(),
+                html.H4("Microplanning Completion Rate Trends"),
+                html.Div([
+                    html.Div([building_rate_chart], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                    html.Div([du_rate_chart], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'})
+                ]),
+                html.Div([
+                    html.Div([building_rate_last7_chart], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                    html.Div([du_rate_last7_chart], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'})
+                ])
+            ])
+            
+            line_charts = [line_charts_container]
+        else:
+            line_charts = [html.Div("No timeline data available for the selected domain and wards.", style={'textAlign': 'center', 'padding': '20px'})]
+    else:
+        line_charts = [html.Div("Timeline data not available. Please run the status report generation first.", style={'textAlign': 'center', 'padding': '20px'})]
+
+    return [table] + line_charts + pie_charts, {'display': 'block'}
 
 @app.callback(
     Output("download-opp-csv", "data"),

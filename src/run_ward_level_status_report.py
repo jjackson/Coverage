@@ -163,6 +163,10 @@ def find_ward_column_name(domain):
             return "ward_name"
         case 'ccc-chc-isodaf-2024-25':
             return "ward_name"
+        case 'ccc-chc-zegcawis-2024-25':
+            return "ward_name"
+        case 'ccc-chc-cowacdi-2024-25':
+            return "ward_name"
         case _:
             return ""
 
@@ -196,12 +200,16 @@ def main():
     #conver domain name values from actual name to cchq domain names
     visit_data_df['domain'] = visit_data_df['domain'].map(opportunity_to_domain_mapping)
     print("Visit data fetched successfully.")
+    output_as_excel_in_downloads(visit_data_df, "visit_data_df")
 
     ward_level_df = init_microplanning_ward_level_data_frame()
     ward_level_final_df = generate_ward_level_status_report(valid_opportunities,visit_data_df, ward_level_df)
 
     opp_level_df = init_microplannin_opp_level_data_frame()
     opp_level_final_df = generate_opp_level_status_report(valid_opportunities,visit_data_df, opp_level_df)
+
+    timline_df = generate_timeline_based_status_report(valid_opportunities, visit_data_df, ward_level_df)
+
 
 def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df):
     #####Get all the required metrics##### 
@@ -393,6 +401,196 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
     final_df.loc[:, pct_cols] = final_df[pct_cols].round(2)
     output_as_excel_in_downloads(final_df, "ward_level_status_report")
     return final_df
-  
+
+def generate_timeline_based_status_report(valid_opportunities, visit_data_df, ward_level_df):
+    """
+    Generate timeline-based status report showing cumulative and last 7 days metrics
+    for each visit date, domain, and ward combination.
+    
+    Args:
+        valid_opportunities: List of valid domain names
+        visit_data_df: DataFrame containing visit data with columns: visit_date, domain, case_id
+    
+    Returns:
+        DataFrame with timeline-based metrics
+    """
+    timeline_rows = []
+    
+    for domain in valid_opportunities:
+        print(f"Processing timeline for domain: {domain}")
+        
+        # Get the directory of the current script
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        data_path = os.path.join(project_root, 'data')
+        
+        # Load coverage data from pickle file for each domain
+        pickle_file_name = domain.replace('"', '') + ".pkl"
+        pickle_path = os.path.join(data_path, pickle_file_name)
+        
+        if not os.path.exists(pickle_path):
+            print(f"Error: {pickle_file_name} not found. Please run run_coverage.py first.")
+            continue
+        
+        try:
+            with open(pickle_path, 'rb') as f:
+                service_df = pickle.load(f)
+        except Exception as e:
+            print(f"Error loading pickle file: {str(e)}")
+            continue
+        
+        if service_df is None or service_df.empty:
+            print(f"No data found for domain {domain}. Skipping...")
+            continue
+        
+        # Convert coverage data to DataFrame if not already
+        if not isinstance(service_df, pd.DataFrame):
+            service_df = pd.DataFrame(service_df)
+        
+        # Get ward column name for this domain
+        ward_column = find_ward_column_name(domain)
+        if ward_column == "":
+            print(f"Warning: No ward column found for domain {domain}. Skipping...")
+            continue
+        
+        # Filter visit data for current domain
+        domain_visit_data = visit_data_df[visit_data_df['domain'] == domain].copy()
+        
+        # Merge visit data with service data to get building and DU information
+        domain_visit_data = pd.merge(domain_visit_data, service_df, on="case_id", how="left")
+        
+        # Get unique visit dates for this domain
+        unique_visit_dates = sorted(domain_visit_data['visit_date'].unique())
+        
+        # Get unique wards for this domain
+        unique_wards = domain_visit_data[ward_column].unique()
+        
+        for visit_date in unique_visit_dates:
+            for ward in unique_wards:
+                # Filter data for current ward
+                ward_visit_data = domain_visit_data[domain_visit_data[ward_column] == ward].copy()
+                
+                if ward_visit_data.empty:
+                    continue
+                
+                # a) visits_so_far: number of visits performed on or before current visit_date
+                visits_so_far = len(ward_visit_data[ward_visit_data['visit_date'] <= visit_date])
+                
+                # b) visits_last7days: number of visits performed in last 7 days from current visit_date
+                seven_days_before = visit_date - timedelta(days=7)
+                visits_last7days = len(ward_visit_data[
+                    (ward_visit_data['visit_date'] >= seven_days_before) & 
+                    (ward_visit_data['visit_date'] <= visit_date)
+                ])
+                
+                # c) buildings_so_far: sum of buildings covered on or before current visit_date
+                buildings_so_far_data = ward_visit_data[
+                    (ward_visit_data['visit_date'] <= visit_date) & 
+                    (ward_visit_data['du_status'] == 'completed')
+                ]
+                buildings_so_far = buildings_so_far_data['buildings'].sum() if not buildings_so_far_data.empty else 0
+                
+                # d) buildings_last7days: sum of buildings covered in last 7 days from current visit_date
+                buildings_last7days_data = ward_visit_data[
+                    (ward_visit_data['visit_date'] >= seven_days_before) & 
+                    (ward_visit_data['visit_date'] <= visit_date) & 
+                    (ward_visit_data['du_status'] == 'completed')
+                ]
+                buildings_last7days = buildings_last7days_data['buildings'].sum() if not buildings_last7days_data.empty else 0
+                
+                # e) dus_so_far: sum of DUs covered on or before current visit_date
+                dus_so_far_data = ward_visit_data[
+                    (ward_visit_data['visit_date'] <= visit_date) & 
+                    (ward_visit_data['du_status'] == 'completed')
+                ]
+                dus_so_far = len(dus_so_far_data)
+                
+                # f) dus_last7days: sum of DUs covered in last 7 days from current visit_date
+                dus_last7days_data = ward_visit_data[
+                    (ward_visit_data['visit_date'] >= seven_days_before) & 
+                    (ward_visit_data['visit_date'] <= visit_date) & 
+                    (ward_visit_data['du_status'] == 'completed')
+                ]
+                dus_last7days = len(dus_last7days_data)
+                
+                # Get targets from ward_level_df for percentage calculations
+                ward_targets = ward_level_df[
+                    (ward_level_df['domain'] == domain) & 
+                    (ward_level_df['ward'] == ward)
+                ]
+                
+                if not ward_targets.empty:
+                    visit_target = ward_targets['visit_target'].iloc[0]
+                    du_target = ward_targets['du_target'].iloc[0]
+                    building_target = ward_targets['building_target'].iloc[0]
+                    
+                    # Calculate percentage completions
+                    pct_visits_completed = (visits_so_far / visit_target * 100) if visit_target > 0 else 0
+                    pct_visits_completed_last7days = (visits_last7days / visit_target * 100) if visit_target > 0 else 0
+                    pct_dus_completed = (dus_so_far / du_target * 100) if du_target > 0 else 0
+                    pct_dus_completed_last7days = (dus_last7days / du_target * 100) if du_target > 0 else 0
+                    pct_buildings_completed = (buildings_so_far / building_target * 100) if building_target > 0 else 0
+                    pct_buildings_completed_last7days = (buildings_last7days / building_target * 100) if building_target > 0 else 0
+                     
+                     # Calculate microplanning completion rates
+                    building_microplanning_completion_rate = (pct_buildings_completed / pct_visits_completed * 100) if pct_visits_completed > 0 else 0
+                    du_microplanning_completion_rate = (pct_dus_completed / pct_visits_completed * 100) if pct_visits_completed > 0 else 0
+                    building_microplanning_completion_rate_last7days = (pct_buildings_completed_last7days / pct_visits_completed_last7days * 100) if pct_visits_completed_last7days > 0 else 0
+                    du_microplanning_completion_rate_last7days = (pct_dus_completed_last7days / pct_visits_completed_last7days * 100) if pct_visits_completed_last7days > 0 else 0
+                else:
+                    # Set to 0 if no targets found
+                    pct_visits_completed = 0
+                    pct_visits_completed_last7days = 0
+                    pct_dus_completed = 0
+                    pct_dus_completed_last7days = 0
+                    pct_buildings_completed = 0
+                    pct_buildings_completed_last7days = 0
+                    building_microplanning_completion_rate = 0
+                    du_microplanning_completion_rate = 0
+                    building_microplanning_completion_rate_last7days = 0
+                    du_microplanning_completion_rate_last7days = 0
+                
+                # Create row for timeline
+                timeline_row = {
+                     'visit_date': visit_date,
+                     'domain': domain,
+                     'ward': ward,
+                     'visits_so_far': visits_so_far,
+                     'buildings_so_far': buildings_so_far,
+                     'dus_so_far': dus_so_far,
+                     'visits_last7days': visits_last7days,
+                     'buildings_last7days': buildings_last7days,
+                     'dus_last_7days': dus_last7days,
+                     'pct_visits_completed': pct_visits_completed,
+                     'pct_visits_completed_last7days': pct_visits_completed_last7days,
+                     'pct_dus_completed': pct_dus_completed,
+                     'pct_dus_completed_last7days': pct_dus_completed_last7days,
+                     'pct_buildings_completed': pct_buildings_completed,
+                     'pct_buildings_completed_last7days': pct_buildings_completed_last7days,
+                     'building_microplanning_completion_rate': building_microplanning_completion_rate,
+                     'du_microplanning_completion_rate': du_microplanning_completion_rate,
+                     'building_microplanning_completion_rate_last7days': building_microplanning_completion_rate_last7days,
+                     'du_microplanning_completion_rate_last7days': du_microplanning_completion_rate_last7days
+                 }
+                
+                timeline_rows.append(timeline_row)
+    
+    # Create DataFrame from collected rows
+    timeline_df = pd.DataFrame(timeline_rows)
+    
+    # Sort by visit_date, domain, and ward
+    if not timeline_df.empty:
+        timeline_df = timeline_df.sort_values(['visit_date', 'domain', 'ward']).reset_index(drop=True)
+        
+        # Round all pct_ columns to two decimal places
+        pct_cols = [col for col in timeline_df.columns if col.startswith('pct_')]
+        timeline_df.loc[:, pct_cols] = timeline_df[pct_cols].round(2)
+    
+    # Save to Excel
+    output_as_excel_in_downloads(timeline_df, "timeline_based_status_report")
+    
+    print(f"Timeline report generated with {len(timeline_df)} rows")
+    return timeline_df
+
+
 if __name__ == "__main__":
     main()

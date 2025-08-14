@@ -298,7 +298,6 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed']
             final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week']
-
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
@@ -482,35 +481,39 @@ def generate_timeline_based_status_report(valid_opportunities, visit_data_df, wa
                     (ward_visit_data['visit_date'] <= visit_date)
                 ])
                 
-                # c) buildings_so_far: sum of buildings covered on or before current visit_date
+                # c) buildings_so_far: count of unique buildings covered on or before current visit_date
                 buildings_so_far_data = ward_visit_data[
                     (ward_visit_data['visit_date'] <= visit_date) & 
                     (ward_visit_data['du_status'] == 'completed')
                 ]
-                buildings_so_far = buildings_so_far_data['buildings'].sum() if not buildings_so_far_data.empty else 0
+                # Count unique case_ids (buildings/DUs), not visit count
+                buildings_so_far = buildings_so_far_data['case_id'].nunique() if not buildings_so_far_data.empty else 0
                 
-                # d) buildings_last7days: sum of buildings covered in last 7 days from current visit_date
+                # d) buildings_last7days: count of unique buildings covered in last 7 days from current visit_date
                 buildings_last7days_data = ward_visit_data[
                     (ward_visit_data['visit_date'] >= seven_days_before) & 
                     (ward_visit_data['visit_date'] <= visit_date) & 
                     (ward_visit_data['du_status'] == 'completed')
                 ]
-                buildings_last7days = buildings_last7days_data['buildings'].sum() if not buildings_last7days_data.empty else 0
+                # Count unique case_ids (buildings/DUs), not visit count
+                buildings_last7days = buildings_last7days_data['case_id'].nunique() if not buildings_last7days_data.empty else 0
                 
-                # e) dus_so_far: sum of DUs covered on or before current visit_date
+                # e) dus_so_far: count of unique DUs covered on or before current visit_date
                 dus_so_far_data = ward_visit_data[
                     (ward_visit_data['visit_date'] <= visit_date) & 
                     (ward_visit_data['du_status'] == 'completed')
                 ]
-                dus_so_far = len(dus_so_far_data)
+                # Count unique case_ids (DUs), not visit count
+                dus_so_far = dus_so_far_data['case_id'].nunique() if not dus_so_far_data.empty else 0
                 
-                # f) dus_last7days: sum of DUs covered in last 7 days from current visit_date
+                # f) dus_last7days: count of unique DUs covered in last 7 days from current visit_date
                 dus_last7days_data = ward_visit_data[
                     (ward_visit_data['visit_date'] >= seven_days_before) & 
                     (ward_visit_data['visit_date'] <= visit_date) & 
                     (ward_visit_data['du_status'] == 'completed')
                 ]
-                dus_last7days = len(dus_last7days_data)
+                # Count unique case_ids (DUs), not visit count
+                dus_last7days = dus_last7days_data['case_id'].nunique() if not dus_last7days_data.empty else 0
                 
                 # Get targets from ward_level_df for percentage calculations
                 ward_targets = ward_level_df[
@@ -518,6 +521,7 @@ def generate_timeline_based_status_report(valid_opportunities, visit_data_df, wa
                     (ward_level_df['ward'] == ward)
                 ]
                 
+
                 if not ward_targets.empty:
                     visit_target = ward_targets['visit_target'].iloc[0]
                     du_target = ward_targets['du_target'].iloc[0]
@@ -536,6 +540,15 @@ def generate_timeline_based_status_report(valid_opportunities, visit_data_df, wa
                     du_microplanning_completion_rate = (pct_dus_completed / pct_visits_completed * 100) if pct_visits_completed > 0 else 0
                     building_microplanning_completion_rate_last7days = (pct_buildings_completed_last7days / pct_visits_completed_last7days * 100) if pct_visits_completed_last7days > 0 else 0
                     du_microplanning_completion_rate_last7days = (pct_dus_completed_last7days / pct_visits_completed_last7days * 100) if pct_visits_completed_last7days > 0 else 0
+                    
+                    # Debug logging for extreme values (optional - remove after testing)
+                    if building_microplanning_completion_rate > 1000 or du_microplanning_completion_rate > 1000:
+                        print(f"DEBUG - {domain}/{ward}/{visit_date}:")
+                        print(f"  Visits: {visits_so_far}/{visit_target} ({pct_visits_completed:.1f}%)")
+                        print(f"  Buildings: {buildings_so_far}/{building_target} ({pct_buildings_completed:.1f}%)")
+                        print(f"  DUs: {dus_so_far}/{du_target} ({pct_dus_completed:.1f}%)")
+                        print(f"  Building Rate: {building_microplanning_completion_rate:.1f}%")
+                        print(f"  DU Rate: {du_microplanning_completion_rate:.1f}%")
                 else:
                     # Set to 0 if no targets found
                     pct_visits_completed = 0

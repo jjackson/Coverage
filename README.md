@@ -18,6 +18,7 @@ The project is organized into the following directories :
   - `create_delivery_map.py` - Creates an interactive map of delivery units
   - `create_statistics.py` - Generates statistical analysis and visualizations
   - `create_flw_views.py` - Generates Field-Level Worker performance analysis
+  - `water_visualization/` - 🆕 Water points mapping from CommCare survey data
   - `opportunity_comparison_statistics.py` - Generates comparison statistics between opportunities
   - `report_generator_gui.py` - GUI interface for report generation
   
@@ -93,6 +94,44 @@ This will:
    - Generate the FLW analysis report
 6. Create a main index HTML dashboard page linking to all project reports
 7. Automatically open the dashboard in your default web browser
+
+## Water Points Mapping
+
+🆕 **New Feature**: Interactive water points visualization from CommCare survey data.
+
+### Quick Start
+```bash
+cd src/water_visualization
+python launch_water_map.py
+```
+
+This will:
+1. Automatically detect water survey projects in the `water_data/` directory
+2. Process Excel files and link them to corresponding image folders
+3. Generate an interactive Leaflet map with all water points
+4. Copy images to the output directory for offline viewing
+5. Automatically open the map in your default browser
+
+### Features
+- **Interactive Markers**: Color-coded by water point type (piped water, boreholes, wells)
+- **Rich Popups**: Location hierarchy, water point characteristics, survey metadata
+- **Image Gallery**: Click photo placeholders to view full-size images in lightbox
+- **Responsive Design**: Works on desktop and mobile devices
+- **Offline Ready**: Single HTML file with all images included
+
+### Data Structure
+Place your CommCare water survey data in the `water_data/` directory:
+```
+water_data/
+├── PROJECT1 CCC Waterbody Survey - August 7.xlsx
+├── PROJECT1 Pics-Aug 7/
+│   └── photo1-username-form_uuid.jpg
+├── PROJECT2 CCC Waterbody Survey - August 7.xlsx
+└── PROJECT2 Pics - Aug 7/
+    └── photo1-username-form_uuid.jpg
+```
+
+The system automatically matches Excel files to image directories by project name.
 
 ## Input Files
 

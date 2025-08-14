@@ -121,38 +121,38 @@
       "wards": {
         "Kware": {
           "visit_target": 5268,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 3897,
+          "du_target": 602
         },
         "Tsaki Walakae": {
           "visit_target": 9300,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 10547,
+          "du_target": 1716
         },
         "Basansan": {
           "visit_target": 5135,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 4706,
+          "du_target": 745
         },
         "Durbawa": {
           "visit_target": 5669,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 5990,
+          "du_target": 1167
         },
         "Gandu": {
           "visit_target": 6531,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 5783,
+          "du_target": 1141
         },
         "Gidan Rugga More": {
           "visit_target": 5610,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 8306,
+          "du_target": 1746
         },
         "Hamma Ali Marabawa": {
           "visit_target": 6960,
-          "building_target": 1000,
-          "du_target": 2000
+          "building_target": 7278,
+          "du_target": 1314
         }
 
       }

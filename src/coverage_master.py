@@ -399,9 +399,7 @@ def main():
             print(f"\nProcessing opportunity: {opportunity_name}")
             print(f"Service points for this opportunity: {len(service_df)}")
             # Use mapped domain name if available, otherwise use opportunity name
-            domain_name = opportunity_to_domain_mapping.get(opportunity_name)
-            print("----domain_name-----")
-            print(domain_name) 
+            domain_name = opportunity_to_domain_mapping.get(opportunity_name) 
             #-------Changing domain list to get data from env variables only -----#
             if(domain_name is not None and domain_name != ""):
                 coverage_data = data_loader.get_coverage_data_from_du_api_and_service_dataframe(
@@ -419,7 +417,7 @@ def main():
                 print(f"Successfully loaded coverage data for {key}")
                         
         print(f"\nTotal coverage data objects created: {len(coverage_data_objects)}")
-        
+
     else:     
         print("Loading from Local Files")
         
@@ -459,8 +457,6 @@ def main():
 
             # Use mapped domain name if available, otherwise use opportunity name
             domain_name = opportunity_to_domain_mapping.get(opportunity_name)
-            print("----domain_name inside-------")
-            print(domain_name)
             if not domain_name:
                 print(f"  Warning: No domain mapping found for opportunity '{opportunity_name}', skipping")
                 continue

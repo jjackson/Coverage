@@ -14,3 +14,7 @@
     white-space: pre-line;
     overflow-wrap: anywhere;
 }
+
+.cell-red-bg {
+    background-color: #ffcccc !important;
+}

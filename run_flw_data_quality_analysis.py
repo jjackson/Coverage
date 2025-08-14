@@ -130,7 +130,7 @@ def main():
     output_files = report.generate()
     #quality_issues_df = report.excel_data.get('Quality Issues Found')
     quality_issues_df = report.excel_data.get('FLW Results')
-    
+
     if quality_issues_df is not None and not quality_issues_df.empty:
         quality_issues_df['flw_id'] = quality_issues_df['flw_id'].astype(str)
     else:
@@ -189,7 +189,7 @@ def main():
             #DU's with Camping
             camping_df = set_camping(service_df)
             domain_df = pd.merge(domain_df, camping_df, how='outer')
-
+            
             #DU's with No Children merging
             dus_with_no_children_df = dus_with_no_children(service_df)
             domain_df = pd.merge(domain_df, dus_with_no_children_df, how='outer')
@@ -450,7 +450,7 @@ def set_forced_du_closure(df, domain):
     # If the column doesn't exist, create a placeholder column with False values
         df['forced_du_closure'] = False
 
-    
+
     forced_total_df = df.groupby('cchq_user_id')['forced_du_closure'].sum().reset_index()
     forced_total_df.rename(columns={'forced_du_closure': 'forced_du_closure_count_total'}, inplace=True)
     

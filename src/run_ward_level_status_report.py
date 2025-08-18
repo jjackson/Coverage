@@ -237,54 +237,71 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
                 service_df = service_df
             else:
                 service_df = pd.DataFrame(service_df)
-            #output_as_excel_in_downloads(service_df, "domain_"+ domain+"_pickel_data")
             domain_df = service_df.copy()
             domain_df_last_week = service_df.copy()
             # Filter the DataFrame for the current domain
             domain_df_last_week['last_modified'] = pd.to_datetime(domain_df_last_week['last_modified'], utc=True)
-             # Define analysis window
-            today_utc = datetime.now(pytz.UTC)
-            seven_days_ago = today_utc - timedelta(days=7)
 
-            # Filter rows modified in the last 7 days
-            domain_df_last_week = domain_df_last_week[domain_df_last_week['last_modified'] >= seven_days_ago]
-            print(f"Processing domain: {domain}")
-
-            #Update DU relateed columns
-            final_df.loc[(final_df['domain'] == domain) , 'du_completed'] = domain_df[ (domain_df['du_status'] == 'completed')].shape[0]
-            final_df.loc[(final_df['domain'] == domain) , 'du_completed_last_week'] = domain_df_last_week[ (domain_df_last_week['du_status'] == 'completed')].shape[0]
-            final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed'] = 100*final_df.loc[(final_df['domain'] == domain) , 'du_completed'] / final_df.loc[(final_df['domain'] == domain) , 'du_target']
-            final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'du_target']
-                    
-            #Update building related columns
-            buildings_completed = domain_df[ (domain_df['du_status'] == 'completed')]['buildings'].sum()
-            final_df.loc[(final_df['domain'] == domain) ,'buildings_completed'] = buildings_completed
-            buildings_completed_last_week = domain_df_last_week[ (domain_df_last_week['du_status'] == 'completed')]['buildings'].sum()
-            final_df.loc[(final_df['domain'] == domain) ,'buildings_completed_last_week'] = buildings_completed_last_week
-            final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed'] = 100*final_df.loc[(final_df['domain'] == domain), 'buildings_completed'] / final_df.loc[(final_df['domain'] == domain) , 'building_target']
-            final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain), 'building_target']
-                    
-            #Update visit related columns
-            subset_visit_data_df = visit_data_df[visit_data_df['domain'] == domain]
-            subset_visit_data_df = pd.merge(subset_visit_data_df, domain_df, on="case_id",how="left")
-            subset_visit_data_df = subset_visit_data_df[['case_id','visit_date','domain']]
-
-            subset_visit_data_df_last_week = subset_visit_data_df.copy()
+            # Define today_utc for use in calculations
             today_utc = datetime.now(pytz.UTC)
             seven_days_ago = (today_utc - timedelta(days=7)).date()
-            # Filter rows modified in the last 7 days
-            subset_visit_data_df_last_week = subset_visit_data_df_last_week[subset_visit_data_df_last_week['visit_date'] >= seven_days_ago]
-                    
-            # Count visits completed total
-            visits_completed = subset_visit_data_df.shape[0]
-            final_df.loc[(final_df['domain'] == domain) , 'visits_completed'] = visits_completed
-            # Count visits completed last week  
-            visits_completed_last_week = subset_visit_data_df_last_week.shape[0]
-            final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] = visits_completed_last_week
-            # Calculate percentage of visits completed
-
+            
+            #Getting overall counts sorted
+            #visit related data
+            final_df.loc[(final_df['domain'] == domain) , 'visits_completed'] = visit_data_df[ (visit_data_df['domain'] == domain)].shape[0]
+            final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df['visit_date'] >= seven_days_ago)].shape[0]
             final_df.loc[(final_df['domain'] == domain), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
-            final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
+            final_df.loc[(final_df['domain'] == domain), 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
+            
+            #du related overall data
+            final_df.loc[(final_df['domain'] == domain) , 'du_completed'] = domain_df[ (domain_df['du_status'] == 'completed')].shape[0]
+            final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed'] = 100*final_df.loc[(final_df['domain'] == domain) , 'du_completed'] / final_df.loc[(final_df['domain'] == domain) , 'du_target']
+            
+            #building related overall data
+            buildings_completed = domain_df[ (domain_df['du_status'] == 'completed')]['buildings'].sum()
+            final_df.loc[(final_df['domain'] == domain) ,'buildings_completed'] = buildings_completed
+            
+            final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed'] = 100*final_df.loc[(final_df['domain'] == domain), 'buildings_completed'] / final_df.loc[(final_df['domain'] == domain) , 'building_target']
+
+
+            ##In the following steps, we will calculate last 7 days data
+            # Define analysis window
+            subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain]
+            # Step 1: Ensure visit_date is datetime
+            subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(visit_data_df['visit_date'])
+
+            # Step 2: Define date range
+            today = pd.Timestamp.today().normalize()
+            seven_days_ago = today - pd.Timedelta(days=7)
+
+            # Step 3: Filter visit data for last 7 days
+            recent_visits = subset_visit_data_df_last_week[
+                (subset_visit_data_df_last_week['visit_date'] >= seven_days_ago) &
+                (subset_visit_data_df_last_week['visit_date'] <= today)
+            ]
+
+            # Step 4: Merge with domain_df to get du_status and building
+            merged = pd.merge(recent_visits, domain_df, on='case_id', how='inner')
+            #output_as_excel_in_downloads(merged, "merged")
+
+            # Step 5: Filter for du_status == 'completed'
+            complete_cases = merged[merged['du_status'] == 'completed']
+            output_as_excel_in_downloads(complete_cases, "complete_cases")
+            # Step 6a: Count unique case_ids
+            unique_case_count = complete_cases['case_id'].nunique()
+
+            # Step 6b: Sum buildings for those unique case_ids
+            # First, get unique case_ids
+            unique_case_ids = complete_cases['case_id'].unique()
+
+            # Filter domain_df to those case_ids and sum buildings
+            building_sum = domain_df[domain_df['case_id'].isin(unique_case_ids)]['buildings'].sum()
+            print(f"Buildinds completed {building_sum}")
+            # Step 7 : Assigning the outputs appropriately
+            final_df.loc[(final_df['domain'] == domain), 'du_completed_last_week'] = unique_case_count
+            final_df.loc[(final_df['domain'] == domain), 'buildings_completed_last_week'] = building_sum
+            final_df.loc[(final_df['domain'] == domain), 'pct_du_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'du_target']
+            final_df.loc[(final_df['domain'] == domain), 'pct_buildings_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'building_target']
             
             #Update percentage completion for the domain
             start_date_to_date = datetime.strptime(final_df.loc[(final_df['domain'] == domain) , 'start_date'].iloc[0], '%Y-%m-%d').date()
@@ -395,7 +412,7 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
-     # Round all pct_ columns to two decimal places
+      # Round all pct_ columns to two decimal places
     pct_cols = [col for col in final_df.columns if col.startswith('pct_')]
     final_df.loc[:, pct_cols] = final_df[pct_cols].round(2)
     output_as_excel_in_downloads(final_df, "ward_level_status_report")

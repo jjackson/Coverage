@@ -32,28 +32,80 @@ app.index_string = '''
                 font-weight: bold !important;
             }
             
-            /* Header text wrapping styles */
+            /* Header text wrapping and auto-sizing styles */
             .ag-header-cell-wrap .ag-header-cell-text {
                 white-space: normal !important;
                 word-wrap: break-word !important;
                 overflow-wrap: break-word !important;
-                line-height: 1.2 !important;
-                padding: 4px !important;
+                line-height: 1.3 !important;
+                padding: 6px !important;
+                text-align: center !important;
+                display: block !important;
+                width: 100% !important;
             }
             
             .ag-header-cell-wrap {
                 height: auto !important;
-                min-height: 40px !important;
+                min-height: 50px !important;
+                max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
+                justify-content: center !important;
+                padding: 4px !important;
             }
             
             .ag-header-cell-label {
                 height: auto !important;
-                min-height: 40px !important;
+                min-height: 50px !important;
+                max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                width: 100% !important;
+                padding: 4px !important;
+            }
+            
+            /* Auto-size columns based on content */
+            .ag-header-cell {
+                min-width: 120px !important;
+                max-width: none !important;
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
+            }
+            
+            /* Ensure headers can expand to fit text */
+            .ag-header-cell-resize {
+                display: none !important;
+            }
+            
+            /* Better text wrapping for long headers */
+            .ag-header-cell-text {
+                max-width: none !important;
+                overflow: visible !important;
+                height: auto !important;
+                min-height: auto !important;
+            }
+            
+            /* Header row auto-height */
+            .ag-header-row {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
+            }
+            
+            /* Ensure header container allows auto-height */
+            .ag-header-container {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
+            }
+            
+            /* Header group auto-height */
+            .ag-header-group-cell {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
             }
         </style>
     </head>
@@ -91,13 +143,287 @@ else:
     # Convert visit_date to datetime for proper plotting
     timeline_df['visit_date'] = pd.to_datetime(timeline_df['visit_date'])
 
+def get_column_display_name(column_name):
+    """
+    Map column names to more appropriate display names for the AgGrid tables.
+    
+    This function provides user-friendly column headers by mapping technical column names
+    to readable display names. You can easily customize this mapping by:
+    
+    1. Adding new mappings to the column_mapping dictionary
+    2. Modifying existing mappings to match your preferred terminology
+    3. Adding domain-specific column names for your use case
+    
+    Example of adding custom mappings:
+    column_mapping['my_custom_column'] = 'My Custom Display Name'
+    column_mapping['internal_code'] = 'Public Description'
+    """
+    column_mapping = {
+        # Domain and location columns
+        'domain': 'Project Domain',
+        'ward': 'Ward',
+        'opportunity_name': 'Opportunity Name',
+        'project_name': 'Project Name',
+        'region': 'Region',
+        'district': 'District',
+        'sub_district': 'Sub District',
+        'village': 'Village',
+        'community': 'Community',
+        
+        # Target columns
+        'visit_target': 'Visit Target',
+        'building_target': 'Building Target',
+        'du_target': 'Delivery Unit Target',
+        'household_target': 'Household Target',
+        'population_target': 'Population Target',
+        
+        # Completed columns
+        'visits_completed': 'Visits Completed',
+        'buildings_completed': 'Buildings Completed',
+        'du_completed': 'Delivery Units Completed',
+        'households_completed': 'Households Completed',
+        'population_covered': 'Population Covered',
+        
+        # Percentage columns
+        'pct_visits_completed': 'Visit Completion %',
+        'pct_buildings_completed': 'Building Completion %',
+        'pct_dus_completed': 'DU Completion %',
+        'pct_households_completed': 'Household Completion %',
+        'pct_population_covered': 'Population Coverage %',
+        'pct_visits_completed_last7days': 'Visit Completion % (7d)',
+        'pct_buildings_completed_last7days': 'Building Completion % (7d)',
+        'pct_dus_completed_last7days': 'DU Completion % (7d)',
+        'pct_households_completed_last7days': 'Household Completion % (7d)',
+        'pct_population_covered_last7days': 'Population Coverage % (7d)',
+        
+        # Count columns
+        'total_visits': 'Total Visits',
+        'total_buildings': 'Total Buildings',
+        'total_dus': 'Total Delivery Units',
+        'total_flws': 'Total Field Workers',
+        'total_households': 'Total Households',
+        'total_population': 'Total Population',
+        'total_service_areas': 'Total Service Areas',
+        
+        # Status columns
+        'status': 'Status',
+        'completion_status': 'Completion Status',
+        'delivery_status': 'Delivery Status',
+        'verification_status': 'Verification Status',
+        'quality_status': 'Quality Status',
+        
+        # Date columns
+        'visit_date': 'Visit Date',
+        'last_visit_date': 'Last Visit Date',
+        'start_date': 'Start Date',
+        'end_date': 'End Date',
+        'planned_date': 'Planned Date',
+        'actual_date': 'Actual Date',
+        'created_date': 'Created Date',
+        'updated_date': 'Updated Date',
+        
+        # Performance metrics
+        'completion_rate': 'Completion Rate',
+        'efficiency_score': 'Efficiency Score',
+        'productivity_index': 'Productivity Index',
+        'performance_rating': 'Performance Rating',
+        'quality_score': 'Quality Score',
+        'accuracy_rate': 'Accuracy Rate',
+        
+        # Geographic columns
+        'latitude': 'Latitude',
+        'longitude': 'Longitude',
+        'coordinates': 'Coordinates',
+        'gps_accuracy': 'GPS Accuracy',
+        'location_verified': 'Location Verified',
+        
+        # Quality metrics
+        'data_quality_score': 'Data Quality Score',
+        'validation_status': 'Validation Status',
+        'error_count': 'Error Count',
+        'warning_count': 'Warning Count',
+        'data_completeness': 'Data Completeness',
+        'data_consistency': 'Data Consistency',
+        
+        # Financial columns
+        'budget_allocated': 'Budget Allocated',
+        'budget_spent': 'Budget Spent',
+        'cost_per_visit': 'Cost per Visit',
+        'cost_per_building': 'Cost per Building',
+        'cost_per_du': 'Cost per Delivery Unit',
+        'total_cost': 'Total Cost',
+        'remaining_budget': 'Remaining Budget',
+        
+        # Time-based metrics
+        'avg_time_per_visit': 'Avg Time per Visit',
+        'avg_time_per_building': 'Avg Time per Building',
+        'avg_time_per_du': 'Avg Time per DU',
+        'total_working_hours': 'Total Working Hours',
+        'overtime_hours': 'Overtime Hours',
+        'travel_time': 'Travel Time',
+        'waiting_time': 'Waiting Time',
+        
+        # FLW specific columns
+        'flw_name': 'Field Worker Name',
+        'flw_id': 'Field Worker ID',
+        'flw_phone': 'Field Worker Phone',
+        'flw_supervisor': 'Field Worker Supervisor',
+        'flw_performance_rating': 'Performance Rating',
+        'flw_experience_years': 'Experience (Years)',
+        'flw_training_completed': 'Training Completed',
+        'flw_availability': 'Availability Status',
+        
+        # Delivery unit specific columns
+        'du_name': 'Delivery Unit Name',
+        'du_type': 'Delivery Unit Type',
+        'du_category': 'Delivery Unit Category',
+        'du_priority': 'Delivery Unit Priority',
+        'du_size': 'Delivery Unit Size',
+        'du_population': 'DU Population',
+        'du_households': 'DU Households',
+        
+        # Service area columns
+        'service_area_name': 'Service Area Name',
+        'service_area_type': 'Service Area Type',
+        'population_size': 'Population Size',
+        'household_count': 'Household Count',
+        'area_km2': 'Area (km²)',
+        'density': 'Population Density',
+        
+        # Visit specific columns
+        'visit_type': 'Visit Type',
+        'visit_duration': 'Visit Duration',
+        'visit_notes': 'Visit Notes',
+        'visit_photos': 'Visit Photos',
+        'visit_verification': 'Visit Verification',
+        'visit_quality': 'Visit Quality',
+        'visit_outcome': 'Visit Outcome',
+        
+        # Building specific columns
+        'building_type': 'Building Type',
+        'building_condition': 'Building Condition',
+        'building_occupancy': 'Building Occupancy',
+        'building_notes': 'Building Notes',
+        'building_age': 'Building Age',
+        'building_material': 'Building Material',
+        
+        # Custom calculated columns
+        'microplanning_efficiency': 'Microplanning Efficiency',
+        'coverage_gap': 'Coverage Gap',
+        'optimization_score': 'Optimization Score',
+        'risk_assessment': 'Risk Assessment',
+        'progress_trend': 'Progress Trend',
+        'performance_benchmark': 'Performance Benchmark',
+        'efficiency_gap': 'Efficiency Gap',
+        
+        # Health-specific columns (if applicable)
+        'vaccination_rate': 'Vaccination Rate',
+        'health_indicators': 'Health Indicators',
+        'mortality_rate': 'Mortality Rate',
+        'morbidity_rate': 'Morbidity Rate',
+        'nutrition_status': 'Nutrition Status',
+        'sanitation_access': 'Sanitation Access',
+        
+        # Education-specific columns (if applicable)
+        'literacy_rate': 'Literacy Rate',
+        'enrollment_rate': 'Enrollment Rate',
+        'attendance_rate': 'Attendance Rate',
+        'dropout_rate': 'Dropout Rate',
+        'teacher_student_ratio': 'Teacher-Student Ratio',
+        
+        # Infrastructure columns
+        'road_access': 'Road Access',
+        'electricity_access': 'Electricity Access',
+        'water_access': 'Water Access',
+        'internet_access': 'Internet Access',
+        'healthcare_facility': 'Healthcare Facility',
+        'school_facility': 'School Facility'
+    }
+    
+    # Return mapped name if exists, otherwise return original with title case
+    display_name = column_mapping.get(column_name, column_name.replace('_', ' ').title())
+    
+    # Replace "Pct" with "%" in all header names
+    display_name = display_name.replace('Pct', '%')
+    
+    return display_name
+
+def add_custom_column_mapping(custom_mappings):
+    """
+    Add custom column name mappings to the display name function.
+    
+    Args:
+        custom_mappings (dict): Dictionary of column_name: display_name pairs
+        
+    Example:
+        add_custom_column_mapping({
+            'my_internal_code': 'Public Display Name',
+            'technical_field': 'User-Friendly Name'
+        })
+    """
+    # This function allows runtime customization of column mappings
+    # You can call this function before creating the AgGrid tables
+    # to add project-specific column name mappings
+    
+    # Note: For permanent changes, modify the column_mapping dictionary
+    # in the get_column_display_name function above
+    
+    # Custom column mappings added successfully
+    pass
+
+def get_available_columns(dataframe):
+    """
+    Get a list of available columns in the dataframe with their display names.
+    
+    Args:
+        dataframe: Pandas DataFrame to analyze
+        
+    Returns:
+        dict: Dictionary mapping original column names to display names
+    """
+    return {col: get_column_display_name(col) for col in dataframe.columns}
+
+# Example usage of custom column mappings:
+# Uncomment and modify the lines below to add project-specific column names
+# 
+# add_custom_column_mapping({
+#     'project_specific_field': 'Project-Specific Display Name',
+#     'internal_metric': 'Public Metric Name',
+#     'technical_indicator': 'User-Friendly Indicator'
+# })
+#
+# You can also see what columns are available in your data:
+# available_opp_columns = get_available_columns(opp_level_final_df)
+# available_ward_columns = get_available_columns(ward_level_final_df)
+
 # Prepare dropdown options
 domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
 # Prepare columns for the opportunity-level table
 column_defs = []
-for i, col in enumerate(opp_level_final_df.columns):
-    col_def = {"headerName": col, "field": col}
+
+# Get all columns and identify percentage columns and date columns
+all_columns = list(opp_level_final_df.columns)
+pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
+date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
+other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
+
+# Reorder columns: put date columns just before percentage columns
+reordered_columns = []
+for col in other_columns:
+    reordered_columns.append(col)
+
+# Add date columns just before percentage columns
+for date_col in date_columns:
+    reordered_columns.append(date_col)
+
+# Add percentage columns at the end
+for pct_col in pct_columns:
+    reordered_columns.append(pct_col)
+
+# Create column definitions with the reordered columns
+for i, col in enumerate(reordered_columns):
+    col_def = {"headerName": get_column_display_name(col), "field": col}
     if i < 4:
         col_def["pinned"] = "left"  # Freeze the first four columns
     
@@ -115,18 +441,20 @@ for i, col in enumerate(opp_level_final_df.columns):
     
     # Set width for numeric columns
     if pd.api.types.is_numeric_dtype(opp_level_final_df[col]):
-        col_def["width"] = 150
-        col_def["minWidth"] = 150
-        col_def["maxWidth"] = 200
+        col_def["minWidth"] = 120
+        col_def["maxWidth"] = 300
+        col_def["suppressSizeToFit"] = False
     else:
         # For text columns, set minimum width to accommodate full text
         col_def["minWidth"] = 120
-        col_def["maxWidth"] = 300
+        col_def["maxWidth"] = 400
         col_def["autoHeight"] = True
         col_def["wrapText"] = True
+        col_def["suppressSizeToFit"] = False
     
     # Enable header text wrapping for all columns
     col_def["headerClass"] = "ag-header-cell-wrap"
+    col_def["headerHeight"] = "auto"
     col_def["headerComponentParams"] = {
         "template": '<div class="ag-cell-label-container" role="presentation">' +
                    '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -153,7 +481,15 @@ opp_level_table = AgGrid(
                      "enableExport": True, 
                      "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                      "suppressColumnVirtualisation": True,
-                     "autoGroupColumnDef": {"minWidth": 200}},
+                     "autoGroupColumnDef": {"minWidth": 200},
+                     "autoSizeColumns": True,
+                     "autoSizePadding": 10,
+                     "suppressRowVirtualisation": True,
+                     "suppressSizeToFit": False,
+                     "sizeColumnsToFit": True,
+                     "headerHeight": "auto",
+                     "suppressRowHoverHighlight": False,
+                     "rowHeight": 40},
     csvExportParams={
         "fileName": "opp_level_status_report.csv",
         "allColumns": True
@@ -273,8 +609,29 @@ def update_charts(selected_domain, selected_wards):
 
     # Prepare AgGrid column definitions, freeze first 5 columns and set width for numeric columns
     column_defs = []
-    for i, col in enumerate(filtered_rows.columns):
-        col_def = {"headerName": col, "field": col}
+    
+    # Get all columns and identify percentage columns and date columns
+    all_columns = list(filtered_rows.columns)
+    pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
+    date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
+    other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
+    
+    # Reorder columns: put date columns just before percentage columns
+    reordered_columns = []
+    for col in other_columns:
+        reordered_columns.append(col)
+    
+    # Add date columns just before percentage columns
+    for date_col in date_columns:
+        reordered_columns.append(date_col)
+    
+    # Add percentage columns at the end
+    for pct_col in pct_columns:
+        reordered_columns.append(pct_col)
+    
+    # Create column definitions with the reordered columns
+    for i, col in enumerate(reordered_columns):
+        col_def = {"headerName": get_column_display_name(col), "field": col}
         if i < 5:
             col_def["pinned"] = "left"
         
@@ -291,18 +648,20 @@ def update_charts(selected_domain, selected_wards):
             }
         
         if pd.api.types.is_numeric_dtype(filtered_rows[col]):
-            col_def["width"] = 150
-            col_def["minWidth"] = 150
-            col_def["maxWidth"] = 200
+            col_def["minWidth"] = 120
+            col_def["maxWidth"] = 300
+            col_def["suppressSizeToFit"] = False
         else:
             # For text columns, set minimum width to accommodate full text
             col_def["minWidth"] = 120
-            col_def["maxWidth"] = 300
+            col_def["maxWidth"] = 400
             col_def["autoHeight"] = True
             col_def["wrapText"] = True
+            col_def["suppressSizeToFit"] = False
         
         # Enable header text wrapping for all columns
         col_def["headerClass"] = "ag-header-cell-wrap"
+        col_def["headerHeight"] = "auto"
         col_def["headerComponentParams"] = {
             "template": '<div class="ag-cell-label-container" role="presentation">' +
                        '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -326,7 +685,15 @@ def update_charts(selected_domain, selected_wards):
         dashGridOptions={"pagination": True, "paginationPageSize": 10, "enableExport": True,
                          "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                          "suppressColumnVirtualisation": True,
-                         "autoGroupColumnDef": {"minWidth": 200}},
+                         "autoGroupColumnDef": {"minWidth": 200},
+                         "autoSizeColumns": True,
+                         "autoSizePadding": 10,
+                         "suppressRowVirtualisation": True,
+                         "suppressSizeToFit": False,
+                         "sizeColumnsToFit": True,
+                         "headerHeight": "auto",
+                         "suppressRowHoverHighlight": False,
+                         "rowHeight": 40},
         csvExportParams={
         "fileName": "ward_level_status_report.csv",
         "allColumns": True
@@ -406,14 +773,8 @@ def update_charts(selected_domain, selected_wards):
             # Sort by visit_date for proper line plotting
             timeline_filtered = timeline_filtered.sort_values('visit_date')
             
-            # Debug: Print available columns and sample data
-            print(f"Available columns in timeline_df: {list(timeline_df.columns)}")
-            print(f"Sample timeline data for {selected_domain}:")
-            print(timeline_filtered.head())
-            
             # Check if microplanning columns exist, if not calculate them
             if 'building_microplanning_completion_rate' not in timeline_filtered.columns:
-                print("Microplanning columns not found, calculating them...")
                 # Calculate microplanning completion rates
                 timeline_filtered['building_microplanning_completion_rate'] = timeline_filtered.apply(
                     lambda row: (row['pct_buildings_completed'] / row['pct_visits_completed'] * 100) 
@@ -431,11 +792,6 @@ def update_charts(selected_domain, selected_wards):
                     lambda row: (row['pct_dus_completed_last7days'] / row['pct_visits_completed_last7days'] * 100) 
                     if row['pct_visits_completed_last7days'] > 0 else 0, axis=1
                 )
-            
-            # Debug: Print sample microplanning values
-            print(f"Sample microplanning values:")
-            print(f"Building rate: {timeline_filtered['building_microplanning_completion_rate'].head()}")
-            print(f"DU rate: {timeline_filtered['du_microplanning_completion_rate'].head()}")
             
             # Chart a) building_microplanning_completion_rate vs visit_date
             building_rate_chart = dcc.Graph(

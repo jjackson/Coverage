@@ -401,7 +401,28 @@ domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'
 
 # Prepare columns for the opportunity-level table
 column_defs = []
-for i, col in enumerate(opp_level_final_df.columns):
+
+# Get all columns and identify percentage columns and date columns
+all_columns = list(opp_level_final_df.columns)
+pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
+date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
+other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
+
+# Reorder columns: put date columns just before percentage columns
+reordered_columns = []
+for col in other_columns:
+    reordered_columns.append(col)
+
+# Add date columns just before percentage columns
+for date_col in date_columns:
+    reordered_columns.append(date_col)
+
+# Add percentage columns at the end
+for pct_col in pct_columns:
+    reordered_columns.append(pct_col)
+
+# Create column definitions with the reordered columns
+for i, col in enumerate(reordered_columns):
     col_def = {"headerName": get_column_display_name(col), "field": col}
     if i < 4:
         col_def["pinned"] = "left"  # Freeze the first four columns
@@ -588,7 +609,28 @@ def update_charts(selected_domain, selected_wards):
 
     # Prepare AgGrid column definitions, freeze first 5 columns and set width for numeric columns
     column_defs = []
-    for i, col in enumerate(filtered_rows.columns):
+    
+    # Get all columns and identify percentage columns and date columns
+    all_columns = list(filtered_rows.columns)
+    pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
+    date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
+    other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
+    
+    # Reorder columns: put date columns just before percentage columns
+    reordered_columns = []
+    for col in other_columns:
+        reordered_columns.append(col)
+    
+    # Add date columns just before percentage columns
+    for date_col in date_columns:
+        reordered_columns.append(date_col)
+    
+    # Add percentage columns at the end
+    for pct_col in pct_columns:
+        reordered_columns.append(pct_col)
+    
+    # Create column definitions with the reordered columns
+    for i, col in enumerate(reordered_columns):
         col_def = {"headerName": get_column_display_name(col), "field": col}
         if i < 5:
             col_def["pinned"] = "left"

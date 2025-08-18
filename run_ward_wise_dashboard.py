@@ -32,13 +32,14 @@ app.index_string = '''
                 font-weight: bold !important;
             }
             
-            /* Header text wrapping styles */
+            /* Header text wrapping and auto-sizing styles */
             .ag-header-cell-wrap .ag-header-cell-text {
                 white-space: normal !important;
                 word-wrap: break-word !important;
                 overflow-wrap: break-word !important;
                 line-height: 1.2 !important;
                 padding: 4px !important;
+                text-align: center !important;
             }
             
             .ag-header-cell-wrap {
@@ -46,6 +47,7 @@ app.index_string = '''
                 min-height: 40px !important;
                 display: flex !important;
                 align-items: center !important;
+                justify-content: center !important;
             }
             
             .ag-header-cell-label {
@@ -54,6 +56,24 @@ app.index_string = '''
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                width: 100% !important;
+            }
+            
+            /* Auto-size columns based on content */
+            .ag-header-cell {
+                min-width: 120px !important;
+                max-width: none !important;
+            }
+            
+            /* Ensure headers can expand to fit text */
+            .ag-header-cell-resize {
+                display: none !important;
+            }
+            
+            /* Better text wrapping for long headers */
+            .ag-header-cell-text {
+                max-width: none !important;
+                overflow: visible !important;
             }
         </style>
     </head>
@@ -363,15 +383,16 @@ for i, col in enumerate(opp_level_final_df.columns):
     
     # Set width for numeric columns
     if pd.api.types.is_numeric_dtype(opp_level_final_df[col]):
-        col_def["width"] = 150
-        col_def["minWidth"] = 150
-        col_def["maxWidth"] = 200
+        col_def["minWidth"] = 120
+        col_def["maxWidth"] = 300
+        col_def["suppressSizeToFit"] = False
     else:
         # For text columns, set minimum width to accommodate full text
         col_def["minWidth"] = 120
-        col_def["maxWidth"] = 300
+        col_def["maxWidth"] = 400
         col_def["autoHeight"] = True
         col_def["wrapText"] = True
+        col_def["suppressSizeToFit"] = False
     
     # Enable header text wrapping for all columns
     col_def["headerClass"] = "ag-header-cell-wrap"
@@ -401,7 +422,12 @@ opp_level_table = AgGrid(
                      "enableExport": True, 
                      "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                      "suppressColumnVirtualisation": True,
-                     "autoGroupColumnDef": {"minWidth": 200}},
+                     "autoGroupColumnDef": {"minWidth": 200},
+                     "autoSizeColumns": True,
+                     "autoSizePadding": 10,
+                     "suppressRowVirtualisation": True,
+                     "suppressSizeToFit": False,
+                     "sizeColumnsToFit": True},
     csvExportParams={
         "fileName": "opp_level_status_report.csv",
         "allColumns": True
@@ -539,15 +565,16 @@ def update_charts(selected_domain, selected_wards):
             }
         
         if pd.api.types.is_numeric_dtype(filtered_rows[col]):
-            col_def["width"] = 150
-            col_def["minWidth"] = 150
-            col_def["maxWidth"] = 200
+            col_def["minWidth"] = 120
+            col_def["maxWidth"] = 300
+            col_def["suppressSizeToFit"] = False
         else:
             # For text columns, set minimum width to accommodate full text
             col_def["minWidth"] = 120
-            col_def["maxWidth"] = 300
+            col_def["maxWidth"] = 400
             col_def["autoHeight"] = True
             col_def["wrapText"] = True
+            col_def["suppressSizeToFit"] = False
         
         # Enable header text wrapping for all columns
         col_def["headerClass"] = "ag-header-cell-wrap"
@@ -574,7 +601,12 @@ def update_charts(selected_domain, selected_wards):
         dashGridOptions={"pagination": True, "paginationPageSize": 10, "enableExport": True,
                          "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                          "suppressColumnVirtualisation": True,
-                         "autoGroupColumnDef": {"minWidth": 200}},
+                         "autoGroupColumnDef": {"minWidth": 200},
+                         "autoSizeColumns": True,
+                         "autoSizePadding": 10,
+                         "suppressRowVirtualisation": True,
+                         "suppressSizeToFit": False,
+                         "sizeColumnsToFit": True},
         csvExportParams={
         "fileName": "ward_level_status_report.csv",
         "allColumns": True

@@ -265,9 +265,9 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             ##In the following steps, we will calculate last 7 days data
             # Define analysis window
-            subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain]
+            subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain].copy()
             # Step 1: Ensure visit_date is datetime
-            subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(visit_data_df['visit_date'])
+            subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(subset_visit_data_df_last_week['visit_date'])
 
             # Step 2: Define date range
             today = pd.Timestamp.today().normalize()
@@ -294,7 +294,6 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             # Filter domain_df to those case_ids and sum buildings
             building_sum = domain_df[domain_df['case_id'].isin(unique_case_ids)]['buildings'].sum()
-            print(f"Buildinds completed {building_sum}")
             # Step 7 : Assigning the outputs appropriately
             final_df.loc[(final_df['domain'] == domain), 'du_completed_last_week'] = unique_case_count
             final_df.loc[(final_df['domain'] == domain), 'buildings_completed_last_week'] = building_sum
@@ -388,9 +387,9 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
                     
                     ##In the following steps, we will calculate last 7 days data
                     # Define analysis window
-                    subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain]
+                    subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain].copy()
                     # Step 1: Ensure visit_date is datetime
-                    subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(visit_data_df['visit_date'])
+                    subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(subset_visit_data_df_last_week['visit_date'])
 
                     # Step 2: Define date range
                     today = pd.Timestamp.today().normalize()
@@ -418,7 +417,6 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
 
                     # Filter domain_df to those case_ids and sum buildings
                     building_sum = domain_df[domain_df['case_id'].isin(unique_case_ids) & (domain_df[ward_column] == ward)]['buildings'].sum()
-                    print(f"Buildinds completed {building_sum}")
                     # Step 7 : Assigning the outputs appropriately
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] = unique_case_count
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed_last_week'] = building_sum
@@ -435,9 +433,9 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week']
                             
                             
-                else:
-                        print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
-                        # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
+            else:
+                print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
+                # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")

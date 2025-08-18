@@ -197,10 +197,9 @@ def main():
     # Extract only the date component from visit_date
     visit_data_df['visit_date'] = visit_data_df['visit_date'].dt.date
 
-    #conver domain name values from actual name to cchq domain names
+    #convert domain name values from actual name to cchq domain names
     visit_data_df['domain'] = visit_data_df['domain'].map(opportunity_to_domain_mapping)
     print("Visit data fetched successfully.")
-    output_as_excel_in_downloads(visit_data_df, "visit_data_df")
 
     ward_level_df = init_microplanning_ward_level_data_frame()
     ward_level_final_df = generate_ward_level_status_report(valid_opportunities,visit_data_df, ward_level_df)
@@ -286,7 +285,6 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             # Step 5: Filter for du_status == 'completed'
             complete_cases = merged[merged['du_status'] == 'completed']
-            output_as_excel_in_downloads(complete_cases, "complete_cases")
             # Step 6a: Count unique case_ids
             unique_case_count = complete_cases['case_id'].nunique()
 
@@ -357,58 +355,89 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
             domain_df_last_week = service_df.copy()
             # Filter the DataFrame for the current domain
             domain_df_last_week['last_modified'] = pd.to_datetime(domain_df_last_week['last_modified'], utc=True)
-             # Define analysis window
+            
             today_utc = datetime.now(pytz.UTC)
-            seven_days_ago = today_utc - timedelta(days=7)
-
-            # Filter rows modified in the last 7 days
-            domain_df_last_week = domain_df_last_week[domain_df_last_week['last_modified'] >= seven_days_ago]
+            seven_days_ago = (today_utc - timedelta(days=7)).date()
 
             ward_column = find_ward_column_name(domain)
             if(ward_column != ""):
                 wards = final_df.loc[final_df['domain'] == domain, 'ward'].unique()   
                 for ward in wards:
                     print(f"Processing domain: {domain}, ward: {ward}")
-
-                    #Update DU relateed columns
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed'] = domain_df[(domain_df[ward_column] == ward) & (domain_df['du_status'] == 'completed')].shape[0]
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] = domain_df_last_week[(domain_df_last_week[ward_column] == ward) & (domain_df_last_week['du_status'] == 'completed')].shape[0]
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_target']
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_target']
-                    
-                    #Update building related columns
-                    buildings_completed = domain_df[(domain_df[ward_column] == ward) & (domain_df['du_status'] == 'completed')]['buildings'].sum()
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward),'buildings_completed'] = buildings_completed
-                    buildings_completed_last_week = domain_df_last_week[(domain_df_last_week[ward_column] == ward) & (domain_df_last_week['du_status'] == 'completed')]['buildings'].sum()
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward),'buildings_completed_last_week'] = buildings_completed_last_week
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_buildings_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'building_target']
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_buildings_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'building_target']
-                    
-                    #Update visit related columns
-                    subset_visit_data_df = visit_data_df[visit_data_df['domain'] == domain]
-                    subset_visit_data_df = pd.merge(subset_visit_data_df, domain_df, on="case_id",how="left")
-                    subset_visit_data_df = subset_visit_data_df[['case_id','visit_date','domain',ward_column]]
-
-                    subset_visit_data_df_last_week = subset_visit_data_df.copy()
                     today_utc = datetime.now(pytz.UTC)
                     seven_days_ago = (today_utc - timedelta(days=7)).date()
-                    # Filter rows modified in the last 7 days
-                    subset_visit_data_df_last_week = subset_visit_data_df_last_week[subset_visit_data_df_last_week['visit_date'] >= seven_days_ago]
+
+                    visit_data_df_ward = pd.merge(visit_data_df, domain_df, on="case_id",how="left")
+                    visit_data_df_ward['visit_date'] = pd.to_datetime(visit_data_df_ward['visit_date'], utc=True)
+                    #visit related data
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df_ward[ward_column] == ward)].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df_ward[ward_column] == ward) & (visit_data_df['visit_date']>= seven_days_ago)].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visit_target']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visit_target']
                     
-                    # Count visits completed total
-                    visits_completed = subset_visit_data_df[subset_visit_data_df[ward_column] == ward].shape[0]
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed'] = visits_completed
-                    # Count visits completed last week  
-                    visits_completed_last_week = subset_visit_data_df_last_week[subset_visit_data_df_last_week[ward_column] == ward].shape[0]
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed_last_week'] = visits_completed_last_week
-                    # Calculate percentage of visits completed
+                    #du related overall data
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'du_completed'] = domain_df[ (domain_df['du_status'] == 'completed') & (domain_df[ward_column] == ward)].shape[0]
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'du_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'du_target']
+                    
+                    #building related overall data
+                    buildings_completed = domain_df[ (domain_df['du_status'] == 'completed') & (domain_df[ward_column] == ward) ]['buildings'].sum()
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) ,'buildings_completed'] = buildings_completed
+                    
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'building_target']
 
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visit_target']
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'visit_target']
+                    
+                    ##In the following steps, we will calculate last 7 days data
+                    # Define analysis window
+                    subset_visit_data_df_last_week = visit_data_df[visit_data_df['domain'] == domain]
+                    # Step 1: Ensure visit_date is datetime
+                    subset_visit_data_df_last_week['visit_date'] = pd.to_datetime(visit_data_df['visit_date'])
 
-            else:
-                print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
-                # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
+                    # Step 2: Define date range
+                    today = pd.Timestamp.today().normalize()
+                    seven_days_ago = today - pd.Timedelta(days=7)
+
+                    # Step 3: Filter visit data for last 7 days
+                    recent_visits = subset_visit_data_df_last_week[
+                        (subset_visit_data_df_last_week['visit_date'] >= seven_days_ago) &
+                        (subset_visit_data_df_last_week['visit_date'] <= today)
+                    ]
+
+                    # Step 4: Merge with domain_df to get du_status and building
+                    merged = pd.merge(recent_visits, domain_df, on='case_id', how='inner')
+                    #output_as_excel_in_downloads(merged, "merged")
+
+                    # Step 5: Filter for du_status == 'completed'
+                    complete_cases = merged[(merged['du_status'] == 'completed') & (merged[ward_column] == ward)]
+
+                    # Step 6a: Count unique case_ids
+                    unique_case_count = complete_cases['case_id'].nunique()
+
+                    # Step 6b: Sum buildings for those unique case_ids
+                    # First, get unique case_ids
+                    unique_case_ids = complete_cases['case_id'].unique()
+
+                    # Filter domain_df to those case_ids and sum buildings
+                    building_sum = domain_df[domain_df['case_id'].isin(unique_case_ids) & (domain_df[ward_column] == ward)]['buildings'].sum()
+                    print(f"Buildinds completed {building_sum}")
+                    # Step 7 : Assigning the outputs appropriately
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'du_completed_last_week'] = unique_case_count
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'buildings_completed_last_week'] = building_sum
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'du_target']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_buildings_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'building_target']
+                    
+                    #Update percentage completion for the domain
+                    
+
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_building_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week']
+
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week']
+                            
+                            
+                else:
+                        print(f"Warning: No ward column found for domain {domain}. Skipping DU completion updates.")
+                        # @TODO: Handle the case of ccc-chc-zegcawis-2024-25 and ccc-chc-cowacdi-2024-25
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")

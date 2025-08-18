@@ -37,32 +37,41 @@ app.index_string = '''
                 white-space: normal !important;
                 word-wrap: break-word !important;
                 overflow-wrap: break-word !important;
-                line-height: 1.2 !important;
-                padding: 4px !important;
+                line-height: 1.3 !important;
+                padding: 6px !important;
                 text-align: center !important;
+                display: block !important;
+                width: 100% !important;
             }
             
             .ag-header-cell-wrap {
                 height: auto !important;
-                min-height: 40px !important;
+                min-height: 50px !important;
+                max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                padding: 4px !important;
             }
             
             .ag-header-cell-label {
                 height: auto !important;
-                min-height: 40px !important;
+                min-height: 50px !important;
+                max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 width: 100% !important;
+                padding: 4px !important;
             }
             
             /* Auto-size columns based on content */
             .ag-header-cell {
                 min-width: 120px !important;
                 max-width: none !important;
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
             }
             
             /* Ensure headers can expand to fit text */
@@ -74,6 +83,29 @@ app.index_string = '''
             .ag-header-cell-text {
                 max-width: none !important;
                 overflow: visible !important;
+                height: auto !important;
+                min-height: auto !important;
+            }
+            
+            /* Header row auto-height */
+            .ag-header-row {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
+            }
+            
+            /* Ensure header container allows auto-height */
+            .ag-header-container {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
+            }
+            
+            /* Header group auto-height */
+            .ag-header-group-cell {
+                height: auto !important;
+                min-height: 50px !important;
+                max-height: none !important;
             }
         </style>
     </head>
@@ -309,7 +341,12 @@ def get_column_display_name(column_name):
     }
     
     # Return mapped name if exists, otherwise return original with title case
-    return column_mapping.get(column_name, column_name.replace('_', ' ').title())
+    display_name = column_mapping.get(column_name, column_name.replace('_', ' ').title())
+    
+    # Replace "Pct" with "%" in all header names
+    display_name = display_name.replace('Pct', '%')
+    
+    return display_name
 
 def add_custom_column_mapping(custom_mappings):
     """
@@ -396,6 +433,7 @@ for i, col in enumerate(opp_level_final_df.columns):
     
     # Enable header text wrapping for all columns
     col_def["headerClass"] = "ag-header-cell-wrap"
+    col_def["headerHeight"] = "auto"
     col_def["headerComponentParams"] = {
         "template": '<div class="ag-cell-label-container" role="presentation">' +
                    '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -427,7 +465,10 @@ opp_level_table = AgGrid(
                      "autoSizePadding": 10,
                      "suppressRowVirtualisation": True,
                      "suppressSizeToFit": False,
-                     "sizeColumnsToFit": True},
+                     "sizeColumnsToFit": True,
+                     "headerHeight": "auto",
+                     "suppressRowHoverHighlight": False,
+                     "rowHeight": 40},
     csvExportParams={
         "fileName": "opp_level_status_report.csv",
         "allColumns": True
@@ -578,6 +619,7 @@ def update_charts(selected_domain, selected_wards):
         
         # Enable header text wrapping for all columns
         col_def["headerClass"] = "ag-header-cell-wrap"
+        col_def["headerHeight"] = "auto"
         col_def["headerComponentParams"] = {
             "template": '<div class="ag-cell-label-container" role="presentation">' +
                        '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -606,7 +648,10 @@ def update_charts(selected_domain, selected_wards):
                          "autoSizePadding": 10,
                          "suppressRowVirtualisation": True,
                          "suppressSizeToFit": False,
-                         "sizeColumnsToFit": True},
+                         "sizeColumnsToFit": True,
+                         "headerHeight": "auto",
+                         "suppressRowHoverHighlight": False,
+                         "rowHeight": 40},
         csvExportParams={
         "fileName": "ward_level_status_report.csv",
         "allColumns": True

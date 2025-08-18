@@ -308,10 +308,10 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
             final_df.loc[(final_df['domain'] == domain), 'pct_completion'] = 100*total_days_till_now/total_days
 
             final_df.loc[(final_df['domain'] == domain), 'pct_building_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed']
-            final_df.loc[(final_df['domain'] == domain), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week']
+            final_df.loc[(final_df['domain'] == domain), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed_last_week']
 
             final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed']
-            final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week']
+            final_df.loc[(final_df['domain'] == domain), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'pct_visits_completed_last_week']
             
         else:
             print(f"No data found for domain {domain}. Run the coverage for all the domains. For now, we are skipping the domain {domain}...")
@@ -427,10 +427,10 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
                     
 
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_building_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed']
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_building_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_buildings_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed_last_week']
 
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed']
-                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week']
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward), 'pct_du_microplanning_completion_rate_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_du_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'pct_visits_completed_last_week']
                             
                             
             else:

@@ -1,0 +1,64 @@
+{
+  "domains": {
+    "ccc-chc-zegcawis-2024-25": {
+      "start_date":"2025-05-09",
+      "end_date" : "2025-10-31",
+       "visit_target": 50000,
+          "building_target": 79262,
+          "du_target": 12498
+    },
+    "ccc-chc-cowacdi-2024-25": {
+      "start_date":"2025-05-07",
+      "end_date" : "2025-10-31",
+       "visit_target": 50000,
+          "building_target": 46104,
+          "du_target": 6371
+      
+    },
+    "ccc-chc-ahti-2024-25": {
+      "start_date":"2025-05-19",
+      "end_date" : "2025-10-31",
+       "visit_target": 25000,
+          "building_target": 30961,
+          "du_target": 3214
+      
+    },
+    "ccc-chc-rwyd-2024-25": {
+      "start_date":"2025-06-17",
+      "end_date" : "2025-10-31",
+       "visit_target": 25000,
+          "building_target": 35205,
+          "du_target": 9670
+    },
+    "ccc-chc-jhf-2024-25": {
+      "start_date":"2025-06-19",
+      "end_date" : "2025-10-31",
+      "visit_target": 40000,
+          "building_target": 64408,
+          "du_target": 11724
+    },
+    "ccc-chc-ruwoyd-2024-25": {
+      "start_date":"2025-06-19",
+      "end_date" : "2025-10-31",
+       "visit_target": 40000,
+          "building_target": 44939,
+          "du_target": 8565
+     
+    },
+    "ccc-chc-eha-c-2024-25": {
+      "start_date":"2025-07-01",
+      "end_date" : "2025-10-31",
+       "visit_target": 40000,
+          "building_target": 36119,
+          "du_target": 9889
+     
+    },
+    "ccc-chc-isodaf-2024-25": {
+      "start_date":"2025-07-03",
+      "end_date" : "2025-10-31",
+       "visit_target": 30000,
+          "building_target": 31124,
+          "du_target": 7075
+    }
+  }
+}

@@ -34,6 +34,8 @@ def convert_to_serializable(obj):
         return obj
 
 def generate_contrasting_colors(n):
+    import colorsys
+    
     # Predefined high-contrast color palette
     base_colors = [
         "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF",  # Primary and secondary
@@ -46,33 +48,28 @@ def generate_contrasting_colors(n):
     
     # If we need more colors than we have predefined
     if n > len(base_colors):
-        # Generate random distinct colors for the remaining ones
-        existing_colors = set(base_colors)
-        while len(existing_colors) < n:
-            # Generate random RGB with sufficient distance from existing colors
-            r = random.randint(0, 255)
-            g = random.randint(0, 255)
-            b = random.randint(0, 255)
-            # Convert to hex
-            color = "#{:02x}{:02x}{:02x}".format(r, g, b)
-            
-            # Check if the color is sufficiently different from existing ones
-            # by measuring Euclidean distance in RGB space
-            min_distance = float('inf')
-            for existing in existing_colors:
-                # Convert hex to RGB
-                er = int(existing[1:3], 16)
-                eg = int(existing[3:5], 16)
-                eb = int(existing[5:7], 16)
-                # Calculate distance
-                distance = ((r - er) ** 2 + (g - eg) ** 2 + (b - eb) ** 2) ** 0.5
-                min_distance = min(min_distance, distance)
-            
-            # Add if sufficiently different
-            if min_distance > 100:  # Threshold for difference
-                existing_colors.add(color)
+        colors = list(base_colors)
+        needed = n - len(base_colors)
         
-        colors = list(existing_colors)
+        # Generate additional colors systematically using HSV space for better distribution
+        for i in range(needed):
+            # Use golden ratio to distribute hues evenly
+            hue = (i * 0.618033988749895) % 1.0  # Golden ratio for good distribution
+            
+            # Vary saturation and value to create more distinct colors
+            if i < needed // 2:
+                saturation = 0.8 + (i % 3) * 0.1  # 0.8, 0.9, 1.0
+                value = 0.7 + (i % 4) * 0.1       # 0.7, 0.8, 0.9, 1.0
+            else:
+                saturation = 0.5 + ((i - needed // 2) % 3) * 0.15  # 0.5, 0.65, 0.8
+                value = 0.4 + ((i - needed // 2) % 4) * 0.15       # 0.4, 0.55, 0.7, 0.85
+            
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+            
+            # Convert to hex
+            color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+            colors.append(color)
     else:
         colors = base_colors[:n]
     
@@ -106,21 +103,9 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
     flws = coverage_data.unique_flw_names
     status_values = coverage_data.unique_status_values
     
-    # Create a mapping between FLW CommCare IDs and FLW names
-    flw_id_to_name_map = {}
-    flw_name_to_id_map = {}
-    
-    # Try to get existing mapping from coverage_data if available
-    if hasattr(coverage_data, 'flw_commcare_id_to_name_map') and coverage_data.flw_commcare_id_to_name_map:
-        flw_id_to_name_map = coverage_data.flw_commcare_id_to_name_map
-        # Create the reverse mapping
-        flw_name_to_id_map = {name: id for id, name in flw_id_to_name_map.items()}
-    # Fallback to using flws objects if available
-    elif hasattr(coverage_data, 'flws'):
-        for flw_name, flw_obj in coverage_data.flws.items():
-            if hasattr(flw_obj, 'id') and flw_obj.id:
-                flw_id_to_name_map[flw_obj.id] = flw_name
-                flw_name_to_id_map[flw_name] = flw_obj.id
+    # Get FLW ID/name mappings using the clean methods
+    flw_id_to_name_map = coverage_data.get_flw_id_to_name_map()
+    flw_name_to_id_map = coverage_data.get_flw_name_to_id_map()
     
     # Debug print
     # print(f"Unique status values: {status_values}")
@@ -168,6 +153,24 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             for key, value in list(feature['properties'].items()):
                 feature['properties'][key] = convert_to_serializable(value)
     
+    # Debug: Print FLW colors mapping
+    # print("FLW Colors Mapping:")
+    # for flw, color in flw_colors.items():
+    #     print(f"  {flw}: {color}")
+
+    # # Debug: Print a sample of service points with their assigned colors
+    # if service_points_geojson is not None:
+    #     print("\nSample Service Points with Colors:")
+    #     features = service_points_geojson.get('features', [])
+    #     for i, feature in enumerate(features[:10]):  # Print up to 10 service points
+    #         flw_name = feature['properties'].get('flw_name')
+    #         flw_commcare_id = feature['properties'].get('flw_commcare_id')
+    #         color = feature['properties'].get('color')
+    #         print(f"  Service Point {i+1}: FLW Name: {flw_name}, FLW CommCare ID: {flw_commcare_id}, Color: {color}")
+    #     if len(features) > 10:
+    #         print(f"  ... ({len(features) - 10} more service points not shown)")
+    # else:
+    #     print("No service points geojson available for debugging.")
     
     # Create HTML with embedded Leaflet map
     html_content = f"""
@@ -992,7 +995,29 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
             }}
             
             // Fit map to all features
-            map.fitBounds(L.geoJSON(geojsonData).getBounds());
+            // Check if we have delivery units (geojsonData) or need to use service points
+            if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {{
+                // Use delivery units for bounds if available
+                map.fitBounds(L.geoJSON(geojsonData).getBounds());
+            }} else if (servicePointsData && servicePointsData.features && servicePointsData.features.length > 0) {{
+                // For service-only maps, zoom to first valid service delivery point
+                let firstValidPoint = null;
+                for (let feature of servicePointsData.features) {{
+                    const coords = feature.geometry.coordinates;
+                    if (coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {{
+                        firstValidPoint = [coords[1], coords[0]]; // [lat, lng] for Leaflet
+                        break;
+                    }}
+                }}
+                if (firstValidPoint) {{
+                    map.setView(firstValidPoint, 10); // Zoom level 10 for local area view
+                }} else {{
+                    map.setView([9.0820, 8.6753], 6); // Fallback to Nigeria center
+                }}
+            }} else {{
+                // Fallback to Nigeria center if no data available
+                map.setView([9.0820, 8.6753], 6);
+            }}
             
             // Add FLW toggle controls
             const flwTogglesContainer = document.getElementById('flw-toggles');
@@ -1080,6 +1105,10 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     }}
                 }});
             }}
+            
+            // Debug: Check what FLW data is available in JavaScript
+            console.log("JavaScript Debug - flwIdToNameMap:", flwIdToNameMap);
+            console.log("JavaScript Debug - Object.entries count:", Object.entries(flwIdToNameMap).length);
             
             // Organize by FLW names but store IDs for filtering
             Object.entries(flwIdToNameMap).forEach(([flwId, flwName]) => {{
@@ -1785,7 +1814,29 @@ def create_leaflet_map(excel_file=None, service_delivery_csv=None, coverage_data
                     }});
                     
                     // If showing all, fit to all features
-                    map.fitBounds(L.geoJSON(geojsonData).getBounds());
+                    // Check if we have delivery units (geojsonData) or need to use service points
+                    if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {{
+                        // Use delivery units for bounds if available
+                        map.fitBounds(L.geoJSON(geojsonData).getBounds());
+                    }} else if (servicePointsData && servicePointsData.features && servicePointsData.features.length > 0) {{
+                        // For service-only maps, zoom to first valid service delivery point
+                        let firstValidPoint = null;
+                        for (let feature of servicePointsData.features) {{
+                            const coords = feature.geometry.coordinates;
+                            if (coords && coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {{
+                                firstValidPoint = [coords[1], coords[0]]; // [lat, lng] for Leaflet
+                                break;
+                            }}
+                        }}
+                        if (firstValidPoint) {{
+                            map.setView(firstValidPoint, 10); // Zoom level 10 for local area view
+                        }} else {{
+                            map.setView([9.0820, 8.6753], 6); // Fallback to Nigeria center
+                        }}
+                    }} else {{
+                        // Fallback to Nigeria center if no data available
+                        map.setView([9.0820, 8.6753], 6);
+                    }}
                 }} else {{
                     // Create a bounds object to calculate the extent of the selected service area
                     const bounds = L.latLngBounds();

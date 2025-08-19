@@ -17,6 +17,7 @@ import json
 from dotenv import load_dotenv
 from functools import lru_cache
 from src.sqlqueries import sql_queries
+import pickle
 try:
     # When imported as a module
     from models import CoverageData, DeliveryUnit, ServiceDeliveryPoint
@@ -496,7 +497,19 @@ def get_du_dataframe_from_commcare_api(domain: str,
     
     df.to_excel(excel_path, index=False)
     print(f"Delivery units data saved to: {excel_path}")
+
+    # Save coverage data to a pickel file on project root folder for future references
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    file_name = domain+".pkl"
+    data_dir = os.path.join(project_root, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    pickle_path = os.path.join(data_dir,file_name)
     
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(df, f)
+    print(f"Pickle file saved at: {pickle_path}")
+    
+
     return df
 
 def load_delivery_units_from_commcare_api(domain: str, 
@@ -769,6 +782,18 @@ def get_coverage_data_from_excel_and_csv(excel_file: str, service_delivery_csv: 
 
     return data
 
+def get_coverage_data_service_only(service_df: pd.DataFrame) -> 'CoverageData':
+    """
+    Load coverage data from service delivery points only (no delivery units)
+    
+    Args:
+        service_df: DataFrame containing service delivery GPS coordinates
+        
+    Returns:
+        CoverageData object with only service delivery points and FLWs
+    """
+    return CoverageData.load_service_delivery_only(service_df)
+
 def ensure_data_directory_and_get_filename(output_filename: Optional[str] = None, 
                                      file_prefix: str = "export", 
                                      file_id: str = None,
@@ -1027,7 +1052,7 @@ def export_superset_query_with_pagination(
         if 'session' in locals():
             session.close()
 
-def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password) -> Dict[str, pd.DataFrame]:
+def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset_username, superset_password, sql_query) -> Dict[str, pd.DataFrame]:
     """
     Load service delivery data from Superset and group by unique opportunity_name values.
     
@@ -1046,7 +1071,7 @@ def load_service_delivery_df_by_opportunity_from_superset(superset_url, superset
         # Use the new export function to get the data
         csv_path = export_superset_query_with_pagination(
             superset_url=superset_url,
-            sql_query=sql_queries.SQL_QUERIES["opportunity_uservisit"],
+            sql_query=sql_query,
             username=superset_username,
             password=superset_password
         )
@@ -1147,4 +1172,167 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error retrieving data from Superset: {str(e)}")
         exit(1)
+
+def superset_query_with_pagination_as_df(
+    superset_url: str,
+    sql_query: str,
+    username: str,
+    password: str,
+    chunk_size: int = constants.SQL_CHUNK_SIZE,
+    timeout: int = constants.API_TIMEOUT_LIMIT,
+    verbose: bool = False
+) -> pd.DataFrame:
+    """
+    Export all data from a Superset saved query using pagination to bypass the 10,000 row limit.
     
+    Args:
+        superset_url: Base URL of the Superset instance (e.g., 'https://superset.example.com')
+        sql_query: SQL query to execute
+        username: Superset username for authentication
+        password: Superset password for authentication
+        output_filename: Optional custom filename for the CSV (without extension)
+        chunk_size: Number of rows to fetch per chunk (default: 10000)
+        timeout: Request timeout in seconds (default: 120)
+        verbose: Whether to show detailed progress output (default: False)
+        
+    Returns:
+        Response coverted into a dataframe
+        
+    Raises:
+        ValueError: If required parameters are missing or invalid
+        RuntimeError: If authentication or data retrieval fails
+    """
+    # Validate input parameters
+    if not superset_url or not username or not password :
+        raise ValueError("superset_url, username, password are required")
+    
+    # Clean up the base URL
+    superset_url = superset_url.rstrip('/')
+    if not superset_url.startswith(('http://', 'https://')):
+        superset_url = f'https://{superset_url}'
+    
+
+    try:
+        session = requests.Session()
+        
+        # Authenticate
+        auth_url = f'{superset_url}/api/v1/security/login'
+        auth_payload = {
+            'username': username,
+            'password': password,
+            'provider': 'db',
+            'refresh': True
+        }
+        
+        auth_response = session.post(auth_url, json=auth_payload, timeout=timeout)
+        if auth_response.status_code != 200:
+            raise RuntimeError(f"Authentication failed: {auth_response.text}")
+        
+        auth_data = auth_response.json()
+        if 'access_token' not in auth_data:
+            raise RuntimeError(f"No access token in response: {auth_data}")
+        
+        access_token = auth_data['access_token']
+        headers = {'Authorization': f'Bearer {access_token}'}
+        
+        # Get CSRF token
+        csrf_url = f'{superset_url}/api/v1/security/csrf_token/'
+        csrf_response = session.get(csrf_url, headers=headers, timeout=timeout)
+        if csrf_response.status_code == 200:
+            csrf_data = csrf_response.json()
+            csrf_token = csrf_data.get('result')
+            if csrf_token:
+                headers['x-csrftoken'] = csrf_token
+                headers['Referer'] = superset_url+"/sqllab"
+                headers['Content-Type'] = 'application/json'
+        
+        
+
+        # Execute paginated query
+        execute_url = f'{superset_url}/api/v1/sqllab/execute/'
+        all_data = []
+        all_columns = None
+        offset = 0
+        total_rows = 0
+        chunk_num = 1
+
+        base_sql = sql_query
+        
+        while True:
+            # Add OFFSET and LIMIT to the SQL
+            paginated_sql = f"""
+            {base_sql.rstrip(';')}
+            OFFSET {offset}
+            LIMIT {chunk_size}
+            """
+            
+            payload = {
+                "ctas_method": "TABLE",
+                "database_id": constants.DATABASE_ID,
+                "expand_data": constants.FALSE,
+                "json": constants.TRUE,
+                "queryLimit": chunk_size,
+                "runAsync": constants.FALSE,
+                "schema": constants.SCHEMA_PUBLIC,
+                "select_as_cta": constants.FALSE,
+                "sql": paginated_sql,
+                "templateParams": "",
+                "tmp_table_name": ""
+            }
+            
+            response = session.post(execute_url, json=payload, headers=headers, timeout=timeout)
+            result = response.json()
+
+            if response.status_code != 200:
+                break
+            if result.get('status') != 'success':
+                break
+            
+            # Get data and columns
+            chunk_data = result.get('data', [])
+            columns = result.get('columns', [])
+            if not chunk_data:
+                break
+            # Store columns from first chunk
+            if all_columns is None:
+                all_columns = columns
+                
+            # Add chunk data to overall results
+            all_data.extend(chunk_data)
+            chunk_rows = len(chunk_data)
+            total_rows += chunk_rows
+            print("Total Rows : " + str(total_rows))
+            # If we got fewer rows than chunk_size, we've reached the end
+            if chunk_rows < chunk_size:
+                break
+            
+            # Prepare for next chunk
+            offset += chunk_size
+            chunk_num += 1
+            
+            # Small delay to be nice to the server
+            time.sleep(0.5)
+         
+        if verbose:
+            print(f"\n🎯 Pagination complete!")
+            print(f"   Total rows fetched: {total_rows:,}")
+            print(f"   Total chunks: {chunk_num - 1}")
+        else:
+            print(f"Exported {total_rows:,} rows from Superset query")
+        
+        # Export data to CSV
+        if not all_data or not all_columns:
+            raise RuntimeError("No data was retrieved from the query")
+        
+        # Create DataFrame
+        column_names = [col.get('name', f'col_{i}') for i, col in enumerate(all_columns)]
+        df = pd.DataFrame(all_data, columns=column_names)
+        
+            
+        return df
+        
+    except Exception as e:
+        raise RuntimeError(f"Error exporting data from Superset: {str(e)}")
+    finally:
+        if 'session' in locals():
+            session.close()    

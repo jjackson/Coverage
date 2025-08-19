@@ -96,7 +96,7 @@ def create_html_report(coverage_data):
     # Apply FLW name mapping
     if 'flw_commcare_id' in du_table_data.columns:
         du_table_data['flw_name'] = du_table_data['flw_commcare_id'].apply(
-            lambda id: coverage_data.flw_commcare_id_to_name_map.get(id, id)  # Use the ID itself if no name mapping exists
+            lambda id: coverage_data.get_flw_name_by_id(id)
         )
     
     # Add Delivery Count / Buildings column if both columns exist
@@ -581,8 +581,7 @@ def create_html_report(coverage_data):
         assigned_flw_ids = sorted(list(set(du.flw_commcare_id for du in service_area.delivery_units if du.flw_commcare_id)))
         
         # Map IDs to names, falling back to ID if no name is found
-        flw_name_map = coverage_data.flw_commcare_id_to_name_map
-        assigned_flw_names = [flw_name_map.get(flw_id, flw_id) for flw_id in assigned_flw_ids]
+        assigned_flw_names = [coverage_data.get_flw_name_by_id(flw_id) for flw_id in assigned_flw_ids]
         
         service_area_data.append({
             'service_area_id': sa_id,

@@ -5,9 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="96705d45-a7e7-4aac-bc51-38205902e1c9" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/Coverage.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Coverage.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/flw_summary_dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/flw_summary_dashboard.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/org_summary.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/org_summary.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,6 +42,9 @@
     &quot;accountId&quot;: &quot;6340eb0e-6dbb-4db5-b68d-2c847cb5f7a3&quot;
   }
 }</component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 7
 }</component>
@@ -49,26 +53,29 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.create_statistics.executor&quot;: &quot;Run&quot;,
-    &quot;Python.delivery_unit.executor&quot;: &quot;Run&quot;,
-    &quot;Python.extract_gps_pts.executor&quot;: &quot;Run&quot;,
-    &quot;Python.flw_summary_dashboard.executor&quot;: &quot;Run&quot;,
-    &quot;Python.opportunity_comparison_statistics_sr.executor&quot;: &quot;Run&quot;,
-    &quot;Python.org_summary.executor&quot;: &quot;Run&quot;,
-    &quot;Python.report_generator_gui.executor&quot;: &quot;Run&quot;,
-    &quot;Python.run_coverage.executor&quot;: &quot;Run&quot;,
-    &quot;Python.run_flw_dashboard.executor&quot;: &quot;Run&quot;,
-    &quot;Python.run_report_generator.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;ayogi__fixing__average__issue&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/sathy/Quick_Coverage&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.create_statistics.executor": "Run",
+    "Python.delivery_unit.executor": "Run",
+    "Python.extract_gps_pts.executor": "Run",
+    "Python.flw_summary_dashboard.executor": "Run",
+    "Python.opportunity_comparison_statistics_sr.executor": "Run",
+    "Python.org_summary.executor": "Run",
+    "Python.report_generator_gui.executor": "Run",
+    "Python.run_coverage.executor": "Run",
+    "Python.run_flw_dashboard.executor": "Run",
+    "Python.run_report_generator.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "ayogi__automating__coverage",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/Ashish/Desktop/CCC/Coverage",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "ml.llm.LLMConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\sathy\Coverage\src" />
@@ -77,7 +84,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-5b207ade9991-746f403e7f0c-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-241.17890.14" />
+        <option value="bundled-python-sdk-4c141bd692a7-e2d783800521-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-251.26927.90" />
       </set>
     </attachedChunks>
   </component>
@@ -89,8 +96,12 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1748970290058</updated>
+      <workItem from="1754144929458" duration="264000" />
     </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="UnknownFeatures">
     <option featureType="com.intellij.fileTypeFactory" implementationName=".env" />

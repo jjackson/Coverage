@@ -245,39 +245,67 @@ def calculate_score(df):
     
     def score_row(row):
         score = 0
+        rules_applied = 0
         
-        # Rule 1 : If days_since_active is less than 7 or non existing , score increases by 10
-        if pd.isna(row.get('days_since_active')) or row['days_since_active'] < 7:
-            score += 10
+        # Rule 1 : If days_since_active is less than 7, score increases by 10
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('days_since_active')):
+            if row['days_since_active'] < 7:
+                score += 10
+            rules_applied += 1
         
-        # Rule 2 : avrg_forms_per_day_mavrg is greater than 10 or non existing, increase the score by 10
-        if pd.isna(row.get('avrg_forms_per_day_mavrg')) or row['avrg_forms_per_day_mavrg'] > 10:
-            score += 10
+        # Rule 2 : avrg_forms_per_day_mavrg is greater than 10, increase the score by 10
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('avrg_forms_per_day_mavrg')):
+            if row['avrg_forms_per_day_mavrg'] > 10:
+                score += 10
+            rules_applied += 1
         
-        # Rule 3 : dus_per_day_mavrg is more than 1 or empty, increase the score by 10
-
-        if pd.isna(row.get('dus_per_day_mavrg')) or row['dus_per_day_mavrg'] > 1:
-            score += 10
+        # Rule 3 : dus_per_day_mavrg is more than 1, increase the score by 10
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('dus_per_day_mavrg')):
+            if row['dus_per_day_mavrg'] > 1:
+                score += 10
+            rules_applied += 1
         
-        # Rule 4 : - avg_duration_minutes is more than 3 or non existing, increase score by 10
-        if pd.isna(row.get('avg_duration_minutes')) or row['avg_duration_minutes'] > 3:
-            score += 10
+        # Rule 4 : avg_duration_minutes is more than 3, increase score by 10
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('avg_duration_minutes')):
+            if row['avg_duration_minutes'] > 3:
+                score += 10
+            rules_applied += 1
         
-        # Rule 5 : female_child_ratio_result is not equal to 'strong_negative' , increase the score by 15
-        if row.get('female_child_ratio_result') != 'strong_negative':
-            score += 15
+        # Rule 5 : female_child_ratio_result is not equal to 'strong_negative', increase the score by 15
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('female_child_ratio_result')) and row.get('female_child_ratio_result') != '':
+            if row.get('female_child_ratio_result') != 'strong_negative':
+                score += 15
+            rules_applied += 1
         
         # Rule 6 : red_muac_percentage_result is not equal to 'strong_negative', increase the score by 15
-        if row.get('red_muac_percentage_result') != 'strong_negative':
-            score += 15
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('red_muac_percentage_result')) and row.get('red_muac_percentage_result') != '':
+            if row.get('red_muac_percentage_result') != 'strong_negative':
+                score += 15
+            rules_applied += 1
         
-        # Rule 7 : under_12_months_percentage_result is not equal to 'strong_negative' , increase the score by 15
-        if row.get('under_12_months_percentage_result') != 'strong_negative':
-            score += 15
+        # Rule 7 : under_12_months_percentage_result is not equal to 'strong_negative', increase the score by 15
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('under_12_months_percentage_result')) and row.get('under_12_months_percentage_result') != '':
+            if row.get('under_12_months_percentage_result') != 'strong_negative':
+                score += 15
+            rules_applied += 1
         
-        # Rule 8 : camping  column is less than 10 , increase the score by 15
-        if pd.isna(row.get('camping')) or row['camping'] == '' or row['camping'] != 'Camping +' or row['camping'] != 'Camping ++':
-            score += 15
+        # Rule 8 : camping column is not 'Camping +' or 'Camping ++', increase the score by 15
+        # Only apply if the field is not empty/null
+        if not pd.isna(row.get('camping')) and row.get('camping') != '':
+            if row.get('camping') != 'Camping +' and row.get('camping') != 'Camping ++':
+                score += 15
+            rules_applied += 1
+        
+        # If no rules were applied (all fields were empty), return None to indicate no score
+        if rules_applied == 0:
+            return None
         
         return score
     
@@ -316,7 +344,7 @@ def dus_tobe_watched_summary(df):
     filtered_df.loc[mask, 'individual_dus_tobe_watched'] = (
         filtered_df.loc[mask, 'last_modified'].dt.strftime('%d-%m-%Y') + " : " +
         filtered_df.loc[mask, 'case_name'] + " : " +
-        filtered_df.loc[mask, 'ratio'].astype(int).astype(str)
+        filtered_df['delivery_count'].astype(str) + "/" + filtered_df['buildings'].astype(str)
     )
 
     # d) Group by 'cchq_user_id' and concatenate

@@ -37,32 +37,36 @@ app.index_string = '''
                 white-space: normal !important;
                 word-wrap: break-word !important;
                 overflow-wrap: break-word !important;
-                line-height: 1.3 !important;
-                padding: 6px !important;
+                line-height: 1.2 !important;
+                padding: 4px 6px !important;
                 text-align: center !important;
                 display: block !important;
                 width: 100% !important;
+                font-size: 12px !important;
+                font-weight: 500 !important;
             }
             
             .ag-header-cell-wrap {
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 padding: 4px !important;
+                overflow: hidden !important;
             }
             
             .ag-header-cell-label {
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
                 width: 100% !important;
                 padding: 4px !important;
+                overflow: hidden !important;
             }
             
             /* Auto-size columns based on content */
@@ -70,7 +74,7 @@ app.index_string = '''
                 min-width: 120px !important;
                 max-width: none !important;
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
             }
             
@@ -90,22 +94,36 @@ app.index_string = '''
             /* Header row auto-height */
             .ag-header-row {
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
             }
             
             /* Ensure header container allows auto-height */
             .ag-header-container {
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
             }
             
             /* Header group auto-height */
             .ag-header-group-cell {
                 height: auto !important;
-                min-height: 50px !important;
+                min-height: 60px !important;
                 max-height: none !important;
+            }
+            
+            /* Ensure individual header cells respect their height settings */
+            .ag-header-cell {
+                height: auto !important;
+                min-height: 60px !important;
+                max-height: none !important;
+                overflow: hidden !important;
+            }
+            
+            /* Set minimum height for the main header container */
+            .ag-header.ag-pivot-off.ag-header-allow-overflow {
+                min-height: 80px !important;
+                height: auto !important;
             }
         </style>
     </head>
@@ -443,22 +461,65 @@ for i, col in enumerate(reordered_columns):
             "cell-red-bg": "x == 0 || (typeof x === 'number' && x >= 100)"
         }
     
-    # Set width for numeric columns
-    if pd.api.types.is_numeric_dtype(opp_level_final_df[col]):
+    # Set fixed width for all columns based on content type
+    if str(col).startswith('pct_'):
+        # Percentage columns - wider for readability
+        col_def["width"] = 150
+        col_def["minWidth"] = 150
+        col_def["maxWidth"] = 150
+    elif col in ['domain', 'start_date', 'end_date']:
+        # Domain and date columns - medium width
+        col_def["width"] = 120
         col_def["minWidth"] = 120
-        col_def["maxWidth"] = 300
-        col_def["suppressSizeToFit"] = False
+        col_def["maxWidth"] = 120
+    elif col in ['visit_target', 'building_target', 'du_target']:
+        # Target columns - medium width
+        col_def["width"] = 110
+        col_def["minWidth"] = 110
+        col_def["maxWidth"] = 110
+    elif col in ['unique_user_id', 'visits_completed', 'buildings_completed', 'du_completed']:
+        # Count columns - medium width
+        col_def["width"] = 130
+        col_def["minWidth"] = 130
+        col_def["maxWidth"] = 130
+    elif col in ['visits_completed_last_week', 'buildings_completed_last_week', 'du_completed_last_week']:
+        # Last week count columns - wider for longer names
+        col_def["width"] = 160
+        col_def["minWidth"] = 160
+        col_def["maxWidth"] = 160
     else:
-        # For text columns, set minimum width to accommodate full text
-        col_def["minWidth"] = 120
-        col_def["maxWidth"] = 400
-        col_def["autoHeight"] = True
-        col_def["wrapText"] = True
-        col_def["suppressSizeToFit"] = False
+        # Default width for other columns
+        col_def["width"] = 140
+        col_def["minWidth"] = 140
+        col_def["maxWidth"] = 140
+    
+    col_def["suppressSizeToFit"] = True
+    col_def["resizable"] = False
+    
+    # Set dynamic header height based on column name length
+    column_display_name = get_column_display_name(col)
+    name_length = len(column_display_name)
+    
+    # More granular height adjustment based on actual text length
+    if name_length <= 10:
+        col_def["headerHeight"] = 60
+    elif name_length <= 15:
+        col_def["headerHeight"] = 70
+    elif name_length <= 20:
+        col_def["headerHeight"] = 80
+    elif name_length <= 25:
+        col_def["headerHeight"] = 90
+    elif name_length <= 30:
+        col_def["headerHeight"] = 100
+    elif name_length <= 35:
+        col_def["headerHeight"] = 110
+    elif name_length <= 40:
+        col_def["headerHeight"] = 120
+    else:
+        col_def["headerHeight"] = 130
     
     # Enable header text wrapping for all columns
     col_def["headerClass"] = "ag-header-cell-wrap"
-    col_def["headerHeight"] = "auto"
     col_def["headerComponentParams"] = {
         "template": '<div class="ag-cell-label-container" role="presentation">' +
                    '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -486,12 +547,10 @@ opp_level_table = AgGrid(
                      "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                      "suppressColumnVirtualisation": True,
                      "autoGroupColumnDef": {"minWidth": 200},
-                     "autoSizeColumns": True,
-                     "autoSizePadding": 10,
+                     "autoSizeColumns": False,
                      "suppressRowVirtualisation": True,
-                     "suppressSizeToFit": False,
-                     "sizeColumnsToFit": True,
-                     "headerHeight": "auto",
+                     "suppressSizeToFit": True,
+                     "sizeColumnsToFit": False,
                      "suppressRowHoverHighlight": False,
                      "rowHeight": 40},
     csvExportParams={
@@ -675,21 +734,65 @@ def update_charts(selected_domain, selected_wards):
                 "cell-red-bg": "x == 0 || (typeof x === 'number' && x >= 100)"
             }
         
-        if pd.api.types.is_numeric_dtype(filtered_rows[col]):
+        # Set fixed width for all columns based on content type
+        if str(col).startswith('pct_'):
+            # Percentage columns - wider for readability
+            col_def["width"] = 150
+            col_def["minWidth"] = 150
+            col_def["maxWidth"] = 150
+        elif col in ['domain', 'ward']:
+            # Domain and ward columns - medium width
+            col_def["width"] = 120
             col_def["minWidth"] = 120
-            col_def["maxWidth"] = 300
-            col_def["suppressSizeToFit"] = False
+            col_def["maxWidth"] = 120
+        elif col in ['visit_target', 'building_target', 'du_target']:
+            # Target columns - medium width
+            col_def["width"] = 110
+            col_def["minWidth"] = 110
+            col_def["maxWidth"] = 110
+        elif col in ['unique_user_id', 'visits_completed', 'buildings_completed', 'du_completed']:
+            # Count columns - medium width
+            col_def["width"] = 130
+            col_def["minWidth"] = 130
+            col_def["maxWidth"] = 130
+        elif col in ['visits_completed_last_week', 'buildings_completed_last_week', 'du_completed_last_week']:
+            # Last week count columns - wider for longer names
+            col_def["width"] = 160
+            col_def["minWidth"] = 160
+            col_def["maxWidth"] = 160
         else:
-            # For text columns, set minimum width to accommodate full text
-            col_def["minWidth"] = 120
-            col_def["maxWidth"] = 400
-            col_def["autoHeight"] = True
-            col_def["wrapText"] = True
-            col_def["suppressSizeToFit"] = False
+            # Default width for other columns
+            col_def["width"] = 140
+            col_def["minWidth"] = 140
+            col_def["maxWidth"] = 140
+        
+        col_def["suppressSizeToFit"] = True
+        col_def["resizable"] = False
+        
+        # Set dynamic header height based on column name length
+        column_display_name = get_column_display_name(col)
+        name_length = len(column_display_name)
+        
+        # More granular height adjustment based on actual text length
+        if name_length <= 10:
+            col_def["headerHeight"] = 60
+        elif name_length <= 15:
+            col_def["headerHeight"] = 70
+        elif name_length <= 20:
+            col_def["headerHeight"] = 80
+        elif name_length <= 25:
+            col_def["headerHeight"] = 90
+        elif name_length <= 30:
+            col_def["headerHeight"] = 100
+        elif name_length <= 35:
+            col_def["headerHeight"] = 110
+        elif name_length <= 40:
+            col_def["headerHeight"] = 120
+        else:
+            col_def["headerHeight"] = 130
         
         # Enable header text wrapping for all columns
         col_def["headerClass"] = "ag-header-cell-wrap"
-        col_def["headerHeight"] = "auto"
         col_def["headerComponentParams"] = {
             "template": '<div class="ag-cell-label-container" role="presentation">' +
                        '<span ref="eMenu" class="ag-header-icon ag-header-cell-menu-button"></span>' +
@@ -714,12 +817,10 @@ def update_charts(selected_domain, selected_wards):
                          "menuTabs": ["generalMenuTab", "columnsMenuTab", "filterMenuTab", "exportMenuTab"],
                          "suppressColumnVirtualisation": True,
                          "autoGroupColumnDef": {"minWidth": 200},
-                         "autoSizeColumns": True,
-                         "autoSizePadding": 10,
+                         "autoSizeColumns": False,
                          "suppressRowVirtualisation": True,
-                         "suppressSizeToFit": False,
-                         "sizeColumnsToFit": True,
-                         "headerHeight": "auto",
+                         "suppressSizeToFit": True,
+                         "sizeColumnsToFit": False,
                          "suppressRowHoverHighlight": False,
                          "rowHeight": 40},
         csvExportParams={

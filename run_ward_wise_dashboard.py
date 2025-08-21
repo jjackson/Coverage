@@ -397,7 +397,7 @@ def get_available_columns(dataframe):
 # available_ward_columns = get_available_columns(ward_level_final_df)
 
 # Prepare dropdown options
-domain_options = [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
+domain_options = [{'label': 'All Domains', 'value': 'all_domains'}] + [{'label': d, 'value': d} for d in ward_level_final_df['domain'].unique()]
 
 # Prepare columns for the opportunity-level table
 column_defs = []
@@ -522,7 +522,7 @@ app.layout = html.Div([
             dcc.Dropdown(
                 id='domain-dropdown',
                 options=domain_options,
-                value=domain_options[0]['value'] if domain_options else None
+                value='all_domains'  # Default to "All Domains"
             ),
         ], style={
             'boxShadow': '0 4px 16px rgba(0,0,0,0.15)',
@@ -576,9 +576,17 @@ app.layout = html.Div([
     Input('domain-dropdown', 'value')
 )
 def update_ward_dropdown(selected_domain):
-    wards = ward_level_final_df[ward_level_final_df['domain'] == selected_domain]['ward'].unique()
-    options = [{'label': w, 'value': w} for w in wards]
-    value = options[0]['value'] if options else None
+    if selected_domain == 'all_domains':
+        # If "All Domains" is selected, get all unique wards across all domains
+        all_wards = ward_level_final_df['ward'].unique()
+        options = [{'label': 'All Wards', 'value': 'all_wards'}] + [{'label': w, 'value': w} for w in all_wards]
+        value = 'all_wards'
+    else:
+        # If a specific domain is selected, get wards for that domain
+        wards = ward_level_final_df[ward_level_final_df['domain'] == selected_domain]['ward'].unique()
+        options = [{'label': 'All Wards', 'value': 'all_wards'}] + [{'label': w, 'value': w} for w in wards]
+        value = 'all_wards'
+    
     return options, value
 
 @app.callback(
@@ -595,10 +603,24 @@ def update_charts(selected_domain, selected_wards):
     if isinstance(selected_wards, str):
         selected_wards = [selected_wards]
 
-    filtered_rows = ward_level_final_df[
-        (ward_level_final_df['domain'] == selected_domain) &
-        (ward_level_final_df['ward'].isin(selected_wards))
-    ]
+    # Handle "All Domains" and "All Wards" selections
+    if selected_domain == 'all_domains':
+        if 'all_wards' in selected_wards:
+            # All domains and all wards
+            filtered_rows = ward_level_final_df.copy()
+        else:
+            # All domains, specific wards
+            filtered_rows = ward_level_final_df[ward_level_final_df['ward'].isin(selected_wards)]
+    else:
+        if 'all_wards' in selected_wards:
+            # Specific domain, all wards
+            filtered_rows = ward_level_final_df[ward_level_final_df['domain'] == selected_domain]
+        else:
+            # Specific domain, specific wards
+            filtered_rows = ward_level_final_df[
+                (ward_level_final_df['domain'] == selected_domain) &
+                (ward_level_final_df['ward'].isin(selected_wards))
+            ]
 
     if filtered_rows.empty:
         return html.Div("No data for this selection."), {'display': 'none'}
@@ -764,10 +786,23 @@ def update_charts(selected_domain, selected_wards):
     
     if not timeline_df.empty:
         # Filter timeline data for selected domain and wards
-        timeline_filtered = timeline_df[
-            (timeline_df['domain'] == selected_domain) &
-            (timeline_df['ward'].isin(selected_wards))
-        ]
+        if selected_domain == 'all_domains':
+            if 'all_wards' in selected_wards:
+                # All domains and all wards
+                timeline_filtered = timeline_df.copy()
+            else:
+                # All domains, specific wards
+                timeline_filtered = timeline_df[timeline_df['ward'].isin(selected_wards)]
+        else:
+            if 'all_wards' in selected_wards:
+                # Specific domain, all wards
+                timeline_filtered = timeline_df[timeline_df['domain'] == selected_domain]
+            else:
+                # Specific domain, specific wards
+                timeline_filtered = timeline_df[
+                    (timeline_df['domain'] == selected_domain) &
+                    (timeline_df['ward'].isin(selected_wards))
+                ]
         
         if not timeline_filtered.empty:
             # Sort by visit_date for proper line plotting
@@ -794,6 +829,14 @@ def update_charts(selected_domain, selected_wards):
                 )
             
             # Chart a) building_microplanning_completion_rate vs visit_date
+            # Determine which wards to plot
+            if 'all_wards' in selected_wards:
+                # If "All Wards" is selected, get unique wards from filtered data
+                wards_to_plot = timeline_filtered['ward'].unique()
+            else:
+                # Use selected wards, excluding 'all_wards'
+                wards_to_plot = [ward for ward in selected_wards if ward != 'all_wards']
+            
             building_rate_chart = dcc.Graph(
                 figure=go.Figure(
                     data=[
@@ -803,7 +846,7 @@ def update_charts(selected_domain, selected_wards):
                             mode='lines+markers',
                             name=f'{ward}',
                             line=dict(width=2)
-                        ) for ward in selected_wards
+                        ) for ward in wards_to_plot
                     ],
                     layout=go.Layout(
                         title="Building Microplanning Completion Rate Over Time",
@@ -832,7 +875,7 @@ def update_charts(selected_domain, selected_wards):
                             mode='lines+markers',
                             name=f'{ward}',
                             line=dict(width=2)
-                        ) for ward in selected_wards
+                        ) for ward in wards_to_plot
                     ],
                     layout=go.Layout(
                         title="DU Microplanning Completion Rate Over Time",
@@ -861,7 +904,7 @@ def update_charts(selected_domain, selected_wards):
                             mode='lines+markers',
                             name=f'{ward}',
                             line=dict(width=2)
-                        ) for ward in selected_wards
+                        ) for ward in wards_to_plot
                     ],
                     layout=go.Layout(
                         title="Building Microplanning Completion Rate (Last 7 Days) Over Time",
@@ -890,7 +933,7 @@ def update_charts(selected_domain, selected_wards):
                             mode='lines+markers',
                             name=f'{ward}',
                             line=dict(width=2)
-                        ) for ward in selected_wards
+                        ) for ward in wards_to_plot
                     ],
                     layout=go.Layout(
                         title="DU Microplanning Completion Rate (Last 7 Days) Over Time",
@@ -957,10 +1000,24 @@ def download_ward_csv(n_clicks, selected_domain, selected_wards):
     if isinstance(selected_wards, str):
         selected_wards = [selected_wards]
     
-    filtered_rows = ward_level_final_df[
-        (ward_level_final_df['domain'] == selected_domain) &
-        (ward_level_final_df['ward'].isin(selected_wards))
-    ]
+    # Handle "All Domains" and "All Wards" selections
+    if selected_domain == 'all_domains':
+        if 'all_wards' in selected_wards:
+            # All domains and all wards
+            filtered_rows = ward_level_final_df.copy()
+        else:
+            # All domains, specific wards
+            filtered_rows = ward_level_final_df[ward_level_final_df['ward'].isin(selected_wards)]
+    else:
+        if 'all_wards' in selected_wards:
+            # Specific domain, all wards
+            filtered_rows = ward_level_final_df[ward_level_final_df['domain'] == selected_domain]
+        else:
+            # Specific domain, specific wards
+            filtered_rows = ward_level_final_df[
+                (ward_level_final_df['domain'] == selected_domain) &
+                (ward_level_final_df['ward'].isin(selected_wards))
+            ]
     
     if filtered_rows.empty:
         return None
@@ -969,7 +1026,18 @@ def download_ward_csv(n_clicks, selected_domain, selected_wards):
     pct_cols = [col for col in filtered_rows.columns if str(col).startswith('pct_')]
     filtered_rows.loc[:, pct_cols] = filtered_rows[pct_cols].round(2)
     
-    filename = f"ward_level_data_{selected_domain}_{'_'.join(selected_wards)}.csv"
+    # Generate appropriate filename
+    if selected_domain == 'all_domains':
+        if 'all_wards' in selected_wards:
+            filename = "ward_level_data_all_domains_all_wards.csv"
+        else:
+            filename = f"ward_level_data_all_domains_specific_wards.csv"
+    else:
+        if 'all_wards' in selected_wards:
+            filename = f"ward_level_data_{selected_domain}_all_wards.csv"
+        else:
+            filename = f"ward_level_data_{selected_domain}_{'_'.join(selected_wards)}.csv"
+    
     return dcc.send_data_frame(filtered_rows.to_csv, filename, index=False)
 
 if __name__ == "__main__":

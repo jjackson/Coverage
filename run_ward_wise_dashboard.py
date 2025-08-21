@@ -403,30 +403,33 @@ domain_options = [{'label': 'All Domains', 'value': 'all_domains'}] + [{'label':
 # Prepare columns for the opportunity-level table
 column_defs = []
 
-# Get all columns and identify percentage columns and date columns
+# Define the specific column order for Opportunity Level Summary table
+opp_column_order = [
+    'domain', 'visit_target', 'building_target', 'du_target', 'start_date', 'end_date',
+    'pct_completion', 'pct_building_microplanning_completion_rate', 
+    'pct_building_microplanning_completion_rate_last_week', 'pct_du_microplanning_completion_rate',
+    'pct_du_microplanning_completion_rate_last_week', 'unique_user_id', 'visits_completed',
+    'visits_completed_last_week', 'pct_visits_completed', 'pct_visits_completed_last_week',
+    'buildings_completed', 'buildings_completed_last_week', 'pct_buildings_completed',
+    'pct_buildings_completed_last_week', 'du_completed', 'du_completed_last_week',
+    'pct_du_completed', 'pct_du_completed_last_week'
+]
+
+# Get all columns from the dataframe
 all_columns = list(opp_level_final_df.columns)
-pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
-date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
-other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
 
-# Reorder columns: put date columns just before percentage columns
-reordered_columns = []
-for col in other_columns:
-    reordered_columns.append(col)
+# Filter columns to only include those that exist in the dataframe
+reordered_columns = [col for col in opp_column_order if col in all_columns]
 
-# Add date columns just before percentage columns
-for date_col in date_columns:
-    reordered_columns.append(date_col)
-
-# Add percentage columns at the end
-for pct_col in pct_columns:
-    reordered_columns.append(pct_col)
+# Add any remaining columns that weren't in the specified order
+remaining_columns = [col for col in all_columns if col not in opp_column_order]
+reordered_columns.extend(remaining_columns)
 
 # Create column definitions with the reordered columns
 for i, col in enumerate(reordered_columns):
     col_def = {"headerName": get_column_display_name(col), "field": col}
-    if i < 4:
-        col_def["pinned"] = "left"  # Freeze the first four columns
+    if i < 6:
+        col_def["pinned"] = "left"  # Freeze the first six columns (domain, targets, dates)
     
     # Different highlighting rules based on column type
     if str(col).startswith('pct_'):
@@ -633,30 +636,32 @@ def update_charts(selected_domain, selected_wards):
     # Prepare AgGrid column definitions, freeze first 5 columns and set width for numeric columns
     column_defs = []
     
-    # Get all columns and identify percentage columns and date columns
+    # Define the specific column order for Ward Status Dashboard table
+    ward_column_order = [
+        'domain', 'ward', 'visit_target', 'building_target', 'du_target',
+        'pct_building_microplanning_completion_rate', 'pct_building_microplanning_completion_rate_last_week',
+        'pct_du_microplanning_completion_rate', 'pct_du_microplanning_completion_rate_last_week',
+        'unique_user_id', 'visits_completed', 'visits_completed_last_week', 'pct_visits_completed',
+        'pct_visits_completed_last_week', 'buildings_completed', 'buildings_completed_last_week',
+        'pct_buildings_completed', 'pct_buildings_completed_last_week', 'du_completed',
+        'du_completed_last_week', 'pct_du_completed', 'pct_du_completed_last_week'
+    ]
+    
+    # Get all columns from the filtered dataframe
     all_columns = list(filtered_rows.columns)
-    pct_columns = [col for col in all_columns if str(col).startswith('pct_completion')]
-    date_columns = [col for col in all_columns if col in ['start_date', 'end_date']]
-    other_columns = [col for col in all_columns if not str(col).startswith('pct_completion') and col not in ['start_date', 'end_date']]
     
-    # Reorder columns: put date columns just before percentage columns
-    reordered_columns = []
-    for col in other_columns:
-        reordered_columns.append(col)
+    # Filter columns to only include those that exist in the dataframe
+    reordered_columns = [col for col in ward_column_order if col in all_columns]
     
-    # Add date columns just before percentage columns
-    for date_col in date_columns:
-        reordered_columns.append(date_col)
-    
-    # Add percentage columns at the end
-    for pct_col in pct_columns:
-        reordered_columns.append(pct_col)
+    # Add any remaining columns that weren't in the specified order
+    remaining_columns = [col for col in all_columns if col not in ward_column_order]
+    reordered_columns.extend(remaining_columns)
     
     # Create column definitions with the reordered columns
     for i, col in enumerate(reordered_columns):
         col_def = {"headerName": get_column_display_name(col), "field": col}
         if i < 5:
-            col_def["pinned"] = "left"
+            col_def["pinned"] = "left"  # Freeze the first five columns (domain, ward, targets)
         
         # Different highlighting rules based on column type
         if str(col).startswith('pct_'):

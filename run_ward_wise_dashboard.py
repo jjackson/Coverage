@@ -272,6 +272,7 @@ def get_column_display_name(column_name):
         'flw_experience_years': 'Experience (Years)',
         'flw_training_completed': 'Training Completed',
         'flw_availability': 'Availability Status',
+        'unique_user_id': 'Number of Workers',
         
         # Delivery unit specific columns
         'du_name': 'Delivery Unit Name',

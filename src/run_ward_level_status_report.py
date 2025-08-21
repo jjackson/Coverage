@@ -106,6 +106,7 @@ def init_microplanning_ward_level_data_frame():
     df['du_completed_last_week'] = 0
     df['pct_du_completed'] = 0.0
     df['pct_du_completed_last_week'] = 0.0
+    df['unique_user_id'] = 0
 
     # Display the DataFrame
     return df
@@ -145,6 +146,7 @@ def init_microplannin_opp_level_data_frame():
     df['du_completed_last_week'] = 0
     df['pct_du_completed'] = 0.0
     df['pct_du_completed_last_week'] = 0.0
+    df['unique_user_id'] = 0
 
     # Display the DataFrame
     return df
@@ -191,6 +193,7 @@ def main():
     visit_data_df.rename(columns={'du_case_id': 'case_id'}, inplace=True)
     visit_data_df.rename(columns={'time_end': 'visit_date'}, inplace=True)
     visit_data_df.rename(columns={'name': 'domain'}, inplace=True)
+    visit_data_df.rename(columns={'user_id': 'user_id'}, inplace=True)
 
     # Convert visit_date to datetime
     visit_data_df['visit_date'] = pd.to_datetime(visit_data_df['visit_date'],format='mixed', utc=True, errors='coerce')
@@ -251,6 +254,10 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
             final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df['visit_date'] >= seven_days_ago)].shape[0]
             final_df.loc[(final_df['domain'] == domain), 'pct_visits_completed'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
             final_df.loc[(final_df['domain'] == domain), 'pct_visits_completed_last_week'] = 100*final_df.loc[(final_df['domain'] == domain) , 'visits_completed_last_week'] / final_df.loc[(final_df['domain'] == domain) , 'visit_target']
+            
+            #logic to find number of unique user_id
+            unique_user_id = visit_data_df[ (visit_data_df['domain'] == domain)].groupby('user_id').nunique().reset_index()
+            final_df.loc[(final_df['domain'] == domain) , 'unique_user_id'] = unique_user_id.shape[0]
             
             #du related overall data
             final_df.loc[(final_df['domain'] == domain) , 'du_completed'] = domain_df[ (domain_df['du_status'] == 'completed')].shape[0]
@@ -366,8 +373,15 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
                     today_utc = datetime.now(pytz.UTC)
                     seven_days_ago = (today_utc - timedelta(days=7)).date()
 
+                    
+
                     visit_data_df_ward = pd.merge(visit_data_df, domain_df, on="case_id",how="left")
                     visit_data_df_ward['visit_date'] = pd.to_datetime(visit_data_df_ward['visit_date'], utc=True)
+
+                    #logic to find number of unique user_id
+                    unique_user_id = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df_ward[ward_column] == ward)].groupby('user_id').nunique().reset_index()
+                    final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'unique_user_id'] = unique_user_id.shape[0]
+
                     #visit related data
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df_ward[ward_column] == ward)].shape[0]
                     final_df.loc[(final_df['domain'] == domain) & (final_df['ward'] == ward) , 'visits_completed_last_week'] = visit_data_df[ (visit_data_df['domain'] == domain) & (visit_data_df_ward[ward_column] == ward) & (visit_data_df['visit_date']>= seven_days_ago)].shape[0]

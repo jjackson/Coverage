@@ -154,7 +154,8 @@ ORDER BY opportunity_name, flw_name;"""
 
 "opp_user_visit_du_case_id_mapping" : """SELECT oo.name,
 uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' AS du_case_id,
-(uv.form_json -> 'form' -> 'meta' ->> 'timeEnd')::timestamp AS time_end
+(uv.form_json -> 'form' -> 'meta' ->> 'timeEnd')::timestamp AS time_end,
+uv.form_json -> 'metadata' ->>'userID' AS user_id
 FROM opportunity_uservisit uv
 LEFT JOIN opportunity_opportunity oo 
     ON oo.id = uv.opportunity_id

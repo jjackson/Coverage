@@ -45,7 +45,7 @@ def create_statistics_report(coverage_data=None):
     
     # Write the HTML to a file
     output_filename = "coverage_statistics.html"
-    with open(output_filename, "w") as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
     print(f"Statistics report has been created: {output_filename}")

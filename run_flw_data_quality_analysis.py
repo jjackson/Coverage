@@ -237,7 +237,7 @@ def main():
 
 
     print("The Final output will be downloaded into your Downloads folder with name report_flw_data_quality_analysis.xlsx...")
-    output_as_excel_in_downloads(ultimate_df, "report_flw_data_quality_analysis")
+    output_as_excel_in_downloads(ultimate_df, "Weekly Analysis Report")
 
 
 def calculate_score(df):

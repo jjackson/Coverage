@@ -260,6 +260,15 @@
           "du_target": 965
         }
       }
+    },
+    "ccc-chc-ppfnnew": {
+      "wards": {
+        "wards_To_be_added": {
+          "visit_target": 30000,
+          "building_target": 40000,
+          "du_target": 5000
+        }
+      }
     }
   }
 }

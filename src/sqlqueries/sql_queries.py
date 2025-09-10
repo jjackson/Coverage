@@ -19,7 +19,7 @@ SQL_QUERIES = {
         "FROM public.opportunity_uservisit "
         "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
         "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603);"
+        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722);"
     ),
 
     "services_only_sql": (
@@ -162,6 +162,6 @@ LEFT JOIN opportunity_opportunity oo
 WHERE 
   oo.name like '%Scale Up%'
   AND  oo.is_test = 'false'
-  AND oo.id IN (516,517,531,539,566,575,601,603)
+  AND oo.id IN (516,517,531,539,566,575,601,603,722)
   AND uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' != '';"""
 }

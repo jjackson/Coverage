@@ -60,5 +60,13 @@
           "building_target": 31124,
           "du_target": 7075
     }
+    ,
+    "ccc-chc-ppfnnew": {
+      "start_date":"2025-09-10",
+      "end_date" : "2025-10-31",
+       "visit_target": 30000,
+          "building_target": 40000,
+          "du_target": 5000
+    }
   }
 }

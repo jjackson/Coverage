@@ -239,8 +239,11 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
                 service_df = service_df
             else:
                 service_df = pd.DataFrame(service_df)
-            domain_df = service_df.copy()
-            domain_df_last_week = service_df.copy()
+            
+            filtered_service_df = service_df.loc[service_df['closed'].astype(str).str.contains('false', case=False, na=False)]
+            
+            domain_df = filtered_service_df.copy()
+            domain_df_last_week = filtered_service_df.copy()
             # Filter the DataFrame for the current domain
             domain_df_last_week['last_modified'] = pd.to_datetime(domain_df_last_week['last_modified'], utc=True)
 
@@ -357,8 +360,9 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
             else:
                 service_df = pd.DataFrame(service_df)
             #output_as_excel_in_downloads(service_df, "domain_"+ domain+"_pickel_data")
-            domain_df = service_df.copy()
-            domain_df_last_week = service_df.copy()
+            filtered_service_df = service_df.loc[service_df['closed'].astype(str).str.contains('false', case=False, na=False)]
+            domain_df = filtered_service_df.copy()
+            domain_df_last_week = filtered_service_df.copy()
             # Filter the DataFrame for the current domain
             domain_df_last_week['last_modified'] = pd.to_datetime(domain_df_last_week['last_modified'], utc=True)
             
@@ -502,7 +506,7 @@ def generate_timeline_based_status_report(valid_opportunities, visit_data_df, wa
         # Convert coverage data to DataFrame if not already
         if not isinstance(service_df, pd.DataFrame):
             service_df = pd.DataFrame(service_df)
-        
+        filtered_service_df = service_df.loc[service_df['closed'].astype(str).str.contains('false', case=False, na=False)]
         # Get ward column name for this domain
         ward_column = find_ward_column_name(domain)
         if ward_column == "":
@@ -513,7 +517,7 @@ def generate_timeline_based_status_report(valid_opportunities, visit_data_df, wa
         domain_visit_data = visit_data_df[visit_data_df['domain'] == domain].copy()
         
         # Merge visit data with service data to get building and DU information
-        domain_visit_data = pd.merge(domain_visit_data, service_df, on="case_id", how="left")
+        domain_visit_data = pd.merge(domain_visit_data, filtered_service_df, on="case_id", how="left")
         
         # Get unique visit dates for this domain
         unique_visit_dates = sorted(domain_visit_data['visit_date'].unique())

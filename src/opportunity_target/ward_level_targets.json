@@ -263,10 +263,25 @@
     },
     "ccc-chc-ppfnnew": {
       "wards": {
-        "wards_To_be_added": {
-          "visit_target": 30000,
-          "building_target": 40000,
-          "du_target": 5000
+        "Ashaka/Magaba": {
+          "visit_target": 7762,
+          "building_target": 6853,
+          "du_target": 1317
+        },
+        "Bajoga East": {
+          "visit_target": 9691,
+          "building_target": 5144,
+          "du_target": 956
+        },
+        "Bajoga West": {
+          "visit_target": 8945,
+          "building_target": 9828,
+          "du_target": 1505
+        },
+        "Ribadu": {
+          "visit_target": 7255,
+          "building_target": 4647,
+          "du_target": 563
         }
       }
     }

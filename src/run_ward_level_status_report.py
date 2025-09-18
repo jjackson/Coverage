@@ -169,6 +169,8 @@ def find_ward_column_name(domain):
             return "ward_name"
         case 'ccc-chc-cowacdi-2024-25':
             return "ward_name"
+        case 'ccc-chc-ppfnnew':
+            return "ward_name"
         case _:
             return ""
 

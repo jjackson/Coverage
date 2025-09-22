@@ -27,8 +27,8 @@
       "start_date":"2025-06-17",
       "end_date" : "2025-10-31",
        "visit_target": 25000,
-          "building_target": 35205,
-          "du_target": 9670
+          "building_target": 32484,
+          "du_target": 6949
     },
     "ccc-chc-jhf-2024-25": {
       "start_date":"2025-06-19",
@@ -41,32 +41,31 @@
       "start_date":"2025-06-19",
       "end_date" : "2025-10-31",
        "visit_target": 40000,
-          "building_target": 44939,
-          "du_target": 8565
+          "building_target": 46507,
+          "du_target": 8431
      
     },
     "ccc-chc-eha-c-2024-25": {
       "start_date":"2025-07-01",
       "end_date" : "2025-10-31",
        "visit_target": 40000,
-          "building_target": 36119,
-          "du_target": 9889
+          "building_target": 32854,
+          "du_target": 6624
      
     },
     "ccc-chc-isodaf-2024-25": {
       "start_date":"2025-07-03",
       "end_date" : "2025-10-31",
        "visit_target": 30000,
-          "building_target": 31124,
-          "du_target": 7075
-    }
-    ,
+          "building_target": 28663,
+          "du_target": 4614
+    },
     "ccc-chc-ppfnnew": {
       "start_date":"2025-09-08",
       "end_date" : "2025-10-31",
        "visit_target": 40000,
-          "building_target": 26472,
-          "du_target": 4341
+          "building_target": 26658,
+          "du_target": 4393
     }
   }
 }

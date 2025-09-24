@@ -139,25 +139,31 @@ app.index_string = '''
 '''
 
 
-# Load dataframes from Excel in Downloads
-downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-ward_level_excel_path = os.path.join(downloads_dir, "ward_level_status_report.xlsx")  # Change filename if needed
-if not os.path.exists(ward_level_excel_path):
-    raise FileNotFoundError(f"Excel file not found at {ward_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
-ward_level_final_df = pd.read_excel(ward_level_excel_path)
+# Load dataframes from pickle files in data folder
+import pickle
+project_root = os.path.abspath(os.path.dirname(__file__))
+data_path = os.path.join(project_root, 'data')
 
-opp_level_excel_path = os.path.join(downloads_dir, "opp_level_status_report.xlsx")  # Change filename if needed
-if not os.path.exists(opp_level_excel_path):
-    raise FileNotFoundError(f"Excel file not found at {opp_level_excel_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
-opp_level_final_df = pd.read_excel(opp_level_excel_path)
+ward_level_pickle_path = os.path.join(data_path, "ward_level_status_report.pkl")
+if not os.path.exists(ward_level_pickle_path):
+    raise FileNotFoundError(f"Pickle file not found at {ward_level_pickle_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
+with open(ward_level_pickle_path, 'rb') as f:
+    ward_level_final_df = pickle.load(f)
+
+opp_level_pickle_path = os.path.join(data_path, "opp_level_status_report.pkl")
+if not os.path.exists(opp_level_pickle_path):
+    raise FileNotFoundError(f"Pickle file not found at {opp_level_pickle_path}. Run 'python run_ward_level_status_report.py' from src folder to generate it.")
+with open(opp_level_pickle_path, 'rb') as f:
+    opp_level_final_df = pickle.load(f)
 
 # Load timeline data
-timeline_excel_path = os.path.join(downloads_dir, "timeline_based_status_report.xlsx")
-if not os.path.exists(timeline_excel_path):
-    print(f"Warning: Timeline Excel file not found at {timeline_excel_path}. Line charts will not be available.")
+timeline_pickle_path = os.path.join(data_path, "timeline_based_status_report.pkl")
+if not os.path.exists(timeline_pickle_path):
+    print(f"Warning: Timeline pickle file not found at {timeline_pickle_path}. Line charts will not be available.")
     timeline_df = pd.DataFrame()
 else:
-    timeline_df = pd.read_excel(timeline_excel_path)
+    with open(timeline_pickle_path, 'rb') as f:
+        timeline_df = pickle.load(f)
     # Convert visit_date to datetime for proper plotting
     timeline_df['visit_date'] = pd.to_datetime(timeline_df['visit_date'])
 

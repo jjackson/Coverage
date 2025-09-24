@@ -63,10 +63,30 @@ def load_opportunity_domain_mapping() -> Dict[str, str]:
 
 def output_as_excel_in_downloads(df, file_name):
     if(df is not None and not df.empty):
-        output_path = os.path.join(DOWNLOADS_DIR, file_name +".xlsx")
+        # Generate timestamp in DD-MM-YYYY_HH-MM-SS format
+        current_time = datetime.now()
+        timestamp = current_time.strftime("%d-%m-%Y_%H-%M-%S")
+        
+        # Create filename with timestamp
+        timestamped_filename = f"{file_name}_{timestamp}"
+        
+        # Save Excel file to Downloads folder
+        output_path = os.path.join(DOWNLOADS_DIR, timestamped_filename +".xlsx")
         with pd.ExcelWriter(output_path) as writer:
             df.to_excel(writer, sheet_name="Merged", index=False)
         print(f"Generated file: {output_path}")
+        
+        # Save pickle file to data folder
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        data_path = os.path.join(project_root, 'data')
+        pickle_path = os.path.join(data_path, file_name + ".pkl")
+        
+        # Ensure data directory exists
+        os.makedirs(data_path, exist_ok=True)
+        
+        with open(pickle_path, 'wb') as f:
+            pickle.dump(df, f)
+        print(f"Generated pickle file: {pickle_path}")
     else : 
         print("DF is either empty or Null")
 
@@ -293,7 +313,7 @@ def generate_opp_level_status_report(valid_opportunities,visit_data_df,final_df)
 
             # Step 4: Merge with domain_df to get du_status and building
             merged = pd.merge(recent_visits, domain_df, on='case_id', how='inner')
-            #output_as_excel_in_downloads(merged, "merged")
+            
 
             # Step 5: Filter for du_status == 'completed'
             complete_cases = merged[merged['du_status'] == 'completed']
@@ -361,7 +381,7 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
                 service_df = service_df
             else:
                 service_df = pd.DataFrame(service_df)
-            #output_as_excel_in_downloads(service_df, "domain_"+ domain+"_pickel_data")
+            
             filtered_service_df = service_df.loc[service_df['closed'].astype(str).str.contains('false', case=False, na=False)]
             domain_df = filtered_service_df.copy()
             domain_df_last_week = filtered_service_df.copy()
@@ -423,7 +443,7 @@ def generate_ward_level_status_report(valid_opportunities,visit_data_df,final_df
 
                     # Step 4: Merge with domain_df to get du_status and building
                     merged = pd.merge(recent_visits, domain_df, on='case_id', how='inner')
-                    #output_as_excel_in_downloads(merged, "merged")
+                    
 
                     # Step 5: Filter for du_status == 'completed'
                     complete_cases = merged[(merged['du_status'] == 'completed') & (merged[ward_column] == ward)]

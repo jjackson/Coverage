@@ -20,6 +20,9 @@ from geopy.distance import geodesic
 import networkx as nx
 from scipy.spatial.distance import pdist, squareform
 
+# Add this import
+import constants
+
 # Handle imports based on how the module is used
 try:
     # When imported as a module
@@ -42,7 +45,7 @@ def create_statistics_report(coverage_data=None):
     
     # Write the HTML to a file
     output_filename = "coverage_statistics.html"
-    with open(output_filename, "w") as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
     print(f"Statistics report has been created: {output_filename}")
@@ -93,7 +96,7 @@ def create_html_report(coverage_data):
     # Apply FLW name mapping
     if 'flw_commcare_id' in du_table_data.columns:
         du_table_data['flw_name'] = du_table_data['flw_commcare_id'].apply(
-            lambda id: coverage_data.flw_commcare_id_to_name_map.get(id, id)  # Use the ID itself if no name mapping exists
+            lambda id: coverage_data.get_flw_name_by_id(id)
         )
     
     # Add Delivery Count / Buildings column if both columns exist
@@ -122,6 +125,14 @@ def create_html_report(coverage_data):
             else None, 
             axis=1
         )
+        
+        # Add Delivery/Building Ratio column (same calculation but with different name for clarity)
+        du_table_data['Delivery/Building Ratio'] = du_table_data.apply(
+            lambda row: round(float(row[delivery_count_col]) / float(row[buildings_col]), 2) 
+            if pd.notnull(row[delivery_count_col]) and pd.notnull(row[buildings_col]) and float(row[buildings_col]) > 0 
+            else None, 
+            axis=1
+        )
     
     # Calculate days in DU and flag
     def calculate_days_in_du(row):
@@ -145,16 +156,58 @@ def create_html_report(coverage_data):
     # Add days_in_du column
     du_table_data['days_in_du'] = du_table_data.apply(calculate_days_in_du, axis=1)
     
-    # Add flag_days_in_du column
-    du_table_data['flag_days_in_du'] = du_table_data['days_in_du'].apply(
-        lambda x: True if pd.notnull(x) and x >= 7 else None
-    )
+    # Add flag_days_in_du column - REMOVED
+    # du_table_data['flag_days_in_du'] = du_table_data['days_in_du'].apply(
+    #     lambda x: True if pd.notnull(x) and x >= 7 else None
+    # )
     
     # Add flag_delivery_per_building column
     du_table_data['flag_delivery_per_building'] = du_table_data['Delivery Count / Buildings'].apply(
-        lambda x: True if pd.notnull(x) and x >= 10 else None
+        lambda x: True if pd.notnull(x) else None
     )
     
+    # --- (1) Add Camping column with user input threshold and delivery_count > 20 ---
+    # Default camping threshold
+    camping_default = constants.DEFAULT_CAMPING_THRESHOLD
+    # Add a Camping column (formerly flag_delivery_per_building)
+    du_table_data['Camping'] = du_table_data.apply(
+        lambda row: True if pd.notnull(row.get('Delivery Count / Buildings')) and pd.notnull(row.get(delivery_count_col))
+            and float(row.get('Delivery Count / Buildings')) >= camping_default and float(row.get(delivery_count_col)) > constants.DEFAULT_DELIVERY_COUNT_THRESHOLD else False,
+        axis=1
+    )
+
+    # --- (2) Add filter for Checked In Date (last 7 days) ---
+    today = pd.to_datetime('today').normalize()
+    du_table_data['checked_in_date_dt'] = pd.to_datetime(du_table_data['checked_in_date'], errors='coerce')
+    du_table_data['checked_in_last_7_days'] = du_table_data['checked_in_date_dt'].apply(
+        lambda d: (today - d).days <= 7 if pd.notnull(d) else False
+    )
+
+    # --- (3) Add filter for Camping=True ---
+    du_table_data['camping_true'] = du_table_data['Camping'] == True
+
+    # --- (4) Reduce table to only specified columns in order ---
+    reduced_columns = [
+        'flw_name',
+        buildings_col,
+        delivery_count_col,
+        'Delivery/Building Ratio',  # Add the new ratio column after Delivery Count
+        # 'flag_days_in_du',  # REMOVED - Flag Days in DU column
+        'checked_in_date',
+        'checked_out_date',
+        'du_name',
+        'du_status',
+        'du_checkout_remark',
+        'service_area_id',
+    ]
+    # Only keep columns that exist
+    reduced_columns = [col for col in reduced_columns if col in du_table_data.columns]
+    du_table_data = du_table_data[reduced_columns + ['Camping', 'checked_in_last_7_days', 'camping_true']]
+
+    # Remove 'Camping' from reduced_columns if present
+    if 'Camping' in reduced_columns:
+        reduced_columns.remove('Camping')
+
     # Define columns to exclude from the table
     columns_to_exclude = [
         'caseid', 'centroid', 'BoundingBox', 'Wkt', 'Delivery Target', 'Closed', 'Closed by username',
@@ -184,11 +237,11 @@ def create_html_report(coverage_data):
         'du_status',             # Delivery unit status
         'service_area_id',       # Service area ID
         'Delivery Count / Buildings',  # Ratio of delivery count to buildings
-        'flag_delivery_per_building',  # Flag for DUs with 10 or more deliveries per building
+        'Camping',  # Camping column (was flag_delivery_per_building)
         'checked_in_date',       # Checked in date
         'checked_out_date',       # Checked out date
-        'days_in_du',           # Number of days in delivery unit
-        'flag_days_in_du'       # Flag for DUs with 7 or more days
+        'days_in_du'           # Number of days in delivery unit
+        # 'flag_days_in_du'       # REMOVED - Flag for DUs with 7 or more days
     ]
     
     # Reorder columns based on preferred order
@@ -460,6 +513,40 @@ def create_html_report(coverage_data):
     html_content += f"""
             <section>
                 <h2>Delivery Units Data</h2>
+                                 <div id="delivery-units-table-filters" style="margin-bottom: 20px; border: 2px solid #ddd; border-radius: 8px; padding: 20px; background-color: #f9f9f9;">
+                     <h3 style="text-align: center; margin-top: 0; margin-bottom: 20px; color: #2c3e50; font-size: 18px;">Toggle Filters and Adjust Thresholds to filter the DU Table for suspected Camping</h3>
+                     
+                     <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                         <!-- Line 1: Camping threshold and Apply button -->
+                         <div style="display: flex; align-items: center; gap: 10px;">
+                             <label style="display: flex; align-items: center; gap: 5px;">
+                                 <span>Camping threshold:</span>
+                                 <input type="number" id="camping-threshold" value="12" min="1" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                             </label>
+                             <button id="apply-camping-filter" style="padding: 5px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply Camping Filter to DU Table</button>
+                         </div>
+                         
+                         <!-- Line 2: Minimum Delivery Count and toggle -->
+                         <div style="display: flex; align-items: center; gap: 10px;">
+                             <label style="display: flex; align-items: center; gap: 5px;">
+                                 <span>Minimum Delivery Count:</span>
+                                 <input type="number" id="min-delivery-count" value="20" min="1" style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">
+                             </label>
+                             <label style="display: flex; align-items: center; gap: 5px;">
+                                 <input type="checkbox" id="filter-camping">
+                                 <span>More than Minimum Visits Only</span>
+                             </label>
+                         </div>
+                         
+                         <!-- Line 3: Checked In Last 7 Days toggle -->
+                         <div style="display: flex; align-items: center; gap: 10px;">
+                             <label style="display: flex; align-items: center; gap: 5px;">
+                                 <input type="checkbox" id="filter-last7">
+                                 <span>Checked In Last 7 Days</span>
+                             </label>
+                         </div>
+                     </div>
+                 </div>
                 <div class="table-info">
                     Showing {len(du_table_data):,} delivery units with status other than None and empty strings. Use the search box to filter.
                 </div>
@@ -469,12 +556,22 @@ def create_html_report(coverage_data):
                             <tr>
     """
     
-    # Add table headers based on available columns
-    for col in du_columns:
-        # Format column header (replace underscores with spaces and capitalize)
-        header = col.replace('_', ' ').title()
-        html_content += f"<th>{header}</th>"
-    
+    # Add table headers (renaming as needed)
+    header_map = {
+        'flw_name': 'Flw Name',
+        buildings_col: 'Buildings',
+        delivery_count_col: 'Delivery Count',
+        'Delivery/Building Ratio': 'Delivery/Building Ratio',
+        # 'flag_days_in_du': 'Flag Days In Du',  # REMOVED
+        'checked_in_date': 'Checked In Date',
+        'checked_out_date': 'Checked Out Date',
+        'du_name': 'Du Name',
+        'du_status': 'Du Status',
+        'du_checkout_remark': 'Du Checkout Remark',
+        'service_area_id': 'Service Area Id',
+    }
+    for col in reduced_columns:
+        html_content += f"<th>{header_map.get(col, col)}</th>"
     html_content += """
                             </tr>
                         </thead>
@@ -483,15 +580,26 @@ def create_html_report(coverage_data):
     
     # Add table rows with data
     for _, row in du_table_data.iterrows():
-        html_content += "<tr>"
-        for col in du_columns:
+        # Add data attributes for camping and checked_in_last_7_days
+        camping_attr = 'true' if row.get('Camping', False) else 'false'
+        checked_in_last_7_days_attr = 'true' if row.get('checked_in_last_7_days', False) else 'false'
+        building_count_attr = (
+            float(row.get('buildings')) if pd.notnull(row.get('buildings')) else ''
+        )
+        delivery_count_per_buildings = (
+            float(row.get('Delivery/Building Ratio')) if pd.notnull(row.get('Delivery/Building Ratio')) else ''
+        )
+    
+        delivery_count = (
+            float(row.get(delivery_count_col)) if pd.notnull(row.get(delivery_count_col)) else ''
+        )
+        html_content += f"<tr data-camping='{camping_attr}' data-building-count='{building_count_attr}' data-checked-in-last-7-days='{checked_in_last_7_days_attr}' data-delivery-count-per-buildings='{delivery_count_per_buildings}' data-delivery-count='{delivery_count}'>"
+        for col in reduced_columns:
             value = row[col]
-            # Format the value - handle NaN/None values and format others as strings
             if pd.isna(value):
                 formatted_value = ""
             else:
                 formatted_value = str(value)
-            
             html_content += f"<td>{formatted_value}</td>"
         html_content += "</tr>"
     
@@ -512,8 +620,7 @@ def create_html_report(coverage_data):
         assigned_flw_ids = sorted(list(set(du.flw_commcare_id for du in service_area.delivery_units if du.flw_commcare_id)))
         
         # Map IDs to names, falling back to ID if no name is found
-        flw_name_map = coverage_data.flw_commcare_id_to_name_map
-        assigned_flw_names = [flw_name_map.get(flw_id, flw_id) for flw_id in assigned_flw_ids]
+        assigned_flw_names = [coverage_data.get_flw_name_by_id(flw_id) for flw_id in assigned_flw_ids]
         
         service_area_data.append({
             'service_area_id': sa_id,
@@ -833,7 +940,10 @@ def create_html_report(coverage_data):
         <script>
             $(document).ready(function() {{
                 // Initialize the Delivery Units table
-                $('#delivery-units-table').DataTable({{
+                if ($.fn.DataTable.isDataTable('#delivery-units-table')) {{
+                    $('#delivery-units-table').DataTable().destroy();
+                }}
+                var duTable = $('#delivery-units-table').DataTable({{
                     paging: true,
                     searching: true,
                     ordering: true,
@@ -847,6 +957,67 @@ def create_html_report(coverage_data):
                     scrollX: true,
                     colReorder: true,
                     pageLength: 25
+                }});
+
+                // Custom filter for Camping threshold, Checked In Last 7 Days, Camping Only
+                var campingFilterActive = false;
+                
+                $.fn.dataTable.ext.search.push(
+                    function(settings, data, dataIndex) {{
+                        if (settings.nTable.id !== 'delivery-units-table') return true;
+                        
+                                                 // Get all filter values
+                         var campingThreshold = parseFloat($('#camping-threshold').val()) || 12;
+                         var minDeliveryCount = parseFloat($('#min-delivery-count').val()) || 20;
+                         var filterLast7 = $('#filter-last7').prop('checked');
+                         var filterCamping = $('#filter-camping').prop('checked');
+
+                        // Get row node and data attributes
+                        var rowNode = duTable.row(dataIndex).node();
+                        var deliveryCountBuildings = parseFloat($(rowNode).attr('data-delivery-count-per-buildings'));
+                        var deliveryCount = parseFloat($(rowNode).attr('data-delivery-count'));
+                        var campingAttr = $(rowNode).attr('data-camping');
+                        var checkedInLast7Attr = $(rowNode).attr('data-checked-in-last-7-days');
+
+                        // Apply camping filter based on Delivery/Building Ratio
+                        if (campingFilterActive) {{
+                            if (isNaN(deliveryCountBuildings) || deliveryCountBuildings < campingThreshold) {{
+                                return false;
+                            }}
+                        }}
+
+                        // Filter by Checked In Last 7 Days
+                        if (filterLast7) {{
+                            if (checkedInLast7Attr !== 'true') return false;
+                        }}
+
+                        // Filter by More than Minimum Visits Only
+                        if (filterCamping) {{
+                            if (isNaN(deliveryCount) || deliveryCount <= minDeliveryCount) {{
+                                return false;
+                            }}
+                        }}
+                        
+                        return true;
+                    }}
+                );
+
+                // Handle Apply Camping Filter button
+                $('#apply-camping-filter').on('click', function() {{
+                    campingFilterActive = !campingFilterActive;
+                    if (campingFilterActive) {{
+                        $(this).text('Remove Camping Filter');
+                        $(this).css('background-color', '#f44336');
+                    }} else {{
+                        $(this).text('Apply Camping Filter to DU Table');
+                        $(this).css('background-color', '#4CAF50');
+                    }}
+                    duTable.draw();
+                }});
+
+                // Redraw table on filter change (excluding camping-threshold and min-delivery-count)
+                $('#filter-last7, #filter-camping').on('input change', function() {{
+                    duTable.draw();
                 }});
                 
                 // Initialize the Service Areas table

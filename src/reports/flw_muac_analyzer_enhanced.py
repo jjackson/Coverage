@@ -455,6 +455,11 @@ class EnhancedFLWMUACAnalyzer:
             total_visits = len(flw_data)
             missing_muac_visits = flw_data[self.muac_col].isna().sum()
             valid_muac_data = flw_data[self.muac_col].dropna()
+
+            valid_muac_data = pd.to_numeric(valid_muac_data, errors='coerce')
+            if not isinstance(valid_muac_data, pd.Series):
+                valid_muac_data = pd.Series([valid_muac_data])
+
             invalid_muac_visits = ((valid_muac_data < 9.5) | (valid_muac_data > 21.5)).sum()
             binnable_muac_data = valid_muac_data[(valid_muac_data >= 9.5) & (valid_muac_data <= 21.5)]
             
@@ -543,6 +548,11 @@ class EnhancedFLWMUACAnalyzer:
             total_visits = len(opp_data)
             missing_muac_visits = opp_data[self.muac_col].isna().sum()
             valid_muac_data = opp_data[self.muac_col].dropna()
+
+            valid_muac_data = pd.to_numeric(valid_muac_data, errors='coerce')
+            if not isinstance(valid_muac_data, pd.Series):
+                valid_muac_data = pd.Series([valid_muac_data])
+
             invalid_muac_visits = ((valid_muac_data < 9.5) | (valid_muac_data > 21.5)).sum()
             binnable_muac_data = valid_muac_data[(valid_muac_data >= 9.5) & (valid_muac_data <= 21.5)]
             

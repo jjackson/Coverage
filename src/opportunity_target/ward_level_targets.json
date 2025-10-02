@@ -1,0 +1,290 @@
+{
+  "domains": {
+    "ccc-chc-zegcawis-2024-25": {
+      "wards": {
+        "Auno": {
+          "visit_target": 17325,
+          "building_target": 38761,
+          "du_target": 7338
+        },
+        "Damboa": {
+          "visit_target": 10989,
+          "building_target": 18840,
+          "du_target": 2207
+        },
+        "Kasugula": {
+          "visit_target": 8606,
+          "building_target": 12181,
+          "du_target": 1717
+        },
+        "Mafa": {
+         "visit_target": 3292,
+          "building_target": 9570,
+          "du_target": 1236
+        }
+      }
+    },
+    "ccc-chc-cowacdi-2024-25": {
+      "wards": {
+        "Bolori-1": {
+          "visit_target": 21981,
+          "building_target": 46104,
+          "du_target": 6371
+        }
+      }
+    },
+    "ccc-chc-ahti-2024-25": {
+      "wards": {
+        "Unguwa Uku Chikin Gari": {
+          "visit_target": 5653,
+          "building_target": 4493,
+          "du_target": 388
+        },
+        "Darmanawa": {
+          "visit_target": 11611,
+          "building_target": 14555,
+          "du_target": 1771
+        },
+        "Unguwa Uku Kauyan Alu": {
+          "visit_target": 11008,
+          "building_target": 11913,
+          "du_target": 1055
+        }
+      }
+    },
+    "ccc-chc-rwyd-2024-25": {
+      "wards": {
+        "Futuless": {
+          "visit_target": 2749,
+          "building_target": 4159,
+          "du_target": 1218
+        },
+        "kirchiga": {
+         "visit_target": 3144,
+          "building_target": 5509,
+          "du_target": 1214
+        },
+        "Michika I": {
+          "visit_target": 3471,
+          "building_target": 4969,
+          "du_target": 709
+        },
+        "Michika II": {
+          "visit_target": 3853,
+          "building_target": 6128,
+          "du_target": 1241
+        },
+        "Pallam": {
+          "visit_target": 2531,
+          "building_target": 5103,
+          "du_target": 1179
+        },
+        "Sukur": {
+          "visit_target": 3694,
+          "building_target": 6616,
+          "du_target": 1388
+        }
+
+      }
+    },
+    "ccc-chc-jhf-2024-25": {
+      "wards": {
+        "Jagali North": {
+         "visit_target": 10133,
+          "building_target": 16611,
+          "du_target": 3414
+        },
+        "Jagali South": {
+          "visit_target": 4508,
+          "building_target": 6709,
+          "du_target": 1381
+        },
+        "Lano/ Kuri/ Lambam": {
+         "visit_target": 15119,
+          "building_target": 19549,
+          "du_target": 2991
+        },
+        "Lubo/ Difa/ Kinafa": {
+          "visit_target": 5561,
+          "building_target": 7244,
+          "du_target": 1250
+        },
+        "Nono/ Kunuwal/ Wuro Birdeka": {
+          "visit_target": 8581,
+          "building_target": 14295,
+          "du_target": 2688
+        }
+
+      }
+    },
+    "ccc-chc-ruwoyd-2024-25": {
+      "wards": {
+        "Kware": {
+          "visit_target": 5268,
+          "building_target": 3897,
+          "du_target": 602
+        },
+        "Tsaki Walakae": {
+          "visit_target": 9300,
+          "building_target": 10547,
+          "du_target": 1716
+        },
+        "Basansan": {
+          "visit_target": 5135,
+          "building_target": 4706,
+          "du_target": 745
+        },
+        "Durbawa": {
+          "visit_target": 5669,
+          "building_target": 5990,
+          "du_target": 1167
+        },
+        "Gandu": {
+          "visit_target": 6531,
+          "building_target": 5783,
+          "du_target": 1141
+        },
+        "Gidan Rugga More": {
+          "visit_target": 5610,
+          "building_target": 8306,
+          "du_target": 1746
+        },
+        "Hamma Ali Marabawa": {
+          "visit_target": 6960,
+          "building_target": 7278,
+          "du_target": 1314
+        }
+
+      }
+    },
+    "ccc-chc-eha-c-2024-25": {
+      "wards": {
+        "Dindere": {
+          "visit_target": 1773,
+          "building_target": 1358,
+          "du_target": 276
+        },
+        "Doka": {
+         "visit_target": 3147,
+          "building_target": 2042,
+          "du_target": 441
+        },
+        "Gajida": {
+          "visit_target": 1744,
+          "building_target": 1509,
+          "du_target": 281
+        },
+        "Ginsawa": {
+          "visit_target": 1862,
+          "building_target": 1632,
+          "du_target": 324
+        },
+        "Janguza": {
+          "visit_target": 3421,
+          "building_target": 3087,
+          "du_target": 751
+        },
+        "Jauben Kudu": {
+         "visit_target": 1844,
+          "building_target": 1699,
+          "du_target": 247
+        },
+        "Kwami": {
+          "visit_target": 1124,
+          "building_target": 928,
+          "du_target": 190
+        },
+        "Lambu": {
+          "visit_target": 4545,
+          "building_target": 3183,
+          "du_target": 687
+        },
+        "Langel": {
+          "visit_target": 2812,
+          "building_target": 2036,
+          "du_target": 519
+        },
+        "Tofa": {
+          "visit_target": 5524,
+          "building_target": 3789,
+          "du_target": 600
+        },
+        "Unguwar rimi": {
+          "visit_target": 5201,
+          "building_target": 3923,
+          "du_target": 833
+        },
+        "Wangara": {
+          "visit_target": 2466,
+          "building_target": 1326,
+          "du_target": 308
+        },
+        "Yalwa Karama": {
+          "visit_target": 2363,
+          "building_target": 2158,
+          "du_target": 351
+        },
+        "Yanoko": {
+          "visit_target": 2527,
+          "building_target": 2816,
+          "du_target": 523
+        },
+        "Yarimawa": {
+         "visit_target": 1467,
+          "building_target": 1368,
+          "du_target": 293
+        }
+
+      }
+    },
+    "ccc-chc-isodaf-2024-25": {
+      "wards": {
+        "Farin Dutse": {
+          "visit_target": 5823,
+          "building_target": 5111,
+          "du_target": 821
+        },
+        "Gwaram": {
+          "visit_target": 12125,
+          "building_target": 9454,
+          "du_target": 1410
+        },
+        "Kudai": {
+          "visit_target": 8816,
+          "building_target": 9625,
+          "du_target": 1627
+        },
+        "Maruta": {
+          "visit_target": 6212,
+          "building_target": 4473,
+          "du_target": 756
+        }
+      }
+    },
+    "ccc-chc-ppfnnew": {
+      "wards": {
+        "Ashaka/Magaba": {
+          "visit_target": 7662,
+          "building_target": 6977,
+          "du_target": 1348
+        },
+        
+        "Bajoga East": {
+          "visit_target": 9691,
+          "building_target": 5134,
+          "du_target": 956
+        },
+        "Bajoga West": {
+          "visit_target": 8945,
+          "building_target": 9900,
+          "du_target": 1526
+        },
+        "Ribadu": {
+          "visit_target": 7255,
+          "building_target": 4647,
+          "du_target": 563
+        }
+      }
+    }
+  }
+}

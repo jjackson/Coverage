@@ -29,6 +29,8 @@ class ExcelExporter:
                 if df is None or len(df) == 0:
                     continue
                 
+                print(f"DEBUG: Processing tab: {tab_name}")
+                
                 # Fix timezone issues before processing
                 df_clean = self._fix_timezone_issues(df)
                 
@@ -40,17 +42,17 @@ class ExcelExporter:
                     ws.append(r)
                 
                 # Format the sheet
-                self._format_worksheet(ws, df_clean)
+                self._format_worksheet(ws, df_clean, tab_name)
                 
-                self.log(f"Added sheet: {tab_name} ({len(df_clean)} rows)")
+                print(f"DEBUG: Added sheet: {tab_name} ({len(df_clean)} rows)")
             
             # Save the workbook
             wb.save(output_path)
-            self.log(f"Excel export complete: {len(data_dict)} tabs created")
+            print(f"DEBUG: Excel export complete: {len(data_dict)} tabs created")
             return output_path
             
         except Exception as e:
-            self.log(f"Error creating Excel file: {str(e)}")
+            print(f"DEBUG: Error creating Excel file: {str(e)}")
             return None
     
     def _fix_timezone_issues(self, df):
@@ -64,9 +66,9 @@ class ExcelExporter:
                     # If it's timezone-aware, convert to timezone-naive
                     if hasattr(df_copy[col].dtype, 'tz') and df_copy[col].dtype.tz is not None:
                         df_copy[col] = df_copy[col].dt.tz_localize(None)
-                        self.log(f"Removed timezone from column: {col}")
+                        print(f"DEBUG: Removed timezone from column: {col}")
                 except Exception as e:
-                    self.log(f"Warning: Could not fix timezone for column {col}: {str(e)}")
+                    print(f"DEBUG: Warning: Could not fix timezone for column {col}: {str(e)}")
             
             # Handle object columns that might contain datetime objects
             elif df_copy[col].dtype == 'object':
@@ -78,7 +80,7 @@ class ExcelExporter:
                         if hasattr(first_val, 'tz') and first_val.tz is not None:
                             # Convert timezone-aware datetime objects to timezone-naive
                             df_copy[col] = pd.to_datetime(df_copy[col]).dt.tz_localize(None)
-                            self.log(f"Fixed timezone in object column: {col}")
+                            print(f"DEBUG: Fixed timezone in object column: {col}")
                 except:
                     # If conversion fails, leave the column as-is
                     pass
@@ -94,10 +96,14 @@ class ExcelExporter:
             clean_name = clean_name.replace(char, '_')
         return clean_name[:31]
     
-    def _format_worksheet(self, ws, df):
+    def _format_worksheet(self, ws, df, tab_name):
         """Apply formatting to worksheet"""
         if ws.max_row == 0:
             return
+        
+        print(f"DEBUG: Formatting worksheet for tab: {tab_name}")
+        print(f"DEBUG: DataFrame has _gender_timeline_formatting: {hasattr(df, '_gender_timeline_formatting')}")
+        print(f"DEBUG: DataFrame has _red_score_data: {hasattr(df, '_red_score_data')}")
         
         # Format header row
         header_fill = PatternFill(start_color='E6E6FA', end_color='E6E6FA', fill_type='solid')
@@ -107,12 +113,21 @@ class ExcelExporter:
             cell.fill = header_fill
             cell.font = header_font
         
+        # Apply gender timeline conditional formatting if this is a gender timeline sheet
+        if hasattr(df, '_gender_timeline_formatting') and hasattr(df, '_red_score_data'):
+            print("DEBUG: About to apply gender timeline formatting")
+            self._apply_gender_timeline_formatting(ws, df)
+        else:
+            print("DEBUG: Skipping gender timeline formatting - flags not found")
+        
         # Set frozen panes
         # Freeze header row and first few columns (typically ID columns)
         freeze_col = 'C'  # Default to column C (first 2 columns frozen)
         
-        # Adjust freeze column based on content
-        if 'flw_id' in df.columns or any('id' in col.lower() for col in df.columns[:3]):
+        # For gender timeline, freeze more columns to keep FLW info visible
+        if hasattr(df, '_gender_timeline_formatting'):
+            freeze_col = 'D'  # Freeze flw_id, flw_name, opportunity_name
+        elif 'flw_id' in df.columns or any('id' in col.lower() for col in df.columns[:3]):
             freeze_col = 'D' if len(df.columns) > 3 else 'C'
         
         ws.freeze_panes = f'{freeze_col}2'  # Freeze first columns and header row
@@ -132,3 +147,67 @@ class ExcelExporter:
             # Set width with reasonable bounds
             adjusted_width = min(max(max_length + 2, 10), 50)
             ws.column_dimensions[column_letter].width = adjusted_width
+    
+    def _apply_gender_timeline_formatting(self, ws, df):
+        """Apply conditional formatting to gender timeline sheets"""
+        print("DEBUG: Starting _apply_gender_timeline_formatting")
+        
+        try:
+            red_score_df = df._red_score_data
+            red_fill = PatternFill(start_color='FFCCCC', end_color='FFCCCC', fill_type='solid')
+            
+            print(f"DEBUG: Red score dataframe shape: {red_score_df.shape}")
+            
+            # Find week columns (columns that start with 'Week_')
+            week_columns = [col for col in df.columns if col.startswith('Week_')]
+            print(f"DEBUG: Found {len(week_columns)} week columns")
+            
+            # Get column indices for week columns
+            col_indices = {}
+            for idx, col_name in enumerate(df.columns):
+                if col_name in week_columns:
+                    col_indices[col_name] = idx + 1  # +1 because Excel is 1-indexed
+            
+            print(f"DEBUG: Applying red score formatting to {len(week_columns)} week columns for {len(df)} FLWs")
+            
+            # Debug: Check how many red scores we have
+            total_red_scores = 0
+            for col_name in week_columns:
+                if col_name in red_score_df.columns:
+                    red_count = (red_score_df[col_name] == True).sum()
+                    total_red_scores += red_count
+                    if red_count > 0:
+                        print(f"DEBUG: Week {col_name}: {red_count} red scores")
+            
+            print(f"DEBUG: Total red scores across all weeks: {total_red_scores}")
+            
+            if total_red_scores == 0:
+                print("DEBUG: No red scores found - no cells will be highlighted")
+                return
+            
+            # Apply formatting to cells where red_score_data is True
+            red_cells_count = 0
+            for row_idx in range(len(df)):
+                for col_name in week_columns:
+                    if (col_name in red_score_df.columns and 
+                        row_idx < len(red_score_df) and 
+                        red_score_df.iloc[row_idx][col_name] == True):
+                        
+                        excel_row = row_idx + 2  # +2 for header row (1-indexed)
+                        excel_col = col_indices[col_name]
+                        
+                        cell = ws.cell(row=excel_row, column=excel_col)
+                        cell.fill = red_fill
+                        red_cells_count += 1
+                        
+                        # Debug: Log first few red cells
+                        if red_cells_count <= 5:
+                            print(f"DEBUG: Applied red formatting to row {excel_row}, col {excel_col} ({col_name})")
+            
+            print(f"DEBUG: Applied red formatting to {red_cells_count} cells with red scores")
+            
+        except Exception as e:
+            print(f"DEBUG: Warning: Could not apply gender timeline formatting: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Continue without formatting rather than failing

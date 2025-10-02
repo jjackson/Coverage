@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 import pandas as pd
 import numpy as np
+import scipy.stats as stats
 from datetime import datetime
 from .base_report import BaseReport
 from .utils.excel_exporter import ExcelExporter
@@ -69,29 +70,38 @@ class FLWDataQualityReport(BaseReport):
         ttk.Checkbutton(distribution_frame, text="FLW MUAC", variable=flw_muac_var).grid(row=1, column=0, sticky=tk.W)
         ttk.Checkbutton(distribution_frame, text="Opps MUAC", variable=opps_muac_var).grid(row=1, column=1, sticky=tk.W)
         
+        # Gender timeline analysis
+        ttk.Label(parent_frame, text="Gender timeline:").grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
+        
+        timeline_frame = ttk.Frame(parent_frame)
+        timeline_frame.grid(row=4, column=1, sticky=tk.W, padx=5, pady=2)
+        
+        include_gender_timeline_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(timeline_frame, text="Generate weekly gender timeline per FLW", variable=include_gender_timeline_var).grid(row=0, column=0, sticky=tk.W)
+        
         # MUAC Tampering Experiment
-        ttk.Label(parent_frame, text="MUAC fraud validation:").grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(parent_frame, text="MUAC fraud validation:").grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
         
         tampering_frame = ttk.Frame(parent_frame)
-        tampering_frame.grid(row=4, column=1, sticky=tk.W, padx=5, pady=2)
+        tampering_frame.grid(row=5, column=1, sticky=tk.W, padx=5, pady=2)
         
         include_tampering_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(tampering_frame, text="Include tampering experiment (validates fraud detection)", variable=include_tampering_var).grid(row=0, column=0, sticky=tk.W)
         
         # Correlation analysis options
-        ttk.Label(parent_frame, text="Correlation analysis:").grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(parent_frame, text="Correlation analysis:").grid(row=6, column=0, sticky=tk.W, padx=5, pady=2)
         
         correlation_frame = ttk.Frame(parent_frame)
-        correlation_frame.grid(row=5, column=1, sticky=tk.W, padx=5, pady=2)
+        correlation_frame.grid(row=6, column=1, sticky=tk.W, padx=5, pady=2)
         
         correlation_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(correlation_frame, text="Generate correlation matrices", variable=correlation_var).grid(row=0, column=0, sticky=tk.W)
         
         # Output options
-        ttk.Label(parent_frame, text="Output options:").grid(row=6, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(parent_frame, text="Output options:").grid(row=7, column=0, sticky=tk.W, padx=5, pady=2)
         
         output_frame = ttk.Frame(parent_frame)
-        output_frame.grid(row=6, column=1, sticky=tk.W, padx=5, pady=2)
+        output_frame.grid(row=7, column=1, sticky=tk.W, padx=5, pady=2)
         
         export_csv_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(output_frame, text="Export unified longitudinal CSV", variable=export_csv_var).grid(row=0, column=0, sticky=tk.W)
@@ -106,6 +116,7 @@ class FLWDataQualityReport(BaseReport):
         parent_frame.opps_ages_var = opps_ages_var
         parent_frame.flw_muac_var = flw_muac_var
         parent_frame.opps_muac_var = opps_muac_var
+        parent_frame.include_gender_timeline_var = include_gender_timeline_var
         parent_frame.include_tampering_var = include_tampering_var
         parent_frame.correlation_var = correlation_var
         parent_frame.export_csv_var = export_csv_var
@@ -172,6 +183,198 @@ class FLWDataQualityReport(BaseReport):
         
         return df_clean
     
+    def _create_gender_timeline_analysis(self, df_clean, min_size):
+        """
+        Create gender timeline analysis showing weekly female percentages per FLW
+        
+        Args:
+            df_clean: Cleaned dataframe with standardized columns
+            min_size: Minimum visits required per week to show percentage
+            
+        Returns:
+            pd.DataFrame: Timeline with one row per FLW, one column per week
+        """
+        
+        # Debug: Show available columns
+        self.log(f"Available columns in df_clean: {list(df_clean.columns)}")
+        
+        # Try to find gender column with multiple possible names
+        gender_col = None
+        gender_patterns = [
+            'child_gender', 'gender', 'child_sex', 'sex', 
+            'beneficiary_gender', 'beneficiary_sex', 'patient_gender', 'patient_sex'
+        ]
+        
+        for pattern in gender_patterns:
+            matching_cols = [col for col in df_clean.columns if pattern.lower() in col.lower()]
+            if matching_cols:
+                gender_col = matching_cols[0]
+                self.log(f"Found gender column: {gender_col}")
+                break
+        
+        if gender_col is None:
+            # Fallback: try to get it from original dataframe if not in cleaned version
+            self.log(f"No gender column found in cleaned data. Checking original dataframe...")
+            if 'child_gender' in self.df.columns:
+                # Add the original gender column to df_clean
+                df_clean = df_clean.copy()
+                df_clean['child_gender'] = self.df['child_gender']
+                gender_col = 'child_gender'
+                self.log(f"Added gender column from original data: {gender_col}")
+            else:
+                self.log(f"No gender column found. Tried patterns: {gender_patterns}")
+                self.log(f"Available columns in original df: {list(self.df.columns)}")
+                return pd.DataFrame()
+        
+        # Check other required columns
+        required_cols = ['flw_id', 'flw_name', 'opportunity_name', 'visit_date']
+        missing_cols = [col for col in required_cols if col not in df_clean.columns]
+        
+        if missing_cols:
+            self.log(f"Warning: Missing columns for gender timeline: {missing_cols}")
+            return pd.DataFrame()
+        
+        # Filter to records with valid gender data
+        gender_data = df_clean[
+            df_clean[gender_col].notna() & 
+            df_clean['visit_date'].notna() &
+            df_clean['flw_id'].notna()
+        ].copy()
+        
+        if len(gender_data) == 0:
+            self.log("No valid gender and date data found for timeline analysis")
+            return pd.DataFrame()
+        
+        self.log(f"Creating gender timeline analysis with {len(gender_data)} valid records")
+        self.log(f"Sample gender values: {gender_data[gender_col].value_counts().head()}")
+        
+        # Ensure visit_date is datetime
+        gender_data['visit_date'] = pd.to_datetime(gender_data['visit_date'])
+        
+        # Create week column (Monday start)
+        gender_data['week_start'] = gender_data['visit_date'].dt.to_period('W-MON').dt.start_time
+        gender_data['week_label'] = gender_data['week_start'].dt.strftime('Week_%Y-%m-%d')
+        
+        # Calculate female indicator (handle both 'female_child'/'male_child' and 'f'/'m' formats)
+        gender_values = gender_data[gender_col].str.lower()
+        gender_data['is_female'] = gender_values.isin(['f', 'female', '1', 'female_child']).astype(int)
+        
+        # Debug gender detection
+        female_count = gender_data['is_female'].sum()
+        total_count = len(gender_data)
+        self.log(f"Gender detection: {female_count} female out of {total_count} total ({female_count/total_count*100:.1f}% female)")
+        
+        # Get date range for all weeks
+        min_date = gender_data['week_start'].min()
+        max_date = gender_data['week_start'].max()
+        
+        # Create complete week range
+        week_range = pd.date_range(start=min_date, end=max_date, freq='W-MON')
+        week_labels = [f"Week_{date.strftime('%Y-%m-%d')}" for date in week_range]
+        
+        self.log(f"Timeline covers {len(week_labels)} weeks from {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}")
+        
+        # Group by FLW and week, calculate stats
+        flw_week_stats = gender_data.groupby(['flw_id', 'flw_name', 'opportunity_name', 'week_label']).agg({
+            'is_female': ['count', 'sum'],
+            gender_col: 'count'  # Use the detected gender column name
+        }).reset_index()
+        
+        # Flatten column names
+        flw_week_stats.columns = ['flw_id', 'flw_name', 'opportunity_name', 'week_label', 'total_visits', 'female_count', 'total_children']
+        
+        # Calculate female percentage
+        flw_week_stats['female_pct'] = (flw_week_stats['female_count'] / flw_week_stats['total_visits'] * 100).round(1)
+        
+        # Only keep weeks with sufficient data
+        sufficient_data = flw_week_stats[flw_week_stats['total_visits'] >= min_size].copy()
+        
+        if len(sufficient_data) == 0:
+            self.log(f"No FLW/week combinations meet minimum visit threshold of {min_size}")
+            return pd.DataFrame()
+        
+        self.log(f"Found {len(sufficient_data)} FLW/week combinations with >= {min_size} visits")
+        
+        # Calculate population baseline for red score calculation
+        population_female_count = gender_data['is_female'].sum()
+        population_total = len(gender_data)
+        population_ratio = population_female_count / population_total if population_total > 0 else 0.5
+        
+        def is_red_score(female_count, total_visits, population_baseline=population_ratio):
+            """Determine if this is a red score using same logic as gender assessment"""
+            if total_visits < min_size:
+                return False
+            
+            # Calculate sample ratio
+            sample_ratio = female_count / total_visits
+            
+            # Use population baseline for comparison
+            expected = population_baseline
+            
+            # Calculate z-score for significant deviation
+            if expected == 0 or expected == 1:
+                return False
+            
+            variance = expected * (1 - expected) / total_visits
+            std_error = np.sqrt(variance)
+            z_score = abs(sample_ratio - expected) / std_error if std_error > 0 else 0
+            
+            # Red score if z-score > 2.576 (99% confidence)
+            return z_score > 2.576
+        
+        sufficient_data['is_red_score'] = sufficient_data.apply(
+            lambda row: is_red_score(row['female_count'], row['total_visits']), 
+            axis=1
+        )
+        
+        # Create pivot table
+        pivot_data = sufficient_data.pivot_table(
+            index=['flw_id', 'flw_name', 'opportunity_name'],
+            columns='week_label',
+            values='female_pct',
+            fill_value=np.nan
+        ).reset_index()
+        
+        # Create red score pivot table for color coding reference
+        red_score_pivot = sufficient_data.pivot_table(
+            index=['flw_id', 'flw_name', 'opportunity_name'],
+            columns='week_label', 
+            values='is_red_score',
+            fill_value=False
+        ).reset_index()
+        
+        # Ensure all weeks are present as columns (even if no data)
+        for week_label in week_labels:
+            if week_label not in pivot_data.columns:
+                pivot_data[week_label] = np.nan
+                red_score_pivot[week_label] = False
+        
+        # Sort columns: identifier columns first, then weeks chronologically
+        id_columns = ['flw_id', 'flw_name', 'opportunity_name']
+        week_columns = sorted([col for col in pivot_data.columns if col.startswith('Week_')])
+        pivot_data = pivot_data[id_columns + week_columns]
+        red_score_pivot = red_score_pivot[id_columns + week_columns]
+        
+        # Add summary statistics
+        week_cols = [col for col in pivot_data.columns if col.startswith('Week_')]
+        
+        pivot_data['total_weeks_with_data'] = pivot_data[week_cols].notna().sum(axis=1)
+        pivot_data['avg_female_pct'] = pivot_data[week_cols].mean(axis=1).round(1)
+        pivot_data['red_score_weeks'] = red_score_pivot[week_cols].sum(axis=1)
+        pivot_data['red_score_rate'] = (pivot_data['red_score_weeks'] / pivot_data['total_weeks_with_data'] * 100).round(1)
+        
+        # Sort by total weeks with data (descending) then by FLW name
+        pivot_data = pivot_data.sort_values(['total_weeks_with_data', 'flw_name'], ascending=[False, True])
+        
+        self.log(f"Created gender timeline with {len(pivot_data)} FLWs across {len(week_columns)} weeks")
+        self.log(f"Population baseline female ratio: {population_ratio:.3f}")
+        
+        # Store red score data for Excel formatting
+        pivot_data._red_score_data = red_score_pivot
+        pivot_data._gender_timeline_formatting = True  # Flag for Excel exporter
+        
+        return pivot_data
+
     def _apply_muac_tampering(self, df, tamper_pct=20, noise_range_min=2, noise_range_max=6, seed=42):
         """Apply tampering to MUAC data for fraud detection validation"""
         
@@ -341,6 +544,7 @@ class FLWDataQualityReport(BaseReport):
         """Generate FLW data quality assessment reports with batching"""
         output_files = []
         excel_data = {}
+        from datetime import datetime 
         
         # Get parameters
         batch_size = int(self.get_parameter_value('batch_size', '300'))
@@ -363,11 +567,16 @@ class FLWDataQualityReport(BaseReport):
         include_flw_muac = self.get_parameter_value('flw_muac', True)
         include_opps_muac = self.get_parameter_value('opps_muac', True)
         
+        # Get gender timeline option
+        include_gender_timeline = self.get_parameter_value('include_gender_timeline', True)
+        self.log(f"DEBUG SELF-log: include_gender_timeline = {include_gender_timeline}")
+        print(f"DEBUG PRINT: include_gender_timeline = {include_gender_timeline}")  # Use print() instead of self.log()
+        
         # Get correlation analysis option
         include_correlations = self.get_parameter_value('correlation', True)
         
-        if not selected_assessments and not any([include_flw_ages, include_opps_ages, include_flw_muac, include_opps_muac]) and not export_csv and not include_correlations:
-            self.log("Error: No data quality checks, distribution analysis, correlation analysis, or CSV export selected")
+        if not selected_assessments and not any([include_flw_ages, include_opps_ages, include_flw_muac, include_opps_muac]) and not export_csv and not include_correlations and not include_gender_timeline:
+            self.log("Error: No data quality checks, distribution analysis, correlation analysis, gender timeline, or CSV export selected")
             return output_files
         
         self.log(f"Starting FLW data quality assessment with batching")
@@ -383,6 +592,9 @@ class FLWDataQualityReport(BaseReport):
         
         if distribution_types:
             self.log(f"Distribution analysis: {', '.join(distribution_types)}")
+        
+        if include_gender_timeline:
+            self.log("Gender timeline analysis: Enabled")
         
         if include_correlations:
             self.log("Correlation analysis: Enabled")
@@ -554,6 +766,16 @@ class FLWDataQualityReport(BaseReport):
                     if opps_ages_df is not None and len(opps_ages_df) > 0:
                         excel_data['Opps Ages'] = opps_ages_df
             
+            # Generate gender timeline analysis
+            if include_gender_timeline:
+                self.log("Creating gender timeline analysis...")
+                gender_timeline_df = self._create_gender_timeline_analysis(df_clean, min_size)
+                if gender_timeline_df is not None and len(gender_timeline_df) > 0:
+                    excel_data['Gender Timeline'] = gender_timeline_df
+                    self.log(f"Created gender timeline with {len(gender_timeline_df)} FLWs")
+                else:
+                    self.log("No gender timeline data generated")
+            
             # Generate MUAC distribution analysis with fraud detection
             if include_flw_muac or include_opps_muac:
                 self.log("Creating MUAC distribution analysis with fraud detection...")
@@ -611,7 +833,8 @@ class FLWDataQualityReport(BaseReport):
                 # Generate fraud detection visualizations for original data
                 if flw_muac_original is not None or opps_muac_original is not None:
                     self.log("Creating MUAC fraud detection visualizations...")
-                    viz_output_dir = os.path.join(self.output_dir, "muac_fraud_analysis")
+                    current_date = datetime.now().strftime("%Y-%m-%d")
+                    viz_output_dir = os.path.join(self.output_dir, f"muac_fraud_analysis_{current_date}")
                     
                     # Export with visualizations (original data only for main analysis)
                     viz_results = muac_analyzer.export_detailed_results(
@@ -821,3 +1044,4 @@ class FLWDataQualityReport(BaseReport):
             worst_opp = opportunity_summary.iloc[0] if len(opportunity_summary) > 0 else None
             if worst_opp is not None and worst_opp['pct_flws_with_strong_negative'] > 0:
                 self.log(f"Highest issue rate: {worst_opp['opportunity_name']} ({worst_opp['pct_flws_with_strong_negative']:.1f}%)")
+

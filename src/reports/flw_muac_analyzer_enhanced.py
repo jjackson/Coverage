@@ -99,7 +99,7 @@ class EnhancedFLWMUACAnalyzer:
         
         return longest_plateau
     
-    def _calculate_simplified_fraud_features(self, bin_counts, min_threshold=100):
+    def _calculate_simplified_fraud_features(self, bin_counts, min_threshold=80):
         """Calculate simplified fraud detection features from MUAC bin counts"""
         counts = np.array(bin_counts)
         total_count = np.sum(counts)

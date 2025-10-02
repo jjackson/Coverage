@@ -288,3 +288,4 @@ class TimeAnalyzer:
         }
         
         return summary
+

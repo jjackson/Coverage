@@ -57,3 +57,16 @@ Thumbs.db
 logs/
 
 data/config.json
+
+# Pipeline output directories
+automated_pipeline_output/
+automated_village_pipeline_output/
+
+# Temporary/debug files
+temp_*.py
+update_*.py
+**/debug.py
+**/debug_import.py
+
+# Emacs backup files
+*#

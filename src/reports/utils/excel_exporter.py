@@ -174,15 +174,6 @@ class ExcelExporter:
                             max_length = len(str(cell.value))
                     except Exception as e:
                         self.log(f"  Error measuring cell value length in column {column_letter}: {e}")
-                # Set width with reasonable bounds
-                adjusted_width = min(max(max_length + 2, 10), 50)
-                try:
-<<<<<<< HEAD
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            
             # Set width with reasonable bounds
             adjusted_width = min(max(max_length + 2, 10), 50)
             ws.column_dimensions[column_letter].width = adjusted_width
@@ -250,8 +241,4 @@ class ExcelExporter:
             import traceback
             traceback.print_exc()
             # Continue without formatting rather than failing
-=======
-                    ws.column_dimensions[column_letter].width = adjusted_width
-                except Exception as e:
-                    self.log(f"  Error setting column width for {column_letter} in tab {tab_name}: {e}")
->>>>>>> 289f4321edd46570cefbc03b59cb3b145a1e81d5
+

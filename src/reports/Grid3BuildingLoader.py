@@ -153,7 +153,7 @@ class Grid3BuildingLoader:
         if not match:
             return None
         
-        state = match.group(1).replace('_', ' ').title()
+        state = match.group(2).replace('_', ' ').title()
         lga = match.group(3).replace('_', ' ').title()
         ward = match.group(4).replace('_', ' ').title()
         

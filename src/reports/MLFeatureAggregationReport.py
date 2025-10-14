@@ -13,6 +13,8 @@ import os
 import glob
 from pathlib import Path
 from datetime import datetime
+from .MLFeatureVisualization import generate_all_visualizations
+from .muac_sparkline_by_score import MUACSparklineByScore
 from .base_report import BaseReport
 
 
@@ -102,6 +104,7 @@ class MLFeatureAggregationReport(BaseReport):
         
         # Process each file and combine
         all_flw_data = []
+        all_bin_data = []  # NEW: Collect bin data separately
         
         for csv_file in csv_files:
             filename = csv_file.name
@@ -120,12 +123,19 @@ class MLFeatureAggregationReport(BaseReport):
             try:
                 # Load and process this file
                 df = pd.read_csv(csv_file)
+                
+                # Trim whitespace from all string columns
+                for col in df.columns:
+                    if df[col].dtype == 'object':
+                        df[col] = df[col].str.strip()
+                
                 self.log(f"  -> Loaded {len(df)} records")
                 
-                flw_features = self._aggregate_flw_features(df, classification, min_visits, max_visits)
+                flw_features, flw_bins = self._aggregate_flw_features(df, classification, min_visits, max_visits)  # CHANGED
                 
                 if len(flw_features) > 0:
                     all_flw_data.append(flw_features)
+                    all_bin_data.append(flw_bins)  # NEW
                     self.log(f"  -> Extracted {len(flw_features)} FLWs")
                 else:
                     self.log(f"  -> No FLWs met criteria")
@@ -139,6 +149,7 @@ class MLFeatureAggregationReport(BaseReport):
         
         # Combine all FLW data
         combined_df = pd.concat(all_flw_data, ignore_index=True)
+        combined_bins = pd.concat(all_bin_data, ignore_index=True)  # NEW
         
         # Create output directory with date
         today = datetime.now().strftime("%Y_%m_%d")
@@ -165,6 +176,32 @@ class MLFeatureAggregationReport(BaseReport):
         feature_summary.to_csv(summary_file, index=False)
         output_files.append(summary_file)
         
+
+        # Generate feature distribution visualizations
+        try:
+            viz_files = generate_all_visualizations(combined_df, output_subdir, self.log)
+            output_files.extend(viz_files)
+        except Exception as e:
+            self.log(f"Warning: Could not generate visualizations: {str(e)}")
+
+        # Generate MUAC sparkline visualizations by score
+        try:
+            from .muac_sparkline_by_score import MUACSparklineByScore
+            
+            self.log("Generating MUAC sparkline grids grouped by feature score...")
+            viz_df = combined_df.merge(combined_bins, on=['flw_id', 'classification', 'visits'], how='left')
+
+            sparkline_generator = MUACSparklineByScore.from_dataframe(viz_df, output_subdir)
+
+            sparkline_files = sparkline_generator.generate_both_grids()
+            output_files.extend(sparkline_files)
+            self.log(f"Generated {len(sparkline_files)} sparkline visualizations")
+        except Exception as e:
+            self.log(f"Warning: Could not generate sparkline visualizations: {str(e)}")
+
+        self.log("ML feature aggregation complete!")
+        return output_files
+
         self.log("ML feature aggregation complete!")
         return output_files
     
@@ -192,12 +229,11 @@ class MLFeatureAggregationReport(BaseReport):
         valid_flws = (visit_counts_per_flw >= min_visits).sum()
         
         self.log(f"    DEBUG: FLWs with <{min_visits} visits (excluded): {too_few}")
-        self.log(f"    DEBUG: FLWs with >{max_visits} visits (will be truncated): {too_many}")  
-        self.log(f"    DEBUG: FLWs with >={min_visits} visits (will be included): {valid_flws}")
         
         # Group by FLW
         flw_groups = df.groupby('flw_id')
         flw_data = []
+        flw_bin_data = []  # NEW: Separate list for bin counts
         
         for flw_id, group in flw_groups:
             visit_count = len(group)
@@ -219,9 +255,9 @@ class MLFeatureAggregationReport(BaseReport):
             # Basic FLW info
             flw_features = {
                 'flw_id': flw_id,
-                'flw_name': group['flw_name'].iloc[0] if 'flw_name' in group.columns else None,
+                'flw_name': group['flw_name'].iloc[0].strip() if 'flw_name' in group.columns and pd.notna(group['flw_name'].iloc[0]) else None,
                 'opportunity_id': group['opportunity_id'].iloc[0] if 'opportunity_id' in group.columns else None,
-                'opportunity_name': group['opportunity_name'].iloc[0] if 'opportunity_name' in group.columns else None,
+                'opportunity_name': group['opportunity_name'].iloc[0].strip() if 'opportunity_name' in group.columns and pd.notna(group['opportunity_name'].iloc[0]) else None,
                 'visits': visit_count,
                 'classification': classification
             }
@@ -229,11 +265,24 @@ class MLFeatureAggregationReport(BaseReport):
             # Add all feature types
             flw_features.update(self._calculate_gender_features(group))
             flw_features.update(self._calculate_age_features(group))
-            flw_features.update(self._calculate_muac_features(group))
+            
+            # NEW: Get both features AND bin counts from MUAC calculation
+            muac_features, muac_bins = self._calculate_muac_features_with_bins(group)
+            flw_features.update(muac_features)
             
             flw_data.append(flw_features)
+            
+            # NEW: Store bin data separately for visualization
+            if muac_bins is not None:
+                bin_row = {
+                    'flw_id': flw_id,
+                    'classification': classification,
+                    'visits': visit_count
+                }
+                bin_row.update(muac_bins)
+                flw_bin_data.append(bin_row)
         
-        return pd.DataFrame(flw_data)
+        return pd.DataFrame(flw_data), pd.DataFrame(flw_bin_data)
     
     def _calculate_gender_features(self, group):
         """Calculate gender-related features"""
@@ -269,9 +318,12 @@ class MLFeatureAggregationReport(BaseReport):
                 'muac_bins_with_data': -1,
                 'muac_increasing_to_peak': -1,
                 'muac_decreasing_from_peak': -1,
-                'muac_has_skipped_bins': -1,
-                'muac_has_plateau': -1,
-                'muac_peak_concentration': -1
+                'muac_no_skipped_bins': -1,
+                'muac_no_plateau': -1,
+                'muac_peak_concentration': -1,
+                'muac_bins_sufficient': -1,
+                'muac_peak_reasonable': -1,
+                'muac_features_passed': -1
             })
             return features
         
@@ -288,9 +340,12 @@ class MLFeatureAggregationReport(BaseReport):
                 'muac_bins_with_data': -1,
                 'muac_increasing_to_peak': -1,
                 'muac_decreasing_from_peak': -1,
-                'muac_has_skipped_bins': -1,
-                'muac_has_plateau': -1,
-                'muac_peak_concentration': -1
+                'muac_no_skipped_bins': -1,
+                'muac_no_plateau': -1,
+                'muac_peak_concentration': -1,
+                'muac_bins_sufficient': -1,
+                'muac_peak_reasonable': -1,
+                'muac_features_passed': -1
             })
             return features
         
@@ -316,9 +371,12 @@ class MLFeatureAggregationReport(BaseReport):
             features.update({
                 'muac_increasing_to_peak': -1,
                 'muac_decreasing_from_peak': -1,
-                'muac_has_skipped_bins': -1,
-                'muac_has_plateau': -1,
-                'muac_peak_concentration': -1
+                'muac_no_skipped_bins': -1,
+                'muac_no_plateau': -1,
+                'muac_peak_concentration': -1,
+                'muac_bins_sufficient': -1,
+                'muac_peak_reasonable': -1,
+                'muac_features_passed': -1
             })
             return features
         
@@ -333,17 +391,137 @@ class MLFeatureAggregationReport(BaseReport):
         # Feature 3: Decreasing from peak test
         features['muac_decreasing_from_peak'] = 1 if self._test_decreasing_from_peak(bin_counts, non_zero_indices, peak_index, total_count * 0.02) else 0
         
-        # Feature 4: No skipped bins test (inverted - we want to know if there ARE skipped bins)
-        features['muac_has_skipped_bins'] = 0 if self._test_no_skipped_bins(bin_counts, total_count) else 1
+        # Feature 4: No skipped bins test (INVERTED - 1 means PASSES = no skipped bins)
+        features['muac_no_skipped_bins'] = 1 if self._test_no_skipped_bins(bin_counts, total_count) else 0
         
-        # Feature 5: Has plateau test
-        features['muac_has_plateau'] = 0 if self._test_no_plateau(bin_counts, max_count) else 1
+        # Feature 5: No plateau test (INVERTED - 1 means PASSES = no plateau)
+        features['muac_no_plateau'] = 1 if self._test_no_plateau(bin_counts, max_count) else 0
         
-        # Feature 6: Peak concentration
+        # Feature 6: Peak concentration (continuous feature)
         features['muac_peak_concentration'] = max_count / total_count if total_count > 0 else 0
+        
+        # NEW Feature 7: Bins sufficient (>=5 bins with data)
+        features['muac_bins_sufficient'] = 1 if len(non_zero_indices) >= 5 else 0
+        
+        # NEW Feature 8: Peak reasonable (<=50% concentration)
+        features['muac_peak_reasonable'] = 1 if features['muac_peak_concentration'] <= 0.42 else 0 #PEAK THRESHOLD
+        
+        # NEW: Calculate total features passed (sum of 6 binary features where 1=pass)
+        binary_features = [
+            features['muac_increasing_to_peak'],
+            features['muac_decreasing_from_peak'],
+            features['muac_no_skipped_bins'],
+            features['muac_no_plateau'],
+            features['muac_bins_sufficient'],
+            features['muac_peak_reasonable']
+        ]
+        
+        # Only count if we have valid data (not -1)
+        if all(f != -1 for f in binary_features):
+            features['muac_features_passed'] = sum(binary_features)
+        else:
+            features['muac_features_passed'] = -1
         
         return features
     
+    def _calculate_muac_features_with_bins(self, group):
+        """Calculate MUAC features and return both summary features and bin counts"""
+        
+        # Check if we have MUAC measurement data
+        muac_col = None
+        for col_name in ['soliciter_muac_cm', 'muac_measurement_cm', 'muac_cm', 'muac']:
+            if col_name in group.columns:
+                muac_col = col_name
+                break
+        
+        empty_features = {
+            'has_muac_data': False,
+            'muac_completion_rate': 0.0,
+            'muac_bins_with_data': -1,
+            'muac_increasing_to_peak': -1,
+            'muac_decreasing_from_peak': -1,
+            'muac_no_skipped_bins': -1,
+            'muac_no_plateau': -1,
+            'muac_peak_concentration': -1,
+            'muac_bins_sufficient': -1,
+            'muac_peak_reasonable': -1,
+            'muac_features_passed': -1
+        }
+        
+        if muac_col is None:
+            return empty_features, None
+        
+        # Get valid MUAC measurements (9.5-21.5 cm range)
+        muac_data = pd.to_numeric(group[muac_col], errors='coerce').dropna()
+        valid_muac = muac_data[(muac_data >= 9.5) & (muac_data <= 21.5)]
+        
+        # Basic completion rate
+        features = {'muac_completion_rate': len(muac_data) / len(group)}
+        
+        if len(valid_muac) < 20:
+            features.update({k: v for k, v in empty_features.items() if k != 'muac_completion_rate'})
+            return features, None
+        
+        features['has_muac_data'] = True
+        
+        # Calculate MUAC distribution
+        bin_edges = [9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5, 19.5, 20.5, 21.5]
+        bin_labels = ['9_5_10_5', '10_5_11_5', '11_5_12_5', '12_5_13_5', '13_5_14_5',
+                     '14_5_15_5', '15_5_16_5', '16_5_17_5', '17_5_18_5', '18_5_19_5',
+                     '19_5_20_5', '20_5_21_5']
+        
+        # Calculate bin counts
+        bin_counts = []
+        for i in range(len(bin_edges) - 1):
+            min_val, max_val = bin_edges[i], bin_edges[i + 1]
+            count = ((valid_muac >= min_val) & (valid_muac < max_val)).sum()
+            bin_counts.append(count)
+        
+        total_count = sum(bin_counts)
+        non_zero_indices = [i for i, count in enumerate(bin_counts) if count > 0]
+        
+        # Create bin data dictionary for visualization
+        bin_data = {f'muac_{label}_visits': count for label, count in zip(bin_labels, bin_counts)}
+        
+        # Calculate all the features
+        features['muac_bins_with_data'] = len(non_zero_indices)
+        
+        if len(non_zero_indices) == 0:
+            features.update({k: v for k, v in empty_features.items() 
+                            if k not in ['has_muac_data', 'muac_completion_rate', 'muac_bins_with_data']})
+            return features, bin_data
+        
+        # Find peak
+        max_count = max(bin_counts)
+        peak_indices = [i for i, count in enumerate(bin_counts) if count == max_count]
+        peak_index = peak_indices[0]
+        
+        # All the existing feature calculations
+        features['muac_increasing_to_peak'] = 1 if self._test_increasing_to_peak(bin_counts, non_zero_indices, peak_index, total_count * 0.02) else 0
+        features['muac_decreasing_from_peak'] = 1 if self._test_decreasing_from_peak(bin_counts, non_zero_indices, peak_index, total_count * 0.02) else 0
+        features['muac_no_skipped_bins'] = 1 if self._test_no_skipped_bins(bin_counts, total_count) else 0
+        features['muac_no_plateau'] = 1 if self._test_no_plateau(bin_counts, max_count) else 0
+        features['muac_peak_concentration'] = max_count / total_count if total_count > 0 else 0
+        features['muac_bins_sufficient'] = 1 if len(non_zero_indices) >= 5 else 0
+        features['muac_peak_reasonable'] = 1 if features['muac_peak_concentration'] <= 0.42 else 0  #PEAK THRESHOLD
+        
+        # Calculate total features passed
+        binary_features = [
+            features['muac_increasing_to_peak'],
+            features['muac_decreasing_from_peak'],
+            features['muac_no_skipped_bins'],
+            features['muac_no_plateau'],
+            features['muac_bins_sufficient'],
+            features['muac_peak_reasonable']
+        ]
+        
+        if all(f != -1 for f in binary_features):
+            features['muac_features_passed'] = sum(binary_features)
+        else:
+            features['muac_features_passed'] = -1
+        
+        return features, bin_data
+
     def _test_increasing_to_peak(self, bin_counts, non_zero_indices, peak_index, wiggle_threshold):
         """Test for proper increasing pattern to peak (adapted from aggregation_functions.py)"""
         if peak_index == 0:
@@ -381,17 +559,17 @@ class MLFeatureAggregationReport(BaseReport):
         return increasing_steps >= 1 and big_decreases == 0 and has_adequate_buildup
     
     def _test_decreasing_from_peak(self, bin_counts, non_zero_indices, peak_index, wiggle_threshold):
-        """Test for proper decreasing pattern from peak (adapted from aggregation_functions.py)"""
+        """Test for proper decreasing pattern from peak"""
         if peak_index == len(bin_counts) - 1 or peak_index not in non_zero_indices:
-            return True
+            return False  # Changed: if peak is at end, that's suspicious (no tail)
         
         peak_position_in_nonzero = non_zero_indices.index(peak_index)
         if peak_position_in_nonzero == len(non_zero_indices) - 1:
-            return True
+            return False  # Changed: if no bins after peak, suspicious
         
         steps_from_peak = len(non_zero_indices) - 1 - peak_position_in_nonzero
-        if steps_from_peak < 2:
-            return True
+        if steps_from_peak < 1:  # Changed: need at least 1 step
+            return False
         
         decreasing_steps = 0
         big_increases = 0
@@ -406,7 +584,7 @@ class MLFeatureAggregationReport(BaseReport):
             if step_change > wiggle_threshold:
                 big_increases += 1
         
-        return decreasing_steps >= 2 and big_increases == 0
+        return decreasing_steps >= 1 and big_increases == 0  # Changed: only need 1 decreasing step
     
     def _test_no_skipped_bins(self, bin_counts, total_count):
         """Test for no skipped bins (adapted from aggregation_functions.py)"""
@@ -426,34 +604,50 @@ class MLFeatureAggregationReport(BaseReport):
         return all(count != 0 for count in interior)
     
     def _test_no_plateau(self, bin_counts, max_count):
-        """Test for no suspicious plateaus (adapted from aggregation_functions.py)"""
+        """Test for no suspicious plateaus using enhanced detection (50% peak threshold, 4% total tolerance)"""
         total_count = sum(bin_counts)
         if total_count == 0 or max_count == 0:
             return True
         
-        change_threshold = max_count * 0.03
-        min_count_threshold = total_count * 0.02
-        min_peak_ratio_threshold = max_count * 0.20
+        # Enhanced thresholds (from flw_muac_analyzer_enhanced.py)
+        threshold = 0.5 * max_count  # Only bins with >=50% of peak
+        plateau_tolerance = total_count * 0.04  # 4% of total
         
-        eligible_bins = []
+        # Find high bins
+        high_bins = []
         for i, count in enumerate(bin_counts):
-            if count >= min_count_threshold and count >= min_peak_ratio_threshold:
-                eligible_bins.append((i, count))
+            if count >= threshold:
+                high_bins.append((i, count))
         
-        if len(eligible_bins) < 3:
-            return True
+        if len(high_bins) < 2:
+            return True  # Need at least 2 bins to form a plateau
         
-        for i in range(len(eligible_bins) - 2):
-            bin1_idx, bin1_count = eligible_bins[i]
-            bin2_idx, bin2_count = eligible_bins[i + 1]
-            bin3_idx, bin3_count = eligible_bins[i + 2]
+        # Check consecutive high bins for plateaus
+        longest_plateau = 1
+        current_plateau_start = 0
+        
+        for i in range(1, len(high_bins)):
+            current_bin_idx = high_bins[i][0]
+            prev_bin_idx = high_bins[i-1][0]
             
-            if bin2_idx == bin1_idx + 1 and bin3_idx == bin2_idx + 1:
-                counts = [bin1_count, bin2_count, bin3_count]
-                if max(counts) - min(counts) <= change_threshold:
-                    return False
+            if current_bin_idx == prev_bin_idx + 1:
+                # Bins are consecutive, check if counts are similar
+                current_segment = high_bins[current_plateau_start:i+1]
+                segment_counts = [item[1] for item in current_segment]
+                
+                if max(segment_counts) - min(segment_counts) <= plateau_tolerance:
+                    # This extends the current plateau
+                    plateau_length = len(current_segment)
+                    longest_plateau = max(longest_plateau, plateau_length)
+                else:
+                    # Plateau broken, start new potential plateau
+                    current_plateau_start = i - 1
+            else:
+                # Bins not consecutive, start new potential plateau
+                current_plateau_start = i - 1
         
-        return True
+        # Return False (has plateau) if longest plateau is 3+
+        return longest_plateau < 3
     
     def _calculate_age_features(self, group):
         """Calculate age-related features"""
@@ -606,3 +800,59 @@ class MLFeatureAggregationReport(BaseReport):
                 })
         
         return pd.DataFrame(summary_data)
+
+
+    @classmethod
+    def create_for_automation(cls, output_dir, csv_dir, min_visits=20, max_visits=200, 
+                            batch_size=None, features='all'):
+        """
+        Create report instance for automated pipeline use (no GUI)
+        
+        Args:
+            output_dir: Directory for output files
+            csv_dir: Directory containing real_*.csv and fake_*.csv files
+            min_visits: Minimum visits per FLW
+            max_visits: Maximum visits per FLW
+            batch_size: Batch size for splitting high-volume FLWs (not implemented yet)
+            features: Features to generate - 'all' or list like ['muac', 'age', 'gender'] (not implemented yet)
+        
+        Returns:
+            MLFeatureAggregationReport instance ready to call generate()
+        """
+        # Create a minimal mock params frame that mimics tkinter variables
+        class MockVar:
+            def __init__(self, value):
+                self._value = value
+            def get(self):
+                return self._value
+            def set(self, value):
+                self._value = value
+        
+        class MockParamsFrame:
+            def __init__(self):
+                self.csv_dir_var = MockVar(csv_dir)
+                self.min_visits_var = MockVar(str(min_visits))
+                self.max_visits_var = MockVar(str(max_visits))
+                # Store additional params for future use
+                self._batch_size = batch_size
+                self._features = features
+        
+        mock_frame = MockParamsFrame()
+        
+        # Add dummy log callback to match BaseReport signature
+        def dummy_log(msg):
+            pass
+        
+        # Create instance - match BaseReport's expected parameters
+        instance = cls(
+            df=None,  # Not used for this report type
+            output_dir=output_dir,
+            log_callback=dummy_log,
+            params_frame=mock_frame
+        )
+        
+        # Store additional parameters on instance for future use
+        instance._automation_batch_size = batch_size
+        instance._automation_features = features
+        
+        return instance

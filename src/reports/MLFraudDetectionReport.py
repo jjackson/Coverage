@@ -67,6 +67,7 @@ class MLFraudDetectionReport(BaseReport):
         include_lr = self.get_parameter_value('include_lr', True)
         balance_method = self.get_parameter_value('balance_method', 'class_weight')
         random_state = int(self.get_parameter_value('random_state', 42))
+        use_date_subdir = self.get_parameter_value('use_date_subdir', True)
         
         self.log("Starting ML fraud detection analysis...")
         
@@ -106,8 +107,11 @@ class MLFraudDetectionReport(BaseReport):
             predictions['composite_prob'] = list(predictions.values())[0]
         
         # Create output directory
-        today = datetime.now().strftime("%Y_%m_%d")
-        output_dir = os.path.join(self.output_dir, f"ml_fraud_detection_{today}")
+        if use_date_subdir:
+            today = datetime.now().strftime("%Y_%m_%d")
+            output_dir = os.path.join(self.output_dir, f"ml_fraud_detection_{today}")
+        else:
+            output_dir = self.output_dir
         os.makedirs(output_dir, exist_ok=True)
         
         # Generate all outputs
@@ -495,3 +499,58 @@ class MLFraudDetectionReport(BaseReport):
         except Exception as e:
             # If any other formatting error occurs, log but don't fail
             self.log(f"Note: Could not apply Excel formatting - {str(e)}")
+
+    @classmethod
+    def create_for_automation(cls, df, output_dir, test_split=0.2, include_rf=True, 
+                            include_lr=True, balance_method='class_weight', random_state=42,
+                            use_date_subdir=True):
+        """
+        Create report instance for automated pipeline use (no GUI)
+        
+        Args:
+            df: DataFrame with aggregated FLW features (from MLFeatureAggregationReport)
+            output_dir: Directory for output files
+            test_split: Fraction of data for testing (0-1)
+            include_rf: Whether to train Random Forest model
+            include_lr: Whether to train Logistic Regression model
+            balance_method: Class imbalance handling - 'none' or 'class_weight'
+            random_state: Random seed for reproducibility
+            use_date_subdir: Whether to create dated subdirectory (default True)
+        
+        Returns:
+            MLFraudDetectionReport instance ready to call generate()
+        """
+        # Create a minimal mock params frame that mimics tkinter variables
+        class MockVar:
+            def __init__(self, value):
+                self._value = value
+            def get(self):
+                return self._value
+            def set(self, value):
+                self._value = value
+        
+        class MockParamsFrame:
+            def __init__(self):
+                self.test_split_var = MockVar(str(test_split))
+                self.include_rf_var = MockVar(include_rf)
+                self.include_lr_var = MockVar(include_lr)
+                self.balance_method_var = MockVar(balance_method)
+                self.random_state_var = MockVar(str(random_state))
+                self.use_date_subdir_var = MockVar(use_date_subdir)
+        
+        mock_frame = MockParamsFrame()
+        
+        # Add dummy log callback to match BaseReport signature
+        def dummy_log(msg):
+            pass
+        
+        # Create instance - match BaseReport's expected parameters
+        instance = cls(
+            df=df,
+            output_dir=output_dir,
+            log_callback=dummy_log,
+            params_frame=mock_frame
+        )
+        
+        return instance
+

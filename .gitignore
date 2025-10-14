@@ -61,6 +61,8 @@ data/config.json
 # Pipeline output directories
 automated_pipeline_output/
 automated_village_pipeline_output/
+automated_ml_output/
+automated_photo_output/
 
 # Temporary/debug files
 temp_*.py

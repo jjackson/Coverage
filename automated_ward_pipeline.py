@@ -41,9 +41,80 @@ from src.reports.Grid3WardAnalysis import Grid3WardAnalysis
 # Configuration: Define your analysis runs
 ANALYSIS_CONFIGS = [
 
+    {
+        "name": "Sierra Leone",
+        "enabled": True,
+        "use_proxy_wards": True,
+        "proxy_buffer_m": 50,
+        "proxy_max_radius_km": 75,
+        "superset_query_id": 208,
+        "grid3_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\SLE_population_v2_0_gridded.tif",
+        "min_visits": 500,
+        "expected_visits_per_pop": 0.12,
+        "description": "Sierra Leone with no boundares"
+    },
 
     {
+        "name": "DRC",
+        "enabled": True,
+        "use_proxy_wards": True,
+        "proxy_buffer_m": 50,
+        "proxy_max_radius_km": 75,
+        "superset_query_id": 209,
+        "grid3_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\COD_population_v4_2_gridded.tif",
+        "min_visits": 500,
+        "expected_visits_per_pop": 0.12,
+        "description": "Sierra Leone with no boundares"
+    },
+
+    {
+        "name": "Kenya_Baseline_Polygons v2",
+        "enabled": False,
+        "use_premade_polygons": True,
+        "polygon_csv_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\kenya polygons\baseline_one_cluster_v2.csv",
+        "superset_query_id": 195,
+        "grid3_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\ken_population_v1_0_100m.tif",
+        "min_visits": 500,
+        "expected_visits_per_pop": 0.12,
+        "description": "Kenya with pre-made polygon boundaries"
+    },
+    {
+        "name": "Kenya_Baseline_Polygons v1",
+        "enabled": False,
+        "use_premade_polygons": True,
+        "polygon_csv_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\kenya polygons\baseline_one_cluster.csv",
+        "superset_query_id": 195,
+        "grid3_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\ken_population_v1_0_100m.tif",
+        "min_visits": 500,
+        "expected_visits_per_pop": 0.12,
+        "description": "Kenya with pre-made polygon boundaries"
+    },
+    {
+        "name": "Kenya_Microplan_Polygons v4",
+        "enabled": False,
+        "use_premade_polygons": True,
+        "polygon_csv_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\kenya polygons\microplan_clusters_v4.csv",
+        "superset_query_id": 194,
+        "grid3_file": r"C:\Users\Neal Lesh\Coverage\data\grid3\ken_population_v1_0_100m.tif",
+        "min_visits": 500,
+        "expected_visits_per_pop": 0.12,
+        "description": "Kenya with pre-made polygon boundaries"
+    },
+    {
+        "name": "PPFN (Experiment zero)",
+        "enabled": True,
+        "superset_query_id": 207,
+        "grid3_file": "data/grid3/NGA_population_v3_0_gridded.tif",
+        "shapefile_dir": "data/shape",
+        "min_visits": 50,
+        "buffer_distance": 0,
+        "expected_visits_per_pop": 0.18,
+	"buildings_dir": "data/buildings/",
+        "description": "PPFN visits in Nigeria"
+    },
+    {
         "name": "GW8",
+        "enabled": True,
         "superset_query_id": 187,
         "grid3_file": "data/grid3/NGA_population_v3_0_gridded.tif",
         "shapefile_dir": "data/shape",
@@ -55,6 +126,7 @@ ANALYSIS_CONFIGS = [
     },
     {
         "name": "Solina first pass", 
+        "enabled": True,
         "superset_query_id": 205,
         "grid3_file": "data/grid3/NGA_population_v3_0_gridded.tif",
         "shapefile_dir": "data/shape",
@@ -65,7 +137,20 @@ ANALYSIS_CONFIGS = [
 	"buildings_dir": "data/buildings/"
     },
     {
+        "name": "Solina second pass", 
+        "enabled": True,
+        "superset_query_id": 206,
+        "grid3_file": "data/grid3/NGA_population_v3_0_gridded.tif",
+        "shapefile_dir": "data/shape",
+        "min_visits": 500,
+        "buffer_distance": 0,
+        "expected_visits_per_pop": 0.18,
+        "description": "Solina visits in Nigeria",
+	"buildings_dir": "data/buildings/"
+    },
+    {
         "name": "Bauchi",
+        "enabled": False,
         "superset_query_id": "local_file",
         "local_file": r"C:\Users\Neal Lesh\Coverage\data\bauchi\bauchi_standardized_visits.csv",
         "grid3_file": "data/grid3/NGA_population_v3_0_gridded.tif",
@@ -121,19 +206,27 @@ class AutomatedWardPipeline:
             
         print(f"✓ Superset credentials loaded: {self.superset_url}")
 
+
     def run_pipeline(self, analysis_configs):
         """Run the complete pipeline for all configurations"""
-        print(f"\n🚀 Starting Automated Ward Pipeline")
-        print(f"📊 Processing {len(analysis_configs)} analysis configurations")
+        # Filter to only enabled configs
+        enabled_configs = [c for c in analysis_configs if c.get('enabled', True)]
+        disabled_count = len(analysis_configs) - len(enabled_configs)
+        
+        print(f"Starting Automated Ward Pipeline")
+        print(f"Processing {len(enabled_configs)} analysis configurations")
+        if disabled_count > 0:
+            print(f"  Skipping {disabled_count} disabled configurations")
         print("=" * 60)
         
         # Phase 1: Download all Superset data
-        superset_files = self._download_all_superset_data(analysis_configs)
+        superset_files = self._download_all_superset_data(enabled_configs)
+
         
         # Phase 2: Run analyses
         results = []
-        for i, config in enumerate(analysis_configs, 1):
-            print(f"\n📋 Analysis {i}/{len(analysis_configs)}: {config['name']}")
+        for i, config in enumerate(enabled_configs, 1):
+            print(f"\n📋 Analysis {i}/{len(enabled_configs)}: {config['name']}")
             print("-" * 40)
             
             try:

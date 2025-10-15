@@ -442,7 +442,7 @@ def set_camping(df):
         return pd.Series({'camping': result})
 
     camping_status = (
-    filtered_df.groupby('cchq_user_id')[['cchq_user_id', 'camping']]
+    filtered_df.groupby('cchq_user_id')[['camping']]
     .apply(camping_priority)
 )
     # camping_status.index.name = None

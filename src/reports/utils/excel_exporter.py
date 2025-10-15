@@ -166,8 +166,7 @@ class ExcelExporter:
                 else:
                     # fallback or skip
                     continue
-                column_letter = column_index
-                #column_letter = get_column_letter(column_index)
+                column_letter = get_column_letter(column_index)
                 for cell in column:
                     try:
                         if cell.value is not None and len(str(cell.value)) > max_length:

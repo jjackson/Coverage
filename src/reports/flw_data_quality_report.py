@@ -358,10 +358,15 @@ class FLWDataQualityReport(BaseReport):
         # Add summary statistics
         week_cols = [col for col in pivot_data.columns if col.startswith('Week_')]
         
-        pivot_data['total_weeks_with_data'] = pivot_data[week_cols].notna().sum(axis=1)
+        pivot_data['total_weeks_with_data'] = pivot_data[week_cols].notna().sum(axis=1).astype(int)
         pivot_data['avg_female_pct'] = pivot_data[week_cols].mean(axis=1).round(1)
-        pivot_data['red_score_weeks'] = red_score_pivot[week_cols].sum(axis=1)
-        pivot_data['red_score_rate'] = (pivot_data['red_score_weeks'] / pivot_data['total_weeks_with_data'] * 100).round(1)
+        pivot_data['red_score_weeks'] = red_score_pivot[week_cols].astype(int).sum(axis=1).astype(int)
+        # Avoid division by zero and ensure numeric type
+        pivot_data['red_score_rate'] = 0.0
+        mask = pivot_data['total_weeks_with_data'] > 0
+        pivot_data.loc[mask, 'red_score_rate'] = (
+            pivot_data.loc[mask, 'red_score_weeks'] / pivot_data.loc[mask, 'total_weeks_with_data'] * 100
+        ).round(1)
         
         # Sort by total weeks with data (descending) then by FLW name
         pivot_data = pivot_data.sort_values(['total_weeks_with_data', 'flw_name'], ascending=[False, True])

@@ -285,6 +285,15 @@
           "du_target": 563
         }
       }
+    },
+    "connect-chc-experiments-1": {
+      "wards": {
+        "Tamsum Gamdua": {
+          "visit_target": 20000 ,
+          "building_target": 15044,
+          "du_target":382
+        }
+      }
     }
   }
 }

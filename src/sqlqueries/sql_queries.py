@@ -19,7 +19,7 @@ SQL_QUERIES = {
         "FROM public.opportunity_uservisit "
         "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
         "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722);"
+        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722,814);"
     ),
 
     "services_only_sql": (
@@ -86,28 +86,34 @@ LEFT JOIN opportunity_opportunity oo
 LEFT JOIN users_user u 
     ON uv.user_id = u.id
 WHERE 
-  oo.id IN (516,517,531,539,566,575,601,603,722)
+  oo.id IN (516,517,531,539,566,575,601,603,722,814)
   AND  oo.is_test = 'false'
   AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
 GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
 
 
-"opp_user_details_mapping" : """SELECT 
-  MAX(oo.name) AS opportunity_name,
-  uv.user_id AS flw_id,
-  MAX(u.name) AS flw_name,
-  MAX(u.username),
-  uv.form_json -> 'metadata'->>'userID' AS cchq_user_id
+"opp_user_details_mapping" : """SELECT DISTINCT
+  oo.name AS opportunity_name,
+  oa.user_id AS flw_id,
+  u.name AS flw_name,
+  u.username,
+  uv_recent.cchq_user_id
 FROM opportunity_opportunityaccess oa
-LEFT JOIN opportunity_opportunity oo
+INNER JOIN opportunity_opportunity oo
     ON oo.id = oa.opportunity_id
-LEFT JOIN users_user u
+    AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
+    AND oo.is_test = 'false'
+INNER JOIN users_user u
     ON oa.user_id = u.id
-LEFT JOIN opportunity_uservisit uv
-  ON oa.opportunity_id = uv.opportunity_id
-WHERE oo.id IN (516,517,531,539,566,575,601,603,722)
-AND oo.is_test = 'false'
-GROUP BY uv.user_id, cchq_user_id
+LEFT JOIN LATERAL (
+  SELECT form_json -> 'metadata' ->> 'userID' AS cchq_user_id
+  FROM opportunity_uservisit uv
+  WHERE uv.opportunity_id = oa.opportunity_id
+    AND uv.user_id = oa.user_id
+    AND uv.form_json -> 'metadata' ->> 'userID' IS NOT NULL
+  ORDER BY uv.visit_date DESC
+  LIMIT 1
+) uv_recent ON true
 ORDER BY opportunity_name, flw_name;"""
 ,
 
@@ -119,9 +125,8 @@ FROM opportunity_uservisit uv
 LEFT JOIN opportunity_opportunity oo 
     ON oo.id = uv.opportunity_id
 WHERE 
-  oo.name like '%Scale Up%'
-  AND  oo.is_test = 'false'
-  AND oo.id IN (516,517,531,539,566,575,601,603,722)
+  oo.is_test = 'false'
+  AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
   AND uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' != '';""",
 
 "flw_data_quality_analysis_batch" : """SELECT 

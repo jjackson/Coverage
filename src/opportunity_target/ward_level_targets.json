@@ -294,6 +294,44 @@
           "du_target":382
         }
       }
+    },
+    "connect-chc-experiments-2": {
+      "wards": {
+        "Duhu": {
+          "visit_target": 5000 ,
+          "building_target": 4576,
+          "du_target": 1223
+        },
+        "Gulak": {
+          "visit_target": 5000 ,
+          "building_target": 7363,
+          "du_target": 1688
+        },
+        "Moda/ Dlaka": {
+          "visit_target": 5000 ,
+          "building_target": 3870,
+          "du_target": 813
+        },
+        "Ninkisi/Wuro Ngik": {
+          "visit_target": 5000 ,
+          "building_target": 5842,
+          "du_target": 1375
+        }
+      }
+    },
+    "connect-chc-experiments-3": {
+      "wards": {
+        "Bankanu": {
+          "visit_target": 10530 ,
+          "building_target": 15566,
+          "du_target": 670
+        },
+        "Tunga Mallamawa": {
+          "visit_target": 9477 ,
+          "building_target": 10822,
+          "du_target": 174
+        }
+      }
     }
   }
 }

@@ -28,10 +28,21 @@ class ServiceDeliveryPoint:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ServiceDeliveryPoint':
         """Create a ServiceDeliveryPoint from a dictionary"""
+        latitude_value = data.get('lattitude')
+        longitude_value = data.get('longitude')
+
+        def _to_float(value: Any, default: float = 0.0) -> float:
+            if value in (None, ''):
+                return default
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
         return cls(
             id=str(data.get('visit_id', '')),
-            latitude=float(data.get('lattitude', 0.0)),  # Note: using 'lattitude' as in original code
-            longitude=float(data.get('longitude', 0.0)),
+            latitude=_to_float(latitude_value),  # Note: using 'lattitude' as in original code
+            longitude=_to_float(longitude_value),
             flw_id=str(data.get('flw_id', '')),
             flw_name=str(data.get('flw_name', '')),
             flw_commcare_id=data.get('cchq_user_owner_id'),

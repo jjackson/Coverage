@@ -963,7 +963,9 @@ def export_superset_query_with_pagination(
         total_rows = 0
         chunk_num = 1
 
-        base_sql = sql_query
+        base_sql = sql_query.strip()
+        while base_sql.endswith(";"):
+            base_sql = base_sql[:-1].rstrip()
         
         while True:
             # Add OFFSET and LIMIT to the SQL

@@ -1,48 +1,90 @@
 SQL_QUERIES = {
     "opportunity_uservisit": (
-        "SELECT "
-        "opportunity_uservisit.id as visit_id, "
-        "opportunity_opportunity.name as opportunity_name, "
-        "user_id AS flw_id, "
-        "users_user.name AS flw_name, "
-        "visit_date, "
-        "opportunity_id, "
-        "status, "
-        "form_json -> 'form' ->> 'du_name' AS du_name, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 1) AS lattitude, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 2) AS longitude, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 3) AS elevation_in_m, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 4) AS accuracy_in_m, "
-        "flagged, "
-        "flag_reason, "
-        "form_json -> 'form' -> 'cluster_update_block' -> 'update_cluster_case' -> 'case' ->> '@user_id' AS cchq_user_owner_id "
-        "FROM public.opportunity_uservisit "
-        "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
-        "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722,814);"
+        """
+        WITH base_visits AS (
+            SELECT
+                uv.id AS visit_id,
+                uv.user_id AS flw_id,
+                uv.visit_date,
+                uv.opportunity_id,
+                uv.status,
+                uv.flagged,
+                uv.flag_reason,
+                uv.form_json -> 'form' AS form_payload,
+                uv.form_json -> 'form' -> 'cluster_update_block' -> 'update_cluster_case' -> 'case' AS cluster_case,
+                string_to_array(
+                    COALESCE(uv.form_json -> 'metadata' ->> 'location', ''),
+                    ' '
+                ) AS location_parts
+            FROM public.opportunity_uservisit AS uv
+            WHERE uv.opportunity_id = {opp_id}
+        )
+        SELECT
+            bv.visit_id,
+            oo.name AS opportunity_name,
+            bv.flw_id,
+            uu.name AS flw_name,
+            bv.visit_date,
+            bv.opportunity_id,
+            bv.status,
+            bv.form_payload ->> 'du_name' AS du_name,
+            bv.location_parts[1] AS lattitude,
+            bv.location_parts[2] AS longitude,
+            bv.location_parts[3] AS elevation_in_m,
+            bv.location_parts[4] AS accuracy_in_m,
+            bv.flagged,
+            bv.flag_reason,
+            bv.cluster_case ->> '@user_id' AS cchq_user_owner_id
+        FROM base_visits AS bv
+        JOIN public.opportunity_opportunity AS oo
+            ON oo.id = bv.opportunity_id
+        JOIN public.users_user AS uu
+            ON uu.id = bv.flw_id
+        """
     ),
 
     "services_only_sql": (
-        "SELECT "
-        "opportunity_uservisit.id as visit_id, "
-        "opportunity_opportunity.name as opportunity_name, "
-        "user_id AS flw_id, "
-        "users_user.name AS flw_name, "
-        "visit_date, "
-        "opportunity_id, "
-        "status, "
-        "form_json -> 'form' ->> 'du_name' AS du_name, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 1) AS lattitude, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 2) AS longitude, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 3) AS elevation_in_m, "
-        "SPLIT_PART(form_json -> 'metadata' ->> 'location', ' ', 4) AS accuracy_in_m, "
-        "flagged, "
-        "flag_reason, "
-        "form_json -> 'form' -> 'case' ->> '@user_id' AS cchq_user_owner_id "
-        "FROM public.opportunity_uservisit "
-        "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
-        "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (595);"
+        """
+        WITH base_visits AS (
+            SELECT
+                uv.id AS visit_id,
+                uv.user_id AS flw_id,
+                uv.visit_date,
+                uv.opportunity_id,
+                uv.status,
+                uv.flagged,
+                uv.flag_reason,
+                uv.form_json -> 'form' AS form_payload,
+                uv.form_json -> 'form' -> 'case' AS cluster_case,
+                string_to_array(
+                    COALESCE(uv.form_json -> 'metadata' ->> 'location', ''),
+                    ' '
+                ) AS location_parts
+            FROM public.opportunity_uservisit AS uv
+            WHERE uv.opportunity_id IN (595)
+        )
+        SELECT
+            bv.visit_id,
+            oo.name AS opportunity_name,
+            bv.flw_id,
+            uu.name AS flw_name,
+            bv.visit_date,
+            bv.opportunity_id,
+            bv.status,
+            bv.form_payload ->> 'du_name' AS du_name,
+            bv.location_parts[1] AS lattitude,
+            bv.location_parts[2] AS longitude,
+            bv.location_parts[3] AS elevation_in_m,
+            bv.location_parts[4] AS accuracy_in_m,
+            bv.flagged,
+            bv.flag_reason,
+            bv.cluster_case ->> '@user_id' AS cchq_user_owner_id
+        FROM base_visits AS bv
+        JOIN public.opportunity_opportunity AS oo
+            ON oo.id = bv.opportunity_id
+        JOIN public.users_user AS uu
+            ON uu.id = bv.flw_id
+        """
     ),
 
     "kmc_visit_query": """SELECT 
@@ -86,35 +128,40 @@ LEFT JOIN opportunity_opportunity oo
 LEFT JOIN users_user u 
     ON uv.user_id = u.id
 WHERE 
-  oo.id IN (516,517,531,539,566,575,601,603,722,814)
+  oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
   AND  oo.is_test = 'false'
   AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
 GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
 
 
-"opp_user_details_mapping" : """SELECT DISTINCT
+"opp_user_details_mapping" : """
+WITH recent_visits AS (
+    SELECT DISTINCT ON (uv.opportunity_id, uv.user_id)
+        uv.opportunity_id,
+        uv.user_id,
+        uv.form_json -> 'metadata' ->> 'userID' AS cchq_user_id
+    FROM opportunity_uservisit uv
+    WHERE uv.form_json -> 'metadata' ->> 'userID' IS NOT NULL
+    ORDER BY uv.opportunity_id, uv.user_id, uv.visit_date DESC
+)
+SELECT
   oo.name AS opportunity_name,
   oa.user_id AS flw_id,
   u.name AS flw_name,
   u.username,
-  uv_recent.cchq_user_id
+  rv.cchq_user_id
 FROM opportunity_opportunityaccess oa
-INNER JOIN opportunity_opportunity oo
+JOIN opportunity_opportunity oo
     ON oo.id = oa.opportunity_id
-    AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
+    AND oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
     AND oo.is_test = 'false'
-INNER JOIN users_user u
+JOIN users_user u
     ON oa.user_id = u.id
-LEFT JOIN LATERAL (
-  SELECT form_json -> 'metadata' ->> 'userID' AS cchq_user_id
-  FROM opportunity_uservisit uv
-  WHERE uv.opportunity_id = oa.opportunity_id
-    AND uv.user_id = oa.user_id
-    AND uv.form_json -> 'metadata' ->> 'userID' IS NOT NULL
-  ORDER BY uv.visit_date DESC
-  LIMIT 1
-) uv_recent ON true
-ORDER BY opportunity_name, flw_name;"""
+LEFT JOIN recent_visits rv
+    ON rv.opportunity_id = oa.opportunity_id
+   AND rv.user_id = oa.user_id
+ORDER BY opportunity_name, flw_name
+"""
 ,
 
 "opp_user_visit_du_case_id_mapping" : """SELECT oo.name,
@@ -126,7 +173,7 @@ LEFT JOIN opportunity_opportunity oo
     ON oo.id = uv.opportunity_id
 WHERE 
   oo.is_test = 'false'
-  AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
+  AND oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
   AND uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' != '';""",
 
 "flw_data_quality_analysis_batch" : """SELECT 

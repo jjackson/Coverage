@@ -460,6 +460,13 @@ class CoverageData:
             error_msg = "Required column(s) not found in CommCare data: " + ", ".join(missing_columns) + "\nColumns found: " + ", ".join(found_columns)
             raise ValueError(error_msg)
         
+        # Ensure required numeric identifiers exist before proceeding
+        if 'service_area_id' not in delivery_units_df.columns:
+            found_columns = ", ".join(delivery_units_df.columns)
+            raise KeyError(f"'service_area_id' column not found after renaming. Columns present: {found_columns}")
+        if 'oa_id' not in delivery_units_df.columns:
+            delivery_units_df['oa_id'] = 0
+
         # Drop rows with missing service area IDs (value = None), count them first for debugging
         dropped_data_count = len(delivery_units_df)
         delivery_units_df.drop(delivery_units_df[(delivery_units_df['service_area_id'].isna())].index, inplace=True)
@@ -798,7 +805,11 @@ class CoverageData:
     def create_service_points_dataframe(self) -> Optional[pd.DataFrame]:
         """Create a DataFrame from service points for statistics"""
         if not self.service_points:
-            return None
+            return pd.DataFrame(columns=[
+                'visit_id', 'flw_id', 'flw_name', 'flw_commcare_id',
+                'lattitude', 'longitude', 'visit_date', 'accuracy_in_m',
+                'status', 'du_name', 'flagged', 'flag_reason'
+            ])
             
         service_df = pd.DataFrame([{
             'visit_id': point.id,

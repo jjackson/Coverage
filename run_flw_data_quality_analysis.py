@@ -11,6 +11,7 @@ from src.org_summary import generate_summary
 from src.coverage_master import load_opportunity_domain_mapping
 from datetime import datetime, timedelta
 import pytz
+from sklearn.cluster import KMeans
 from types import SimpleNamespace
 from functools import reduce
 

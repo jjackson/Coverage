@@ -193,6 +193,10 @@ def find_ward_column_name(domain):
             return "ward_name"
         case 'connect-chc-experiments-1':
             return "ward_name"
+        case 'connect-chc-experiments-2':
+            return "ward_name"
+        case 'connect-chc-experiments-3':
+            return "ward_name"
         case _:
             return ""
 

@@ -73,6 +73,20 @@
        "visit_target": 20000 ,
           "building_target": 15044,
           "du_target": 382
+    },
+    "connect-chc-experiments-2": {
+      "start_date":"2025-11-06",
+      "end_date" : "2025-12-31",
+       "visit_target": 20000 ,
+          "building_target": 21651,
+          "du_target": 5099
+    },
+    "connect-chc-experiments-3": {
+      "start_date":"2025-11-06",
+      "end_date" : "2025-12-31",
+       "visit_target": 20000 ,
+          "building_target": 26388,
+          "du_target": 844
     }
   }
 }

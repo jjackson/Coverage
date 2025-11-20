@@ -19,7 +19,7 @@ SQL_QUERIES = {
         "FROM public.opportunity_uservisit "
         "LEFT JOIN opportunity_opportunity ON opportunity_opportunity.id = opportunity_uservisit.opportunity_id "
         "LEFT JOIN users_user ON users_user.id = opportunity_uservisit.user_id "
-        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722,814);"
+        "WHERE opportunity_opportunity.id IN (516,517,531,539,566,575,601,603,722,814,822,823);"
     ),
 
     "services_only_sql": (
@@ -86,7 +86,7 @@ LEFT JOIN opportunity_opportunity oo
 LEFT JOIN users_user u 
     ON uv.user_id = u.id
 WHERE 
-  oo.id IN (516,517,531,539,566,575,601,603,722,814)
+  oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
   AND  oo.is_test = 'false'
   AND uv.visit_date >= CURRENT_DATE - INTERVAL '7 days'
 GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""", 
@@ -101,7 +101,7 @@ GROUP BY uv.user_id, u.name, oo.name, cchq_user_id""",
 FROM opportunity_opportunityaccess oa
 INNER JOIN opportunity_opportunity oo
     ON oo.id = oa.opportunity_id
-    AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
+    AND oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
     AND oo.is_test = 'false'
 INNER JOIN users_user u
     ON oa.user_id = u.id
@@ -126,7 +126,7 @@ LEFT JOIN opportunity_opportunity oo
     ON oo.id = uv.opportunity_id
 WHERE 
   oo.is_test = 'false'
-  AND oo.id IN (516,517,531,539,566,575,601,603,722,814)
+  AND oo.id IN (516,517,531,539,566,575,601,603,722,814,822,823)
   AND uv.form_json -> 'form'->'case'-> 'update' ->>'du_case_id' != '';""",
 
 "flw_data_quality_analysis_batch" : """SELECT 

@@ -186,9 +186,12 @@ def _generate_progress_data(coverage_data_objects: Dict[str, CoverageData], clum
                     
                     # Check if this is a clumped DU
                     is_clumped = False
-                    clumping_value = len(du.service_points) / du.buildings
-                    if clumping_value > clumping_ratio:
-                        is_clumped = True
+                    if du.buildings and du.buildings > 0:
+                        clumping_value = len(du.service_points) / du.buildings
+                        if clumping_value > clumping_ratio:
+                            is_clumped = True
+                    else:
+                        clumping_value = None
 
                     # Track clumped DU completions
                     if is_clumped:

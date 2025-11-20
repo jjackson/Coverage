@@ -3,7 +3,7 @@ import glob
 import argparse
 import subprocess
 import webbrowser
-import json
+import json,constants,pandas as pd
 from datetime import datetime
 from typing import Dict
 from dotenv import load_dotenv, find_dotenv
@@ -337,6 +337,55 @@ def load_opportunity_domain_mapping() -> Dict[str, str]:
         except Exception as e:
             raise ValueError(f"Could not parse OPPORTUNITY_DOMAIN_MAPPING from environment variable. Please check the format. Error: {e}")
 
+def get_superset_data(sql):
+    
+    dotenv_path=find_dotenv("./src/.env")
+    load_dotenv(dotenv_path,override=True)
+    superset_url = os.environ.get('SUPERSET_URL')
+    superset_username = os.environ.get('SUPERSET_USERNAME')
+    superset_password = os.environ.get('SUPERSET_PASSWORD')
+    chunk_size: int = constants.SQL_CHUNK_SIZE
+    timeout: int = constants.API_TIMEOUT_LIMIT
+    verbose: bool = True
+    if superset_username is None or superset_password is None or superset_url is None:
+        raise ValueError("USERNAME, PASSWORD or SUPERSET_URL must be set in the environment or .env file")
+
+    output_df = data_loader.superset_query_with_pagination_as_df(superset_url, sql, superset_username, superset_password, chunk_size, timeout, verbose
+    )
+    return output_df
+
+def get_data_by_opportunity_batch():
+    """Get data by processing each opportunity ID separately to avoid timeouts"""
+    all_dataframes = []
+    opportunity_ids = constants.OPP_IDS
+    for opp_id in opportunity_ids:
+        print(f"\n=== Processing Opportunity ID: {opp_id} ===")
+        
+        # Get SQL query from sql_queries.py and format it with the opportunity ID
+        sql_batch = SQL_QUERIES["opportunity_uservisit"].format(opp_id=opp_id)
+        
+        try:
+            df_batch = get_superset_data(sql_batch)
+            if not df_batch.empty:
+                all_dataframes.append(df_batch)
+                print(f"Retrieved {len(df_batch)} rows for opportunity {opp_id}")
+            else:
+                print(f"No data found for opportunity {opp_id}")
+        except Exception as e:
+            print(f"Error processing opportunity {opp_id}: {e}")
+            continue
+    
+    # Combine all dataframes
+    if all_dataframes:
+        combined_df = pd.concat(all_dataframes, ignore_index=True)
+        print(f"\n=== TOTAL COMBINED DATA ===")
+        print(f"Total rows across all opportunities: {len(combined_df)}")
+        return combined_df
+    else:
+        print("No data retrieved from any opportunity")
+        return pd.DataFrame()
+
+
 def main():
     global coverage_data_objects
     # Set up command line arguments
@@ -382,11 +431,7 @@ def main():
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
         print("Loading Service Delivery Points from Superset API")
-        
-        service_delivery_by_opportunity_df = data_loader.load_service_delivery_df_by_opportunity_from_superset(
-            superset_url, superset_username, superset_password, SQL_QUERIES["opportunity_uservisit"]
-        )
-        
+        service_delivery_by_opportunity_df = data_loader.group_service_delivery_df_by_opportunity(get_data_by_opportunity_batch())
 
         print("Loading Delivery Units from API, opportunity names found in CSV:")
         for key, value in service_delivery_by_opportunity_df.items():
